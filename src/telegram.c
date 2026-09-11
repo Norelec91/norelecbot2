@@ -6,7 +6,7 @@
 #include "telegram_commands.h"
 
 #include <curl/curl.h>
-#include <json-c/json.h>
+#include <jansson.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,7 +33,7 @@ static bool form_field(DynamicString *form, CURL *curl, const char *name, const 
     return ok;
 }
 
-static json_object *telegram_api(
+static json_t *telegram_api(
     const char *token,
     const char *method,
     const char *const names[],
@@ -56,7 +56,7 @@ static json_object *telegram_api(
     for (size_t index = 0U; ready && index < field_count; ++index) {
         ready = form_field(&form, curl, names[index], values[index]);
     }
-    json_object *root = NULL;
+    json_t *root = NULL;
     if (!ready) {
         log_error("Out of memory while preparing Telegram request");
         goto cleanup;
@@ -77,9 +77,10 @@ static json_object *telegram_api(
     } else if (http_status < 200L || http_status >= 300L) {
         log_warning("Telegram %s returned HTTP %ld: %.200s", method, http_status, response.data);
     } else {
-        root = json_tokener_parse(response.data);
+        json_error_t error;
+        root = json_loads(response.data, 0, &error);
         if (root == NULL) {
-            log_warning("Telegram %s returned invalid JSON", method);
+            log_warning("Telegram %s returned invalid JSON: %s", method, error.text);
         }
     }
 
@@ -96,18 +97,17 @@ static void send_message(const AppConfig *config, int64_t chat_id, const char *t
     (void)snprintf(chat_id_text, sizeof(chat_id_text), "%lld", (long long)chat_id);
     const char *names[] = {"chat_id", "text", "disable_web_page_preview"};
     const char *values[] = {chat_id_text, text, "true"};
-    json_object *response = telegram_api(
+    json_decref(telegram_api(
         config->bot_token,
         "sendMessage",
         names,
         values,
         3U,
         POLL_TIMEOUT_SECONDS
-    );
-    json_object_put(response);
+    ));
 }
 
-static json_object *get_updates(const AppConfig *config, int64_t offset, long poll_timeout) {
+static json_t *get_updates(const AppConfig *config, int64_t offset, long poll_timeout) {
     char timeout[16];
     char offset_text[32];
     (void)snprintf(timeout, sizeof(timeout), "%ld", poll_timeout);
@@ -124,32 +124,15 @@ static json_object *get_updates(const AppConfig *config, int64_t offset, long po
     );
 }
 
-static json_object *object_member(json_object *object, const char *name) {
-    json_object *value = NULL;
-    return object != NULL && json_object_object_get_ex(object, name, &value)
-        ? value
-        : NULL;
-}
-
-static void process_message(Storage *storage, const AppConfig *config, json_object *message) {
-    json_object *text_object = object_member(message, "text");
-    if (text_object == NULL || !json_object_is_type(text_object, json_type_string)) {
+static void process_message(Storage *storage, const AppConfig *config, json_t *message) {
+    const char *text = json_string_value(json_object_get(message, "text"));
+    json_t *sender = json_object_get(message, "from");
+    json_t *chat_id_value = json_object_get(json_object_get(message, "chat"), "id");
+    json_t *user_id_value = json_object_get(sender, "id");
+    if (text == NULL || !json_is_integer(chat_id_value) || !json_is_integer(user_id_value)) {
         return;
     }
-    const char *text = json_object_get_string(text_object);
-    json_object *chat = object_member(message, "chat");
-    json_object *sender = object_member(message, "from");
-    json_object *chat_id_object = object_member(chat, "id");
-    json_object *user_id_object = object_member(sender, "id");
-    json_object *username_object = object_member(sender, "username");
-    if (chat_id_object == NULL || user_id_object == NULL) {
-        return;
-    }
-    int64_t chat_id = json_object_get_int64(chat_id_object);
-    int64_t user_id = json_object_get_int64(user_id_object);
-    const char *username = username_object != NULL
-        ? json_object_get_string(username_object)
-        : NULL;
+    int64_t chat_id = (int64_t)json_integer_value(chat_id_value);
     DynamicString reply = {0};
     if (!dynamic_string_init(&reply, 1024U)) {
         return;
@@ -157,8 +140,8 @@ static void process_message(Storage *storage, const AppConfig *config, json_obje
     TelegramCommandContext context = {
         .storage = storage,
         .config = config,
-        .user_id = user_id,
-        .username = username,
+        .user_id = (int64_t)json_integer_value(user_id_value),
+        .username = json_string_value(json_object_get(sender, "username")),
     };
     TelegramCommandResult result = telegram_command_dispatch(&context, text, &reply);
     if (result == TELEGRAM_COMMAND_REPLIED) {
@@ -169,50 +152,47 @@ static void process_message(Storage *storage, const AppConfig *config, json_obje
     dynamic_string_free(&reply);
 }
 
-static json_object *updates_array(json_object *root) {
-    json_object *ok = object_member(root, "ok");
-    json_object *result = object_member(root, "result");
-    return ok != NULL && json_object_get_boolean(ok) != 0 &&
-           result != NULL && json_object_is_type(result, json_type_array)
-        ? result
-        : NULL;
+static json_t *updates_array(json_t *root) {
+    json_t *result = json_object_get(root, "result");
+    return json_is_true(json_object_get(root, "ok")) && json_is_array(result) ? result : NULL;
+}
+
+static void advance_offset(json_t *update, int64_t *offset) {
+    json_t *update_id = json_object_get(update, "update_id");
+    if (json_is_integer(update_id)) {
+        *offset = (int64_t)json_integer_value(update_id) + 1;
+    }
 }
 
 int telegram_run(Storage *storage, const AppConfig *config, volatile sig_atomic_t *stop) {
     log_info("Telegram poller started (trigger=%s)", TELEGRAM_CONQUISTER_TRIGGER);
     int64_t offset = -1;
-    json_object *backlog = get_updates(config, -1, 0L);
-    json_object *array = updates_array(backlog);
-    if (array != NULL && json_object_array_length(array) > 0U) {
-        json_object *last = json_object_array_get_idx(array, json_object_array_length(array) - 1U);
-        json_object *last_id = object_member(last, "update_id");
-        if (last_id != NULL) {
-            offset = json_object_get_int64(last_id) + 1;
-        }
+    json_t *backlog = get_updates(config, -1, 0L);
+    json_t *array = updates_array(backlog);
+    size_t backlog_count = json_array_size(array);
+    if (backlog_count > 0U) {
+        advance_offset(json_array_get(array, backlog_count - 1U), &offset);
     }
-    json_object_put(backlog);
+    json_decref(backlog);
 
     while (*stop == 0) {
-        json_object *root = get_updates(config, offset, POLL_TIMEOUT_SECONDS);
+        json_t *root = get_updates(config, offset, POLL_TIMEOUT_SECONDS);
         array = updates_array(root);
         if (array == NULL) {
-            json_object_put(root);
+            json_decref(root);
             platform_sleep_milliseconds(1000UL);
             continue;
         }
-        size_t count = json_object_array_length(array);
-        for (size_t index = 0U; index < count; ++index) {
-            json_object *update = json_object_array_get_idx(array, index);
-            json_object *update_id = object_member(update, "update_id");
-            if (update_id != NULL) {
-                offset = json_object_get_int64(update_id) + 1;
-            }
-            json_object *message = object_member(update, "message");
-            if (message != NULL) {
+        size_t index;
+        json_t *update;
+        json_array_foreach(array, index, update) {
+            advance_offset(update, &offset);
+            json_t *message = json_object_get(update, "message");
+            if (json_is_object(message)) {
                 process_message(storage, config, message);
             }
         }
-        json_object_put(root);
+        json_decref(root);
     }
     log_info("Telegram poller stopped");
     return 0;

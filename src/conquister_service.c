@@ -5,7 +5,6 @@
 #include "logging.h"
 
 #include <ctype.h>
-#include <json-c/json.h>
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -17,22 +16,13 @@ typedef struct {
     int64_t score;
 } ScoreEntry;
 
-static json_object *new_current(int64_t user_id, const char *username, int64_t now) {
-    json_object *current = json_object_new_object();
-    json_object *id = json_object_new_int64(user_id);
-    json_object *name = json_object_new_string(username);
-    json_object *since = json_object_new_int64(now);
-    if (current == NULL || id == NULL || name == NULL || since == NULL) {
-        json_object_put(current);
-        json_object_put(id);
-        json_object_put(name);
-        json_object_put(since);
-        return NULL;
-    }
-    json_object_object_add(current, "user_id", id);
-    json_object_object_add(current, "username", name);
-    json_object_object_add(current, "since", since);
-    return current;
+static json_t *new_current(int64_t user_id, const char *username, int64_t now) {
+    return json_pack(
+        "{s:I, s:s, s:I}",
+        "user_id", (json_int_t)user_id,
+        "username", username,
+        "since", (json_int_t)now
+    );
 }
 
 bool conquister_claim(
@@ -46,15 +36,14 @@ bool conquister_claim(
     if (!json_storage_lock(storage)) {
         return false;
     }
-    json_object *state = json_storage_load_conquister(storage);
+    json_t *state = json_storage_load_conquister(storage);
     bool ok = false;
     if (state == NULL) {
         goto cleanup;
     }
 
-    json_object *current = json_member(state, "current");
-    json_object *username_value = json_member(current, "username");
-    const char *holder = username_value != NULL ? json_object_get_string(username_value) : NULL;
+    json_t *current = json_object_get(state, "current");
+    const char *holder = json_string_value(json_object_get(current, "username"));
     if (holder != NULL && strcmp(holder, username) == 0) {
         result->status = CLAIM_ALREADY_HELD;
         ok = true;
@@ -62,7 +51,7 @@ bool conquister_claim(
     }
 
     result->status = CLAIM_TAKEN;
-    json_object *scores = json_member(state, "scores");
+    json_t *scores = json_object_get(state, "scores");
     if (holder != NULL && *holder != '\0') {
         (void)snprintf(
             result->previous_username,
@@ -70,9 +59,9 @@ bool conquister_claim(
             "%s",
             holder
         );
-        int64_t since = json_integer(current, "since", now);
+        int64_t since = json_integer_member(current, "since", now);
         result->earned = now > since ? now - since : 0;
-        int64_t previous_score = json_integer(scores, holder, 0);
+        int64_t previous_score = json_integer_member(scores, holder, 0);
         if (previous_score > INT64_MAX - result->earned ||
             !json_set_integer(scores, holder, previous_score + result->earned)) {
             log_error("Could not update Conquister score");
@@ -80,15 +69,13 @@ bool conquister_claim(
         }
     }
 
-    json_object *replacement = new_current(user_id, username, now);
-    if (replacement == NULL) {
+    if (json_object_set_new(state, "current", new_current(user_id, username, now)) != 0) {
         goto cleanup;
     }
-    json_object_object_add(state, "current", replacement);
     ok = json_storage_save_conquister(storage, state);
 
 cleanup:
-    json_object_put(state);
+    json_decref(state);
     json_storage_unlock(storage);
     return ok;
 }
@@ -124,14 +111,14 @@ bool conquister_leaderboard(Storage *storage, size_t limit, Leaderboard *leaderb
     if (!json_storage_lock(storage)) {
         return false;
     }
-    json_object *state = json_storage_load_conquister(storage);
+    json_t *state = json_storage_load_conquister(storage);
     ScoreEntry *sorted = NULL;
     bool ok = false;
     if (state == NULL) {
         goto cleanup;
     }
-    json_object *scores = json_member(state, "scores");
-    size_t count = (size_t)json_object_object_length(scores);
+    json_t *scores = json_object_get(state, "scores");
+    size_t count = json_object_size(scores);
     if (count > SIZE_MAX / sizeof(ScoreEntry)) {
         goto cleanup;
     }
@@ -145,17 +132,22 @@ bool conquister_leaderboard(Storage *storage, size_t limit, Leaderboard *leaderb
     }
     if (ok && count > 0U) {
         size_t index = 0U;
-        json_object_object_foreach(scores, key, value) {
-            sorted[index] = (ScoreEntry){.username = key, .score = json_object_get_int64(value)};
+        const char *key;
+        json_t *value;
+        json_object_foreach(scores, key, value) {
+            sorted[index] = (ScoreEntry){
+                .username = key,
+                .score = (int64_t)json_integer_value(value),
+            };
             ++index;
         }
         qsort(sorted, count, sizeof(*sorted), compare_scores);
 
-        json_object *quotes_added = json_member(state, "quotes_added");
+        json_t *quotes_added = json_object_get(state, "quotes_added");
         for (index = 0U; ok && index < leaderboard->count; ++index) {
             leaderboard->entries[index].username = string_duplicate(sorted[index].username);
             leaderboard->entries[index].score = sorted[index].score;
-            leaderboard->entries[index].quotes_added = json_integer(
+            leaderboard->entries[index].quotes_added = json_integer_member(
                 quotes_added,
                 sorted[index].username,
                 0
@@ -163,18 +155,17 @@ bool conquister_leaderboard(Storage *storage, size_t limit, Leaderboard *leaderb
             ok = leaderboard->entries[index].username != NULL;
         }
     }
-    json_object *current = json_member(state, "current");
-    json_object *holder_value = json_member(current, "username");
-    const char *holder = holder_value != NULL ? json_object_get_string(holder_value) : NULL;
+    json_t *current = json_object_get(state, "current");
+    const char *holder = json_string_value(json_object_get(current, "username"));
     if (ok && holder != NULL && *holder != '\0') {
         leaderboard->current_username = string_duplicate(holder);
-        leaderboard->current_since = json_integer(current, "since", 0);
+        leaderboard->current_since = json_integer_member(current, "since", 0);
         ok = leaderboard->current_username != NULL;
     }
 
 cleanup:
     free(sorted);
-    json_object_put(state);
+    json_decref(state);
     json_storage_unlock(storage);
     if (!ok) {
         leaderboard_free(leaderboard);
@@ -193,11 +184,10 @@ static bool text_equals_ignore_case(const char *left, const char *right) {
     return *left == *right;
 }
 
-static const char *find_key_ignore_case(json_object *object, const char *name) {
-    if (object == NULL) {
-        return NULL;
-    }
-    json_object_object_foreach(object, key, value) {
+static const char *find_key_ignore_case(json_t *object, const char *name) {
+    const char *key;
+    json_t *value;
+    json_object_foreach(object, key, value) {
         (void)value;
         if (text_equals_ignore_case(key, name)) {
             return key;
@@ -211,23 +201,22 @@ bool conquister_user(Storage *storage, const char *username, ConquisterUser *use
     if (!json_storage_lock(storage)) {
         return false;
     }
-    json_object *state = json_storage_load_conquister(storage);
+    json_t *state = json_storage_load_conquister(storage);
     bool ok = state != NULL;
     if (!ok) {
         goto cleanup;
     }
 
     const char *name = NULL;
-    json_object *current = json_member(state, "current");
-    json_object *holder_value = json_member(current, "username");
-    const char *holder = holder_value != NULL ? json_object_get_string(holder_value) : NULL;
+    json_t *current = json_object_get(state, "current");
+    const char *holder = json_string_value(json_object_get(current, "username"));
     if (holder != NULL && *holder != '\0' && text_equals_ignore_case(holder, username)) {
         name = holder;
         user->in_conquister = true;
-        user->since = json_integer(current, "since", 0);
+        user->since = json_integer_member(current, "since", 0);
     }
-    json_object *scores = json_member(state, "scores");
-    json_object *quotes_added = json_member(state, "quotes_added");
+    json_t *scores = json_object_get(state, "scores");
+    json_t *quotes_added = json_object_get(state, "quotes_added");
     const char *score_name = find_key_ignore_case(scores, username);
     const char *quotes_name = find_key_ignore_case(quotes_added, username);
     if (name == NULL) {
@@ -240,22 +229,27 @@ bool conquister_user(Storage *storage, const char *username, ConquisterUser *use
     user->found = true;
     (void)snprintf(user->username, sizeof(user->username), "%s", name);
     if (score_name != NULL) {
-        ScoreEntry self = {.username = score_name, .score = json_integer(scores, score_name, 0)};
+        ScoreEntry self = {
+            .username = score_name,
+            .score = json_integer_member(scores, score_name, 0),
+        };
         user->score = self.score;
         user->rank = 1U;
-        json_object_object_foreach(scores, key, value) {
-            ScoreEntry other = {.username = key, .score = json_object_get_int64(value)};
+        const char *key;
+        json_t *value;
+        json_object_foreach(scores, key, value) {
+            ScoreEntry other = {.username = key, .score = (int64_t)json_integer_value(value)};
             if (compare_scores(&other, &self) < 0) {
                 ++user->rank;
             }
         }
     }
     if (quotes_name != NULL) {
-        user->quotes_added = json_integer(quotes_added, quotes_name, 0);
+        user->quotes_added = json_integer_member(quotes_added, quotes_name, 0);
     }
 
 cleanup:
-    json_object_put(state);
+    json_decref(state);
     json_storage_unlock(storage);
     return ok;
 }

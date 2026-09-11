@@ -3,7 +3,7 @@
   "version-string": "1.0.0",
   "dependencies": [
     "curl",
-    "json-c",
+    "jansson",
     "libmicrohttpd"
   ]
 }

@@ -16,21 +16,21 @@ find_package(Threads REQUIRED)
 find_package(PkgConfig QUIET)
 
 if(PkgConfig_FOUND)
-    pkg_check_modules(JSON_C QUIET IMPORTED_TARGET json-c)
+    pkg_check_modules(JANSSON QUIET IMPORTED_TARGET jansson)
     pkg_check_modules(MICROHTTPD QUIET IMPORTED_TARGET libmicrohttpd)
 endif()
 
-if(TARGET PkgConfig::JSON_C)
-    set(JSON_C_TARGET PkgConfig::JSON_C)
+if(TARGET PkgConfig::JANSSON)
+    set(JANSSON_TARGET PkgConfig::JANSSON)
 else()
-    find_path(JSON_C_INCLUDE_DIR NAMES json-c/json.h REQUIRED)
-    find_library(JSON_C_LIBRARY NAMES json-c json-c-static REQUIRED)
-    add_library(json_c_external UNKNOWN IMPORTED)
-    set_target_properties(json_c_external PROPERTIES
-        IMPORTED_LOCATION "${JSON_C_LIBRARY}"
-        INTERFACE_INCLUDE_DIRECTORIES "${JSON_C_INCLUDE_DIR}"
+    find_path(JANSSON_INCLUDE_DIR NAMES jansson.h REQUIRED)
+    find_library(JANSSON_LIBRARY NAMES jansson REQUIRED)
+    add_library(jansson_external UNKNOWN IMPORTED)
+    set_target_properties(jansson_external PROPERTIES
+        IMPORTED_LOCATION "${JANSSON_LIBRARY}"
+        INTERFACE_INCLUDE_DIRECTORIES "${JANSSON_INCLUDE_DIR}"
     )
-    set(JSON_C_TARGET json_c_external)
+    set(JANSSON_TARGET jansson_external)
 endif()
 
 if(TARGET PkgConfig::MICROHTTPD)
@@ -81,7 +81,7 @@ set(CORE_SOURCES
 
 add_library(norelecbot_core STATIC ${CORE_SOURCES})
 target_include_directories(norelecbot_core PUBLIC src)
-target_link_libraries(norelecbot_core PUBLIC ${JSON_C_TARGET} Threads::Threads)
+target_link_libraries(norelecbot_core PUBLIC ${JANSSON_TARGET} Threads::Threads)
 
 add_executable(norelecbot
     src/main.c

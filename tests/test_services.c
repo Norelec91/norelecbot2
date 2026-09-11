@@ -4,28 +4,25 @@
 #include "test_paths.h"
 
 #include <assert.h>
-#include <json-c/json.h>
+#include <jansson.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 static void assert_json_formats(const char *conquister_path, const char *quotes_path) {
-    json_object *state = json_object_from_file(conquister_path);
+    json_error_t error;
+    json_t *state = json_load_file(conquister_path, 0, &error);
     assert(state != NULL);
-    assert(json_object_is_type(state, json_type_object));
-    json_object *member = NULL;
-    assert(json_object_object_get_ex(state, "current", &member));
-    assert(member != NULL && json_object_is_type(member, json_type_object));
-    assert(json_object_object_get_ex(state, "scores", &member));
-    assert(json_object_is_type(member, json_type_object));
-    assert(json_object_object_get_ex(state, "quotes_added", &member));
-    assert(json_object_is_type(member, json_type_object));
-    json_object_put(state);
+    assert(json_is_object(state));
+    assert(json_is_object(json_object_get(state, "current")));
+    assert(json_is_object(json_object_get(state, "scores")));
+    assert(json_is_object(json_object_get(state, "quotes_added")));
+    json_decref(state);
 
-    json_object *quotes = json_object_from_file(quotes_path);
+    json_t *quotes = json_load_file(quotes_path, 0, &error);
     assert(quotes != NULL);
-    assert(json_object_is_type(quotes, json_type_array));
-    json_object_put(quotes);
+    assert(json_is_array(quotes));
+    json_decref(quotes);
 }
 
 int main(void) {

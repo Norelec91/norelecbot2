@@ -3,19 +3,16 @@
 #include "test_paths.h"
 
 #include <assert.h>
-#include <json-c/json.h>
+#include <jansson.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 static void write_quotes(const char *path, const char *quote) {
-    json_object *quotes = json_object_new_array();
+    json_t *quotes = quote != NULL ? json_pack("[s]", quote) : json_array();
     assert(quotes != NULL);
-    if (quote != NULL) {
-        assert(json_object_array_add(quotes, json_object_new_string(quote)) == 0);
-    }
-    assert(json_object_to_file_ext(path, quotes, JSON_C_TO_STRING_PRETTY) == 0);
-    json_object_put(quotes);
+    assert(json_dump_file(quotes, path, JSON_INDENT(2)) == 0);
+    json_decref(quotes);
 }
 
 int main(void) {

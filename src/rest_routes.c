@@ -3,8 +3,7 @@
 #include "conquister_service.h"
 #include "quote_service.h"
 
-#include <json-c/json.h>
-#include <stdint.h>
+#include <jansson.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -26,85 +25,57 @@ static bool set_response(RestRouteResponse *response, unsigned int status_code, 
     return dynamic_string_append(response->body, body);
 }
 
-static bool append_json(DynamicString *body, json_object *root) {
-    const char *encoded = json_object_to_json_string_ext(root, JSON_C_TO_STRING_PLAIN);
-    return encoded != NULL && dynamic_string_append(body, encoded) &&
-           dynamic_string_append(body, "\n");
-}
-
-static bool add_member(json_object *root, const char *name, json_object *value) {
-    if (value == NULL) {
-        return false;
-    }
-    json_object_object_add(root, name, value);
-    return true;
-}
-
-static bool json_quote_body(DynamicString *body, const char *quote) {
-    json_object *root = json_object_new_object();
-    if (root == NULL) {
-        return false;
-    }
-    bool ok = add_member(root, "quote", json_object_new_string(quote)) && append_json(body, root);
-    json_object_put(root);
+/* Takes ownership of root; a NULL root (failed json_pack) reports an internal error. */
+static bool append_json(DynamicString *body, json_t *root) {
+    char *encoded = root != NULL ? json_dumps(root, JSON_COMPACT) : NULL;
+    bool ok = encoded != NULL && dynamic_string_append(body, encoded) &&
+              dynamic_string_append(body, "\n");
+    free(encoded);
+    json_decref(root);
     return ok;
 }
 
 static bool json_user_body(DynamicString *body, const ConquisterUser *user) {
-    json_object *root = json_object_new_object();
-    if (root == NULL) {
-        return false;
+    json_t *root = json_pack(
+        "{s:s, s:I, s:o, s:I, s:b}",
+        "username", user->username,
+        "score", (json_int_t)user->score,
+        "rank", user->rank > 0U ? json_integer((json_int_t)user->rank) : json_null(),
+        "quotes_added", (json_int_t)user->quotes_added,
+        "in_conquister", user->in_conquister
+    );
+    if (root != NULL && user->in_conquister &&
+        json_object_set_new(root, "since", json_integer((json_int_t)user->since)) != 0) {
+        json_decref(root);
+        root = NULL;
     }
-    bool ok = add_member(root, "username", json_object_new_string(user->username)) &&
-              add_member(root, "score", json_object_new_int64(user->score));
-    if (ok && user->rank > 0U) {
-        ok = add_member(root, "rank", json_object_new_int64((int64_t)user->rank));
-    } else if (ok) {
-        json_object_object_add(root, "rank", NULL);
-    }
-    ok = ok && add_member(root, "quotes_added", json_object_new_int64(user->quotes_added)) &&
-         add_member(root, "in_conquister", json_object_new_boolean(user->in_conquister ? 1 : 0));
-    if (ok && user->in_conquister) {
-        ok = add_member(root, "since", json_object_new_int64(user->since));
-    }
-    ok = ok && append_json(body, root);
-    json_object_put(root);
-    return ok;
+    return append_json(body, root);
 }
 
 static bool json_leaderboard_body(DynamicString *body, const Leaderboard *leaderboard) {
-    json_object *root = json_object_new_object();
-    json_object *entries = json_object_new_array();
-    if (root == NULL || entries == NULL) {
-        json_object_put(root);
-        json_object_put(entries);
-        return false;
-    }
-    bool ok = add_member(root, "entries", entries);
-    for (size_t index = 0U; ok && index < leaderboard->count; ++index) {
+    json_t *entries = json_array();
+    for (size_t index = 0U; entries != NULL && index < leaderboard->count; ++index) {
         const LeaderboardEntry *entry = &leaderboard->entries[index];
-        json_object *item = json_object_new_object();
-        if (item == NULL || json_object_array_add(entries, item) != 0) {
-            json_object_put(item);
-            ok = false;
-            break;
+        json_t *item = json_pack(
+            "{s:I, s:s, s:I, s:I}",
+            "rank", (json_int_t)index + 1,
+            "username", entry->username,
+            "score", (json_int_t)entry->score,
+            "quotes_added", (json_int_t)entry->quotes_added
+        );
+        if (json_array_append_new(entries, item) != 0) {
+            json_decref(entries);
+            entries = NULL;
         }
-        ok = add_member(item, "rank", json_object_new_int64((int64_t)index + 1)) &&
-             add_member(item, "username", json_object_new_string(entry->username)) &&
-             add_member(item, "score", json_object_new_int64(entry->score)) &&
-             add_member(item, "quotes_added", json_object_new_int64(entry->quotes_added));
     }
-    if (ok && leaderboard->current_username != NULL) {
-        json_object *current = json_object_new_object();
-        ok = add_member(root, "current", current) &&
-             add_member(current, "username", json_object_new_string(leaderboard->current_username)) &&
-             add_member(current, "since", json_object_new_int64(leaderboard->current_since));
-    } else if (ok) {
-        json_object_object_add(root, "current", NULL);
-    }
-    ok = ok && append_json(body, root);
-    json_object_put(root);
-    return ok;
+    json_t *current = leaderboard->current_username != NULL
+        ? json_pack(
+              "{s:s, s:I}",
+              "username", leaderboard->current_username,
+              "since", (json_int_t)leaderboard->current_since
+          )
+        : json_null();
+    return append_json(body, json_pack("{s:o, s:o}", "entries", entries, "current", current));
 }
 
 static bool handle_health(
@@ -131,7 +102,7 @@ static bool handle_quote(
         return set_response(response, 404, "{\"error\":\"no quotes available\"}\n");
     }
     response->status_code = 200;
-    bool ok = json_quote_body(response->body, quote);
+    bool ok = append_json(response->body, json_pack("{s:s}", "quote", quote));
     free(quote);
     return ok;
 }
