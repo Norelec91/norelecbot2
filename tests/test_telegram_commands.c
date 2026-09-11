@@ -29,18 +29,19 @@ int main(void) {
     assert(telegram_command_dispatch(nullptr, "ciao", &reply) == TELEGRAM_COMMAND_ERROR);
     assert(telegram_command_dispatch(&context, "ciao", &reply) == TELEGRAM_COMMAND_IGNORED);
     assert(telegram_command_dispatch(&context, "   ", &reply) == TELEGRAM_COMMAND_IGNORED);
-    assert(telegram_command_dispatch(&context, "/classifica", &reply) == TELEGRAM_COMMAND_REPLIED);
+    assert(telegram_command_dispatch(&context, "/leaderboard", &reply) == TELEGRAM_COMMAND_REPLIED);
     assert(strcmp(
                reply.data,
                "Classifica vuota. Scrivi \"We @TheConquister37\" per entrare in @TheConquister37!"
            ) == 0);
+    assert(telegram_command_dispatch(&context, "/classifica", &reply) == TELEGRAM_COMMAND_IGNORED);
 
     config.conquister_chat_id = -1001234567890;
     context.chat_id = -100999;
     assert(telegram_command_dispatch(&context, "We @TheConquister37", &reply) ==
            TELEGRAM_COMMAND_IGNORED);
     assert(reply.length == 0U);
-    assert(telegram_command_dispatch(&context, "/classifica", &reply) == TELEGRAM_COMMAND_REPLIED);
+    assert(telegram_command_dispatch(&context, "/leaderboard", &reply) == TELEGRAM_COMMAND_REPLIED);
     context.chat_id = -1001234567890;
 
     context.username = nullptr;
@@ -53,7 +54,7 @@ int main(void) {
     assert(strstr(reply.data, "alice sei in ") != nullptr);
     assert(strchr(reply.data, '\n') == nullptr);
 
-    assert(telegram_command_dispatch(&context, "  /CLASSIFICA@ExampleBot  ", &reply) ==
+    assert(telegram_command_dispatch(&context, "  /LEADERBOARD@ExampleBot  ", &reply) ==
            TELEGRAM_COMMAND_REPLIED);
     assert(strstr(reply.data, "Classifica") != nullptr);
     assert(strstr(reply.data, "palle @TheConquister37") == nullptr);
@@ -88,7 +89,7 @@ int main(void) {
            TELEGRAM_COMMAND_REPLIED);
     assert(strstr(reply.data, "bob sei in ") != nullptr);
     assert(strstr(reply.data, "!\n\ncitazione di prova") != nullptr);
-    assert(telegram_command_dispatch(&context, "/classifica", &reply) == TELEGRAM_COMMAND_REPLIED);
+    assert(telegram_command_dispatch(&context, "/leaderboard", &reply) == TELEGRAM_COMMAND_REPLIED);
     assert(strstr(reply.data, "🏆 Classifica @TheConquister37:\n\n1. ") != nullptr);
     assert(strstr(reply.data, " — 📜 1 citazione\n") != nullptr);
     assert(strstr(reply.data, "\n\n🪐 In @TheConquister37 ora: bob") != nullptr);

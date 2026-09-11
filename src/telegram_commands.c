@@ -284,7 +284,7 @@ static bool handle_delete_quote(
 }
 
 static const TelegramCommandDefinition TELEGRAM_COMMANDS[] = {
-    {"/classifica", handle_leaderboard},
+    {"/leaderboard", handle_leaderboard},
     {"/addquote", handle_add_quote},
     {"/quotes", handle_quotes},
     {"/delquote", handle_delete_quote},
