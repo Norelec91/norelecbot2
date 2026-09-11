@@ -5,6 +5,7 @@
 #include "storage.hpp"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -12,8 +13,6 @@ namespace norelecbot {
 
 inline constexpr std::string_view conquister_place = "@TheConquister37";
 inline constexpr std::string_view conquister_trigger = "We @TheConquister37";
-
-enum class CommandResult { ignored, replied, error };
 
 struct CommandContext {
     Storage &storage;
@@ -23,12 +22,8 @@ struct CommandContext {
     std::string_view username;
 };
 
-/* Ignored messages produce no reply; recognized messages always do. */
-[[nodiscard]] CommandResult telegram_command_dispatch(
-    const CommandContext &context,
-    std::string_view text,
-    std::string &reply
-);
+/* The reply to send, or nothing when the message is not for the bot; internal failures get a generic error reply. */
+[[nodiscard]] std::optional<std::string> telegram_command_dispatch(const CommandContext &context, std::string_view text);
 
 }
 

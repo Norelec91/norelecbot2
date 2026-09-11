@@ -1,8 +1,6 @@
 #include "test_paths.hpp"
 
-#include "conquister_service.hpp"
-#include "json.hpp"
-#include "quote_service.hpp"
+#include "game.hpp"
 #include "storage.hpp"
 
 #include <fstream>

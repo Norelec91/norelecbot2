@@ -1,8 +1,9 @@
 #include "test_paths.hpp"
 
-#include "quote_service.hpp"
+#include "game.hpp"
 #include "telegram_commands.hpp"
 
+#include <fstream>
 #include <print>
 
 int main() {
@@ -17,69 +18,64 @@ int main() {
 
     {
         Storage storage{config.conquister_path, config.quotes_path};
-        std::string reply;
         CommandContext context{.storage = storage, .config = config, .user_id = 1, .username = "alice"};
-        const auto dispatch = [&](std::string_view text) {
-            return telegram_command_dispatch(context, text, reply);
+        const auto ignored = [&](std::string_view text) {
+            return !telegram_command_dispatch(context, text).has_value();
+        };
+        const auto reply = [&](std::string_view text) {
+            return telegram_command_dispatch(context, text).value_or("<nessuna risposta>");
         };
 
-        assert(dispatch("ciao") == CommandResult::ignored);
-        assert(dispatch("   ") == CommandResult::ignored);
-        assert(dispatch("/leaderboard") == CommandResult::replied);
-        assert(reply == "Classifica vuota. Scrivi \"We @TheConquister37\" per entrare in @TheConquister37!");
-        assert(dispatch("/classifica") == CommandResult::ignored);
+        assert(ignored("ciao"));
+        assert(ignored("   "));
+        assert(reply("/leaderboard") == "Classifica vuota. Scrivi \"We @TheConquister37\" per entrare in @TheConquister37!");
+        assert(ignored("/classifica"));
 
         config.conquister_chat_id = -1001234567890;
         context.chat_id = -100999;
-        assert(dispatch("We @TheConquister37") == CommandResult::ignored);
-        assert(reply.empty());
-        assert(dispatch("/leaderboard") == CommandResult::replied);
+        assert(ignored("We @TheConquister37"));
+        assert(reply("/leaderboard").starts_with("Classifica vuota"));
         context.chat_id = -1001234567890;
 
         context.username = "";
-        assert(dispatch("We @TheConquister37") == CommandResult::replied);
-        assert(reply.contains("Imposta uno username"));
+        assert(reply("We @TheConquister37").contains("Imposta uno username"));
         context.username = "alice";
-        assert(dispatch("We @TheConquister37") == CommandResult::replied);
-        assert(reply.contains("alice sei in "));
-        assert(!reply.contains('\n'));
+        std::string answer = reply("We @TheConquister37");
+        assert(answer.contains("alice sei in ") && !answer.contains('\n'));
 
-        assert(dispatch("  /LEADERBOARD@ExampleBot  ") == CommandResult::replied);
-        assert(reply.contains("Classifica"));
-        assert(!reply.contains("palle @TheConquister37"));
-        assert(dispatch("/quotes 8") == CommandResult::replied);
-        assert(reply == "Solo il proprietario può vedere le citazioni.");
-        assert(dispatch("/addquote") == CommandResult::replied);
-        assert(reply.contains("Uso: /addquote") && reply.contains("1000 palle."));
-        assert(dispatch("/delquote 1") == CommandResult::replied);
-        assert(reply.contains("Solo il proprietario"));
+        answer = reply("  /LEADERBOARD@ExampleBot  ");
+        assert(answer.contains("Classifica") && !answer.contains("palle @TheConquister37"));
+        assert(reply("/quotes 8") == "Solo il proprietario può vedere le citazioni.");
+        answer = reply("/addquote");
+        assert(answer.contains("Uso: /addquote") && answer.contains("1000 palle."));
+        assert(reply("/delquote 1").contains("Solo il proprietario"));
         context.user_id = 99;
         context.username = "owner";
-        assert(dispatch("/delquote 1") == CommandResult::replied);
-        assert(reply == "Citazione non trovata.");
-        assert(dispatch("/quotes 8") == CommandResult::replied);
-        assert(reply == "Nessuna citazione in collezione.");
+        assert(reply("/delquote 1") == "Citazione non trovata.");
+        assert(reply("/quotes 8") == "Nessuna citazione in collezione.");
 
         assert(quote_add(storage, "owner", "citazione di prova", 0).status == QuoteAddStatus::added);
-        assert(dispatch("/quotes") == CommandResult::replied);
-        assert(reply.contains("\n1. citazione di prova"));
+        assert(reply("/quotes").contains("\n1. citazione di prova"));
         context.user_id = 1;
         context.username = "alice";
-        assert(dispatch("We @TheConquister37") == CommandResult::replied);
-        assert(reply.contains("alice sei già in"));
-        assert(!reply.contains("citazione di prova"));
+        answer = reply("We @TheConquister37");
+        assert(answer.contains("alice sei già in") && !answer.contains("citazione di prova"));
         context.user_id = 2;
         context.username = "bob";
-        assert(dispatch("We @TheConquister37") == CommandResult::replied);
-        assert(reply.contains("bob sei in "));
-        assert(reply.contains("!\n\ncitazione di prova"));
-        assert(dispatch("/leaderboard") == CommandResult::replied);
-        assert(reply.contains("🏆 Classifica @TheConquister37:\n\n1. "));
-        assert(reply.contains(" — 📜 1 citazione\n"));
-        assert(reply.contains("\n\n🪐 In @TheConquister37 ora: bob"));
+        answer = reply("We @TheConquister37");
+        assert(answer.contains("bob sei in ") && answer.contains("!\n\ncitazione di prova"));
+        answer = reply("/leaderboard");
+        assert(answer.contains("🏆 Classifica @TheConquister37:\n\n1. "));
+        assert(answer.contains(" — 📜 1 citazione\n"));
+        assert(answer.contains("\n\n🪐 In @TheConquister37 ora: bob"));
         context.user_id = 99;
-        assert(dispatch("/delquote 1") == CommandResult::replied);
-        assert(reply == "Citazione eliminata: citazione di prova");
+        assert(reply("/delquote 1") == "Citazione eliminata: citazione di prova");
+
+        {
+            std::ofstream broken{config.conquister_path, std::ios::binary};
+            broken << "{";
+        }
+        assert(reply("/leaderboard") == "Errore interno: riprova tra poco.");
     }
 
     const bool saved = std::filesystem::exists(config.conquister_path);

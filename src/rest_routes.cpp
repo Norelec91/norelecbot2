@@ -1,8 +1,6 @@
 #include "rest_routes.hpp"
 
-#include "conquister_service.hpp"
-#include "json.hpp"
-#include "quote_service.hpp"
+#include "game.hpp"
 
 #include <array>
 #include <cstddef>

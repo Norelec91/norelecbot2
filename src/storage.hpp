@@ -1,7 +1,7 @@
 #ifndef NORELECBOT_STORAGE_HPP
 #define NORELECBOT_STORAGE_HPP
 
-#include "json.hpp"
+#include <nlohmann/json.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -10,10 +10,13 @@
 #include <random>
 #include <stdexcept>
 #include <string>
-#include <string_view>
+#include <utility>
 #include <vector>
 
 namespace norelecbot {
+
+/* Keeps object keys in insertion order, like the files and responses have always had. */
+using Json = nlohmann::ordered_json;
 
 /* The cause, when known, is logged where the error is thrown. */
 class StorageError : public std::runtime_error {
@@ -21,64 +24,76 @@ public:
     using std::runtime_error::runtime_error;
 };
 
-/* Validates both JSON documents on construction. */
+struct Holder {
+    std::int64_t user_id = 0;
+    std::string username;
+    std::int64_t since = 0;
+
+    bool operator==(const Holder &) const = default;
+};
+
+/* Usernames in file order. */
+using Counters = nlohmann::ordered_map<std::string, std::int64_t>;
+
+struct ConquisterState {
+    std::optional<Holder> current;
+    Counters scores;
+    Counters quotes_added;
+
+    bool operator==(const ConquisterState &) const = default;
+};
+
+using Quotes = std::vector<std::string>;
+
+class Storage;
+
+/* Loads each document on first use; the transaction saves the documents that changed. */
+class StorageSession {
+public:
+    ConquisterState &state();
+    Quotes &quotes();
+    [[nodiscard]] std::size_t random_index(std::size_t count);
+
+private:
+    friend class Storage;
+
+    explicit StorageSession(Storage &storage);
+    void save() const;
+
+    template <typename Document>
+    struct Loaded {
+        Document original;
+        Document current;
+    };
+
+    Storage &storage_;
+    std::optional<Loaded<ConquisterState>> state_;
+    std::optional<Loaded<Quotes>> quotes_;
+};
+
+/* Serializes every access to the two JSON files, which are validated on construction. */
 class Storage {
 public:
     Storage(std::string conquister_path, std::string quotes_path);
 
+    /* Runs function(session) under the lock. If it returns, changed quotes are saved first and then
+       the changed state; the quotes are restored if the state cannot be saved. */
+    template <typename Function>
+    auto transaction(Function &&function) {
+        const std::lock_guard lock{mutex_};
+        StorageSession session{*this};
+        auto result = std::forward<Function>(function)(session);
+        session.save();
+        return result;
+    }
+
 private:
-    friend class StorageTransaction;
+    friend class StorageSession;
 
     std::string conquister_path_;
     std::string quotes_path_;
     std::mutex mutex_;
     std::mt19937_64 random_;
-};
-
-enum class StorageDocuments { state, quotes, all };
-
-struct ScoreEntry {
-    std::string username;
-    std::int64_t score = 0;
-};
-
-/* Holds the storage lock and the requested documents for its whole lifetime. */
-class StorageTransaction {
-public:
-    StorageTransaction(Storage &storage, StorageDocuments documents);
-
-    /* Saves changed quotes, then the changed state; restores the quotes if the state cannot be saved. */
-    void commit();
-
-    [[nodiscard]] std::string_view holder() const;
-    [[nodiscard]] std::int64_t holder_since(std::int64_t fallback) const;
-    void set_holder(std::int64_t user_id, const std::string &username, std::int64_t now);
-    [[nodiscard]] std::int64_t score(const std::string &username) const;
-    void set_score(const std::string &username, std::int64_t value);
-    [[nodiscard]] std::int64_t quotes_added(const std::string &username) const;
-    void set_quotes_added(const std::string &username, std::int64_t count);
-    /* Case-insensitive lookups returning the stored spelling of the name. */
-    [[nodiscard]] std::optional<std::string> find_score(std::string_view username) const;
-    [[nodiscard]] std::optional<std::string> find_quotes_added(std::string_view username) const;
-    /* Scores in file order. */
-    [[nodiscard]] std::vector<ScoreEntry> scores() const;
-
-    [[nodiscard]] std::size_t quotes_count() const;
-    [[nodiscard]] std::string_view quote(std::size_t index) const;
-    void append_quote(const std::string &text);
-    void remove_quote(std::size_t index);
-    [[nodiscard]] std::size_t random_index(std::size_t count);
-
-private:
-    [[nodiscard]] const Json &quote_list() const;
-    Json &writable_quotes();
-
-    Storage &storage_;
-    std::unique_lock<std::mutex> lock_;
-    Json state_;
-    Json quotes_;
-    std::optional<Json> updated_quotes_;
-    bool state_changed_ = false;
 };
 
 }

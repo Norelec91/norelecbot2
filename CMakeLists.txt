@@ -51,8 +51,7 @@ set(CORE_SOURCES
     src/logging.cpp
     src/config.cpp
     src/storage.cpp
-    src/conquister_service.cpp
-    src/quote_service.cpp
+    src/game.cpp
     src/telegram_commands.cpp
     src/rest_routes.cpp
     src/text.cpp

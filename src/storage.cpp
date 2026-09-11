@@ -1,40 +1,17 @@
 #include "storage.hpp"
 
 #include "logging.hpp"
-#include "text.hpp"
 
 #include <algorithm>
 #include <cerrno>
+#include <exception>
 #include <filesystem>
 #include <format>
 #include <fstream>
-#include <iterator>
 #include <system_error>
-#include <utility>
 
 namespace norelecbot {
 namespace {
-
-bool ensure_object_member(Json &parent, const char *name) {
-    if (const Json *value = find_member(parent, name)) {
-        return value->is_object();
-    }
-    parent[name] = Json::object();
-    return true;
-}
-
-bool normalize_conquister(Json &state) {
-    if (!state.is_object()) {
-        return false;
-    }
-    const Json *current = find_member(state, "current");
-    if (current == nullptr) {
-        state["current"] = nullptr;
-    } else if (!current->is_null() && !current->is_object()) {
-        return false;
-    }
-    return ensure_object_member(state, "scores") && ensure_object_member(state, "quotes_added");
-}
 
 bool file_missing(const std::string &path, std::string_view description) {
     std::error_code error;
@@ -62,37 +39,90 @@ std::optional<Json> parse_file(const std::string &path, std::string &error) {
     }
 }
 
-std::optional<Json> load_state(const std::string &path) {
-    if (file_missing(path, "Conquister state")) {
-        return Json{{"current", nullptr}, {"scores", Json::object()}, {"quotes_added", Json::object()}};
+std::int64_t integer(const Json &value) {
+    if (!value.is_number_integer()) {
+        throw std::invalid_argument(std::format("expected an integer, found {}", value.type_name()));
     }
-    std::string error = "unexpected structure";
-    std::optional<Json> state = parse_file(path, error);
-    if (!state || !normalize_conquister(*state)) {
-        log_error("Conquister state {} is not valid: {}", path, error);
-        return std::nullopt;
-    }
-    return state;
+    return value.get<std::int64_t>();
 }
 
-std::optional<Json> load_quotes(const std::string &path) {
+Counters parse_counters(const Json &state, const char *name) {
+    Counters counters;
+    const auto table = state.find(name);
+    if (table == state.end()) {
+        return counters;
+    }
+    if (!table->is_object()) {
+        throw std::invalid_argument(std::format("{} is not an object", name));
+    }
+    for (const auto &entry : table->items()) {
+        counters.emplace(entry.key(), integer(entry.value()));
+    }
+    return counters;
+}
+
+/* Missing sections count as empty, like in the original C version. */
+ConquisterState parse_state(const Json &json) {
+    if (!json.is_object()) {
+        throw std::invalid_argument("unexpected structure");
+    }
+    std::optional<Holder> holder;
+    if (const auto current = json.find("current"); current != json.end() && !current->is_null()) {
+        holder = Holder{
+            .user_id = integer(current->at("user_id")),
+            .username = current->at("username").get<std::string>(),
+            .since = integer(current->at("since")),
+        };
+    }
+    return ConquisterState{std::move(holder), parse_counters(json, "scores"), parse_counters(json, "quotes_added")};
+}
+
+Json state_to_json(const ConquisterState &state) {
+    Json current = nullptr;
+    if (state.current) {
+        current = Json{
+            {"user_id", state.current->user_id},
+            {"username", state.current->username},
+            {"since", state.current->since},
+        };
+    }
+    return Json{{"current", std::move(current)}, {"scores", state.scores}, {"quotes_added", state.quotes_added}};
+}
+
+std::optional<ConquisterState> load_state(const std::string &path) {
+    if (file_missing(path, "Conquister state")) {
+        return ConquisterState{};
+    }
+    std::string error;
+    if (const std::optional<Json> json = parse_file(path, error)) {
+        try {
+            return parse_state(*json);
+        } catch (const std::exception &failure) {
+            error = failure.what();
+        }
+    }
+    log_error("Conquister state {} is not valid: {}", path, error);
+    return std::nullopt;
+}
+
+std::optional<Quotes> load_quotes(const std::string &path) {
     if (file_missing(path, "quote collection")) {
-        return Json::array();
+        return Quotes{};
     }
     std::string error = "unexpected structure";
-    std::optional<Json> quotes = parse_file(path, error);
-    if (!quotes || !quotes->is_array()) {
+    const std::optional<Json> json = parse_file(path, error);
+    if (!json || !json->is_array()) {
         log_error("Quote collection {} is not a JSON array: {}", path, error);
         return std::nullopt;
     }
-    const bool valid = std::all_of(quotes->begin(), quotes->end(), [](const Json &entry) {
+    const bool valid = std::all_of(json->begin(), json->end(), [](const Json &entry) {
         return entry.is_string() && !entry.get_ref<const std::string &>().empty();
     });
     if (!valid) {
         log_error("Quote collection {} contains an invalid entry", path);
         return std::nullopt;
     }
-    return quotes;
+    return json->get<Quotes>();
 }
 
 bool save_json(const std::string &path, const Json &value) {
@@ -122,163 +152,64 @@ bool save_json(const std::string &path, const Json &value) {
     return true;
 }
 
-std::int64_t integer_or(const Json *value, std::int64_t fallback) {
-    return value != nullptr && value->is_number_integer() ? value->get<std::int64_t>() : fallback;
-}
-
-std::optional<std::string> find_key_ignore_case(const Json *object, std::string_view name) {
-    if (object == nullptr || !object->is_object()) {
-        return std::nullopt;
-    }
-    const auto items = object->items();
-    const auto found = std::ranges::find_if(items, [name](const auto &entry) {
-        return text::equals_ignore_case(entry.key(), name);
-    });
-    if (found == items.end()) {
-        return std::nullopt;
-    }
-    return found.key();
-}
-
 }
 
 Storage::Storage(std::string conquister_path, std::string quotes_path)
     : conquister_path_(std::move(conquister_path)),
       quotes_path_(std::move(quotes_path)),
       random_(std::random_device{}()) {
-    {
-        [[maybe_unused]] const StorageTransaction validation{*this, StorageDocuments::all};
+    const bool state_valid = load_state(conquister_path_).has_value();
+    const bool quotes_valid = load_quotes(quotes_path_).has_value();
+    if (!state_valid || !quotes_valid) {
+        throw StorageError("JSON storage could not be loaded");
     }
     log_info("JSON storage ready (conquister={}, quotes={})", conquister_path_, quotes_path_);
 }
 
-StorageTransaction::StorageTransaction(Storage &storage, StorageDocuments documents)
-    : storage_(storage), lock_(storage.mutex_) {
-    bool loaded = true;
-    if (documents != StorageDocuments::quotes) {
-        std::optional<Json> state = load_state(storage.conquister_path_);
-        loaded = state.has_value();
-        if (state) {
-            state_ = std::move(*state);
+StorageSession::StorageSession(Storage &storage) : storage_(storage) {}
+
+ConquisterState &StorageSession::state() {
+    if (!state_) {
+        const std::optional<ConquisterState> loaded = load_state(storage_.conquister_path_);
+        if (!loaded) {
+            throw StorageError("Conquister state could not be loaded");
         }
+        state_.emplace(*loaded, *loaded);
     }
-    if (documents != StorageDocuments::state) {
-        std::optional<Json> quotes = load_quotes(storage.quotes_path_);
-        loaded = loaded && quotes.has_value();
-        if (quotes) {
-            quotes_ = std::move(*quotes);
-        }
-    }
-    if (!loaded) {
-        throw StorageError("JSON storage could not be loaded");
-    }
+    return state_->current;
 }
 
-void StorageTransaction::commit() {
-    if (updated_quotes_ && !save_json(storage_.quotes_path_, *updated_quotes_)) {
-        throw StorageError("Quote collection not saved");
+Quotes &StorageSession::quotes() {
+    if (!quotes_) {
+        const std::optional<Quotes> loaded = load_quotes(storage_.quotes_path_);
+        if (!loaded) {
+            throw StorageError("Quote collection could not be loaded");
+        }
+        quotes_.emplace(*loaded, *loaded);
     }
-    if (state_changed_ && !save_json(storage_.conquister_path_, state_)) {
-        if (updated_quotes_ && !save_json(storage_.quotes_path_, quotes_)) {
+    return quotes_->current;
+}
+
+std::size_t StorageSession::random_index(std::size_t count) {
+    std::uniform_int_distribution<std::size_t> distribution{0, count - 1};
+    return distribution(storage_.random_);
+}
+
+void StorageSession::save() const {
+    bool quotes_saved = false;
+    if (quotes_ && quotes_->current != quotes_->original) {
+        if (!save_json(storage_.quotes_path_, Json(quotes_->current))) {
+            throw StorageError("Quote collection not saved");
+        }
+        quotes_saved = true;
+    }
+    if (state_ && state_->current != state_->original &&
+        !save_json(storage_.conquister_path_, state_to_json(state_->current))) {
+        if (quotes_saved && quotes_ && !save_json(storage_.quotes_path_, Json(quotes_->original))) {
             log_error("Could not roll back quote collection after Conquister save failure");
         }
         throw StorageError("Conquister state not saved");
     }
-}
-
-std::string_view StorageTransaction::holder() const {
-    const Json *username = find_member(find_member(state_, "current"), "username");
-    if (username == nullptr || !username->is_string()) {
-        return {};
-    }
-    return username->get_ref<const std::string &>();
-}
-
-std::int64_t StorageTransaction::holder_since(std::int64_t fallback) const {
-    return integer_or(find_member(find_member(state_, "current"), "since"), fallback);
-}
-
-void StorageTransaction::set_holder(std::int64_t user_id, const std::string &username, std::int64_t now) {
-    state_["current"] = Json{{"user_id", user_id}, {"username", username}, {"since", now}};
-    state_changed_ = true;
-}
-
-std::int64_t StorageTransaction::score(const std::string &username) const {
-    return integer_or(find_member(find_member(state_, "scores"), username.c_str()), 0);
-}
-
-void StorageTransaction::set_score(const std::string &username, std::int64_t value) {
-    state_["scores"][username] = value;
-    state_changed_ = true;
-}
-
-std::int64_t StorageTransaction::quotes_added(const std::string &username) const {
-    return integer_or(find_member(find_member(state_, "quotes_added"), username.c_str()), 0);
-}
-
-void StorageTransaction::set_quotes_added(const std::string &username, std::int64_t count) {
-    state_["quotes_added"][username] = count;
-    state_changed_ = true;
-}
-
-std::optional<std::string> StorageTransaction::find_score(std::string_view username) const {
-    return find_key_ignore_case(find_member(state_, "scores"), username);
-}
-
-std::optional<std::string> StorageTransaction::find_quotes_added(std::string_view username) const {
-    return find_key_ignore_case(find_member(state_, "quotes_added"), username);
-}
-
-std::vector<ScoreEntry> StorageTransaction::scores() const {
-    std::vector<ScoreEntry> entries;
-    if (const Json *table = find_member(state_, "scores"); table != nullptr && table->is_object()) {
-        entries.reserve(table->size());
-        const auto items = table->items();
-        std::ranges::transform(items, std::back_inserter(entries), [](const auto &entry) {
-            return ScoreEntry{entry.key(), integer_or(&entry.value(), 0)};
-        });
-    }
-    return entries;
-}
-
-const Json &StorageTransaction::quote_list() const {
-    return updated_quotes_ ? *updated_quotes_ : quotes_;
-}
-
-Json &StorageTransaction::writable_quotes() {
-    if (!updated_quotes_) {
-        updated_quotes_ = quotes_;
-    }
-    return *updated_quotes_;
-}
-
-std::size_t StorageTransaction::quotes_count() const {
-    return quote_list().size();
-}
-
-std::string_view StorageTransaction::quote(std::size_t index) const {
-    const Json &quotes = quote_list();
-    if (index >= quotes.size() || !quotes[index].is_string()) {
-        return {};
-    }
-    return quotes[index].get_ref<const std::string &>();
-}
-
-void StorageTransaction::append_quote(const std::string &text) {
-    writable_quotes().push_back(text);
-}
-
-void StorageTransaction::remove_quote(std::size_t index) {
-    Json &quotes = writable_quotes();
-    if (index >= quotes.size()) {
-        throw StorageError("Quote not removed");
-    }
-    quotes.erase(index);
-}
-
-std::size_t StorageTransaction::random_index(std::size_t count) {
-    std::uniform_int_distribution<std::size_t> distribution{0, count - 1};
-    return distribution(storage_.random_);
 }
 
 }
