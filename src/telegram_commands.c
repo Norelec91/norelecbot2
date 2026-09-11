@@ -311,6 +311,10 @@ TelegramCommandResult telegram_command_dispatch(
     TelegramCommandHandler handler = nullptr;
     const char *argument = "";
     if (strcmp(message, TELEGRAM_CONQUISTER_TRIGGER) == 0) {
+        if (context->config->conquister_chat_id != 0 &&
+            context->chat_id != context->config->conquister_chat_id) {
+            return TELEGRAM_COMMAND_IGNORED;
+        }
         handler = handle_claim;
     } else {
         char command[64];

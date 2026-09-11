@@ -31,6 +31,13 @@ int main(void) {
     write_file(path, "NORELECBOT_OWNER_ID=\n");
     assert(config_load(&config, path));
     assert(config.quote_cost == 1000);
+    assert(config.conquister_chat_id == 0);
+
+    write_file(path, "NORELECBOT_CONQUISTER_CHAT_ID=-1001234567890\n");
+    assert(config_load(&config, path));
+    assert(config.conquister_chat_id == INT64_C(-1001234567890));
+    write_file(path, "NORELECBOT_CONQUISTER_CHAT_ID=gruppo\n");
+    assert(!config_load(&config, path));
 
     write_file(path, "NORELECBOT_QUOTE_COST=-1\n");
     assert(!config_load(&config, path));

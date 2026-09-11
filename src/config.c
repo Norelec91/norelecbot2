@@ -51,6 +51,10 @@ static bool set_quote_cost(AppConfig *config, const char *value) {
     return true;
 }
 
+static bool set_conquister_chat_id(AppConfig *config, const char *value) {
+    return parse_number(value, 0, INT64_MIN, INT64_MAX, &config->conquister_chat_id);
+}
+
 static bool set_api_host(AppConfig *config, const char *value) {
     return text_copy(config->api_host, sizeof(config->api_host),
                      *value == '\0' ? "0.0.0.0" : value);
@@ -84,6 +88,7 @@ static const struct {
     {"NORELECBOT_CONQUISTER_ENABLED", set_conquister_enabled},
     {"NORELECBOT_OWNER_ID", set_owner_id},
     {"NORELECBOT_QUOTE_COST", set_quote_cost},
+    {"NORELECBOT_CONQUISTER_CHAT_ID", set_conquister_chat_id},
     {"NORELECBOT_API_HOST", set_api_host},
     {"NORELECBOT_API_PORT", set_api_port},
     {"NORELECBOT_CONQUISTER_FILE", set_conquister_file},

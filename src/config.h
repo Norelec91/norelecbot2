@@ -9,6 +9,7 @@ typedef struct {
     bool conquister_enabled;
     int64_t owner_id;
     int quote_cost;
+    int64_t conquister_chat_id;
     char api_host[64];
     int api_port;
     char conquister_path[1024];

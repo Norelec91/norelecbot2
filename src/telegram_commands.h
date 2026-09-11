@@ -19,6 +19,7 @@ typedef struct {
     Storage *storage;
     Arena *arena;
     const AppConfig *config;
+    int64_t chat_id;
     int64_t user_id;
     const char *username;
 } TelegramCommandContext;

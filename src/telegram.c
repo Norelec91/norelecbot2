@@ -144,6 +144,7 @@ static void process_message(Storage *storage, const AppConfig *config, json_t *m
         .storage = storage,
         .arena = &arena,
         .config = config,
+        .chat_id = chat_id,
         .user_id = (int64_t)json_integer_value(user_id_value),
         .username = json_string_value(json_object_get(sender, "username")),
     };

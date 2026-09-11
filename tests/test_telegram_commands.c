@@ -34,6 +34,15 @@ int main(void) {
                reply.data,
                "Classifica vuota. Scrivi \"We @TheConquister37\" per entrare in @TheConquister37!"
            ) == 0);
+
+    config.conquister_chat_id = -1001234567890;
+    context.chat_id = -100999;
+    assert(telegram_command_dispatch(&context, "We @TheConquister37", &reply) ==
+           TELEGRAM_COMMAND_IGNORED);
+    assert(reply.length == 0U);
+    assert(telegram_command_dispatch(&context, "/classifica", &reply) == TELEGRAM_COMMAND_REPLIED);
+    context.chat_id = -1001234567890;
+
     context.username = nullptr;
     assert(telegram_command_dispatch(&context, "We @TheConquister37", &reply) ==
            TELEGRAM_COMMAND_REPLIED);
