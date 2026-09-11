@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
 # Deploy the committed HEAD of this repository to the VPS.
 #
-#   deploy/deploy.sh             send sources, build, run tests, restart the bot
+#   deploy/deploy.sh             build and test in the dev container, send the binary, restart
 #   deploy/deploy.sh rollback    swap back to the previous binary and restart
 #
 # Environment:
 #   DEPLOY_HOST           ssh destination, user@host (default: first line of deploy/host, gitignored)
 #   DEPLOY_SSH            ssh command, may include options (default: ssh)
+#   DEPLOY_ENGINE         container engine (default: podman)
 #   DEPLOY_ALLOW_DIRTY=1  deploy even with uncommitted changes (they are NOT sent)
 set -euo pipefail
 
 DEPLOY_SSH="${DEPLOY_SSH:-ssh}"
+DEPLOY_ENGINE="${DEPLOY_ENGINE:-podman}"
+IMAGE=norelecbot-dev
 ACTION="${1:-deploy}"
 
 case "$ACTION" in
@@ -33,6 +36,7 @@ fi
 
 # All ssh calls share one connection, so a password is asked at most once.
 control_path="${XDG_RUNTIME_DIR:-/tmp}/norelecbot-deploy-%C"
+staging=""
 
 remote() {
     # shellcheck disable=SC2086  # DEPLOY_SSH may contain options
@@ -40,7 +44,8 @@ remote() {
         "$DEPLOY_HOST" "$@"
 }
 
-remote_close() {
+cleanup() {
+    [ -z "$staging" ] || rm -rf "$staging"
     # shellcheck disable=SC2086
     $DEPLOY_SSH -o "ControlPath=$control_path" -O exit "$DEPLOY_HOST" >/dev/null 2>&1 || true
 }
@@ -80,19 +85,19 @@ restart_and_check() {
 case "$action" in
 deploy)
     unit=~/.config/systemd/user/norelecbot.service
-    if [ -f deploy/norelecbot.service ] && ! cmp -s deploy/norelecbot.service "$unit"; then
-        install -m 644 deploy/norelecbot.service "$unit"
+    if ! cmp -s incoming/norelecbot.service "$unit"; then
+        install -m 644 incoming/norelecbot.service "$unit"
         systemctl --user daemon-reload
         echo "==> systemd unit updated"
     fi
-    [ -d build ] || cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+    mkdir -p bin
     if [ -x bin/norelecbot ]; then
         cp -p bin/norelecbot bin/norelecbot.prev
     fi
-    echo "==> building"
-    cmake --build build -j"$(nproc)"
-    echo "==> testing"
-    ctest --test-dir build --output-on-failure
+    # Rename over the old file: the running process keeps its own copy until the restart.
+    install -m 755 incoming/norelecbot bin/norelecbot.new
+    mv -f bin/norelecbot.new bin/norelecbot
+    rm -rf incoming
     echo "==> restarting"
     if ! restart_and_check; then
         echo "!! run 'deploy/deploy.sh rollback' to restore the previous binary" >&2
@@ -116,7 +121,7 @@ esac
 EOF
 }
 
-trap remote_close EXIT
+trap cleanup EXIT
 commit="$(git rev-parse --short HEAD)"
 
 if [ "$ACTION" = deploy ]; then
@@ -126,9 +131,27 @@ if [ "$ACTION" = deploy ]; then
         echo "   commit them, or set DEPLOY_ALLOW_DIRTY=1 to deploy HEAD anyway" >&2
         exit 1
     fi
+    if ! "$DEPLOY_ENGINE" image inspect "$IMAGE" >/dev/null 2>&1; then
+        echo "==> building the $IMAGE image"
+        "$DEPLOY_ENGINE" build -t "$IMAGE" -f tools/Containerfile tools
+    fi
+
+    staging="$(mktemp -d)"
+    echo "==> building and testing $commit in $IMAGE"
+    # Build output goes to stderr; stdout carries only the binary.
+    git archive --format=tar HEAD | "$DEPLOY_ENGINE" run -i --rm "$IMAGE" sh -c '
+        set -e
+        mkdir /work && tar -x -C /work && cd /work
+        cmake -S . -B build -DCMAKE_BUILD_TYPE=Release >&2
+        cmake --build build -j"$(nproc)" >&2
+        ctest --test-dir build --output-on-failure >&2
+        cat bin/norelecbot' > "$staging/norelecbot"
+    [ -s "$staging/norelecbot" ] || { echo "!! the build produced no binary" >&2; exit 1; }
+    git show HEAD:deploy/norelecbot.service > "$staging/norelecbot.service"
+
     echo "==> sending $commit to $DEPLOY_HOST"
-    # -m: give extracted files the current time, so the build always sees them as changed.
-    git archive --format=tar HEAD | remote 'tar -xm -C ~/norelecbot'
+    tar -c -C "$staging" norelecbot norelecbot.service |
+        remote 'rm -rf ~/norelecbot/incoming && mkdir -p ~/norelecbot/incoming && tar -x -C ~/norelecbot/incoming'
 fi
 
 remote_script | remote bash -s -- "$ACTION" "$commit"
