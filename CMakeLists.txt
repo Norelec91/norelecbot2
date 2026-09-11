@@ -46,6 +46,27 @@ else()
     set(MICROHTTPD_TARGET microhttpd_external)
 endif()
 
+option(NORELECBOT_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+
+if(MSVC)
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+    add_compile_options(/W4 /WX /utf-8)
+else()
+    add_compile_options(
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wconversion
+        -Wshadow
+        -Wstrict-prototypes
+        -Werror
+    )
+    if(NORELECBOT_SANITIZE)
+        add_compile_options(-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer)
+        add_link_options(-fsanitize=address,undefined)
+    endif()
+endif()
+
 set(CORE_SOURCES
     src/dynamic_string.c
     src/platform.c
@@ -75,21 +96,6 @@ target_link_libraries(norelecbot PRIVATE
 
 if(WIN32)
     target_link_libraries(norelecbot PRIVATE ws2_32)
-endif()
-
-if(MSVC)
-    add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
-    add_compile_options(/W4 /WX /utf-8)
-else()
-    add_compile_options(
-        -Wall
-        -Wextra
-        -Wpedantic
-        -Wconversion
-        -Wshadow
-        -Wstrict-prototypes
-        -Werror
-    )
 endif()
 
 include(CTest)
