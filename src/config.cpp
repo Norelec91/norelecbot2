@@ -1,0 +1,132 @@
+#include "config.hpp"
+
+#include "logging.hpp"
+#include "text.hpp"
+
+#include <algorithm>
+#include <array>
+#include <cstdlib>
+#include <fstream>
+#include <limits>
+
+namespace norelecbot {
+namespace {
+
+template <typename Number>
+bool set_number(
+    Number &target,
+    std::string_view value,
+    Number fallback,
+    Number minimum = std::numeric_limits<Number>::min(),
+    Number maximum = std::numeric_limits<Number>::max()
+) {
+    const std::optional<std::int64_t> parsed =
+        value.empty() ? std::optional<std::int64_t>{fallback} : text::parse_int64(value);
+    if (!parsed || *parsed < minimum || *parsed > maximum) {
+        return false;
+    }
+    target = static_cast<Number>(*parsed);
+    return true;
+}
+
+bool set_text(std::string &target, std::string_view value, std::string_view fallback) {
+    target = value.empty() ? fallback : value;
+    return true;
+}
+
+struct Setting {
+    const char *name;
+    bool (*apply)(AppConfig &config, std::string_view value);
+};
+
+// Environment variables are applied in this order.
+constexpr std::array settings{
+    Setting{"NORELECBOT_TELEGRAM_TOKEN", [](AppConfig &config, std::string_view value) {
+        return set_text(config.bot_token, value, {});
+    }},
+    Setting{"NORELECBOT_CONQUISTER_ENABLED", [](AppConfig &config, std::string_view value) {
+        config.conquister_enabled =
+            !value.empty() && value != "0" && !text::equals_ignore_case(value, "false");
+        return true;
+    }},
+    Setting{"NORELECBOT_OWNER_ID", [](AppConfig &config, std::string_view value) {
+        return set_number(config.owner_id, value, std::int64_t{0});
+    }},
+    Setting{"NORELECBOT_QUOTE_COST", [](AppConfig &config, std::string_view value) {
+        return set_number(config.quote_cost, value, AppConfig::default_quote_cost, 0);
+    }},
+    Setting{"NORELECBOT_CONQUISTER_CHAT_ID", [](AppConfig &config, std::string_view value) {
+        return set_number(config.conquister_chat_id, value, std::int64_t{0});
+    }},
+    Setting{"NORELECBOT_API_HOST", [](AppConfig &config, std::string_view value) {
+        return set_text(config.api_host, value, AppConfig::default_api_host);
+    }},
+    Setting{"NORELECBOT_API_PORT", [](AppConfig &config, std::string_view value) {
+        return set_number(config.api_port, value, AppConfig::default_api_port, 1, 65535);
+    }},
+    Setting{"NORELECBOT_CONQUISTER_FILE", [](AppConfig &config, std::string_view value) {
+        return set_text(config.conquister_path, value, AppConfig::default_conquister_path);
+    }},
+    Setting{"NORELECBOT_QUOTES_FILE", [](AppConfig &config, std::string_view value) {
+        return set_text(config.quotes_path, value, AppConfig::default_quotes_path);
+    }},
+};
+
+bool apply_setting(AppConfig &config, std::string_view name, std::string_view value) {
+    const auto setting = std::ranges::find_if(settings, [name](const Setting &candidate) {
+        return name == candidate.name;
+    });
+    return setting == settings.end() || setting->apply(config, value);
+}
+
+bool apply_dotenv(AppConfig &config, const std::filesystem::path &path) {
+    std::ifstream file{path};
+    if (!file.is_open()) {
+        return false;
+    }
+    std::string line;
+    while (std::getline(file, line)) {
+        const std::string_view entry = text::trim(line);
+        const std::size_t equals = entry.find('=');
+        if (entry.empty() || entry.front() == '#' || equals == std::string_view::npos) {
+            continue;
+        }
+        const std::string_view name = text::trim(entry.substr(0, equals));
+        std::string_view value = text::trim(entry.substr(equals + 1));
+        if (value.size() >= 2 && (value.front() == '"' || value.front() == '\'') &&
+            value.back() == value.front()) {
+            value = value.substr(1, value.size() - 2);
+        }
+        if (!name.empty() && !apply_setting(config, name, value)) {
+            return false;
+        }
+    }
+    return !file.bad();
+}
+
+bool apply_environment(AppConfig &config) {
+    return std::ranges::all_of(settings, [&config](const Setting &setting) {
+        const char *value = std::getenv(setting.name);
+        return value == nullptr || setting.apply(config, value);
+    });
+}
+
+}
+
+std::optional<AppConfig> load_config(const std::filesystem::path &dotenv_path) {
+    AppConfig config;
+    if (!apply_dotenv(config, dotenv_path)) {
+        log_error(
+            "Required configuration file '{}' is missing, unreadable, or invalid",
+            dotenv_path.string()
+        );
+        return std::nullopt;
+    }
+    if (!apply_environment(config)) {
+        log_error("Invalid environment configuration");
+        return std::nullopt;
+    }
+    return config;
+}
+
+}

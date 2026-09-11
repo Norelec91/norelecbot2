@@ -4,15 +4,13 @@ Checks: >
   cert-*,
   clang-analyzer-*,
   misc-*,
+  modernize-*,
+  performance-*,
   portability-*,
-  -bugprone-assignment-in-if-condition,
   -bugprone-easily-swappable-parameters,
-  -bugprone-multi-level-implicit-pointer-conversion,
   -cert-err33-c,
   -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
-  -misc-include-cleaner
+  -misc-include-cleaner,
+  -modernize-use-designated-initializers,
+  -modernize-use-trailing-return-type
 WarningsAsErrors: '*'
-CheckOptions:
-  bugprone-reserved-identifier.AllowedIdentifiers: '_POSIX_C_SOURCE'
-  cert-dcl37-c.AllowedIdentifiers: '_POSIX_C_SOURCE'
-  cert-dcl51-cpp.AllowedIdentifiers: '_POSIX_C_SOURCE'

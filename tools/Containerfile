@@ -1,7 +1,7 @@
 FROM docker.io/library/debian:trixie
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      cmake make gcc libc6-dev pkg-config ca-certificates \
-      libcurl4-openssl-dev libjansson-dev libmicrohttpd-dev \
+      cmake make g++ libc6-dev pkg-config ca-certificates \
+      nlohmann-json3-dev libcpp-httplib-dev \
       clang clang-tidy cppcheck libclang-rt-19-dev \
  && rm -rf /var/lib/apt/lists/*

@@ -25,20 +25,19 @@ run_build() {
 
 run_build gcc-release -DCMAKE_BUILD_TYPE=Release
 run_build gcc-sanitize -DCMAKE_BUILD_TYPE=Debug -DNORELECBOT_SANITIZE=ON
-run_build clang-fuzz -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang \
+run_build clang-fuzz -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=clang++ \
     -DNORELECBOT_FUZZ=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
 echo "==> cppcheck"
-# cppcheck 2.17 does not treat C23 nullptr comparisons as null checks (false leak reports).
-cppcheck --enable=warning,style,performance,portability --std=c23 -Dnullptr=NULL --quiet --error-exitcode=1 \
+# cppcheck 2.17 knows at most C++20; the C++23 parts are checked by the compilers and clang-tidy.
+cppcheck --enable=warning,style,performance,portability --language=c++ --std=c++20 --quiet --error-exitcode=1 \
     --suppress=missingIncludeSystem --suppress=unusedFunction --suppress=normalCheckLevelMaxBranches \
-    --suppress=knownConditionTrueFalse:src/http_server.c \
-    --suppress=constParameterPointer:src/platform.c \
-    --suppress=constParameterCallback:src/telegram.c \
+    --suppress=constParameterReference:src/telegram.cpp \
+    --suppress=useStlAlgorithm:src/rest_routes.cpp \
     -I src src tests fuzz
 
 echo "==> clang-tidy"
-clang-tidy -p "$OUT/clang-fuzz" --quiet src/*.c tests/*.c fuzz/*.c 2> >(grep -v "warnings generated" >&2)
+clang-tidy -p "$OUT/clang-fuzz" --quiet src/*.cpp tests/*.cpp fuzz/*.cpp 2> >(grep -v "warnings generated" >&2)
 
 echo "==> fuzz REST routes for ${FUZZ_SECONDS}s"
 corpus="$OUT/fuzz-corpus"

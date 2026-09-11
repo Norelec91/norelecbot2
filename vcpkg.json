@@ -2,8 +2,10 @@
   "name": "norelecbot",
   "version-string": "1.0.0",
   "dependencies": [
-    "curl",
-    "jansson",
-    "libmicrohttpd"
+    {
+      "name": "cpp-httplib",
+      "features": ["openssl"]
+    },
+    "nlohmann-json"
   ]
 }
