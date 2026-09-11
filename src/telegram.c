@@ -137,13 +137,16 @@ static void process_message(Storage *storage, const AppConfig *config, json_t *m
     if (!dynamic_string_init(&reply, 1024U)) {
         return;
     }
+    Arena arena = {0};
     TelegramCommandContext context = {
         .storage = storage,
+        .arena = &arena,
         .config = config,
         .user_id = (int64_t)json_integer_value(user_id_value),
         .username = json_string_value(json_object_get(sender, "username")),
     };
     TelegramCommandResult result = telegram_command_dispatch(&context, text, &reply);
+    arena_free(&arena);
     if (result == TELEGRAM_COMMAND_REPLIED) {
         send_message(config, chat_id, reply.data);
     } else if (result == TELEGRAM_COMMAND_ERROR) {

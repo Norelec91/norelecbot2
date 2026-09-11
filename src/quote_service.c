@@ -1,6 +1,5 @@
 #include "quote_service.h"
 
-#include "dynamic_string.h"
 #include "json_storage_internal.h"
 #include "logging.h"
 
@@ -100,96 +99,65 @@ cleanup:
     return ok;
 }
 
-void quote_page_free(QuotePage *page) {
-    if (page == NULL) {
-        return;
-    }
-    if (page->items != NULL) {
-        for (size_t index = 0U; index < page->count; ++index) {
-            free(page->items[index]);
-        }
-    }
-    free(page->items);
-    *page = (QuotePage){0};
-}
-
-bool quote_page_load(Storage *storage, int requested_page, QuotePage *page) {
+bool quote_page_load(Storage *storage, Arena *arena, int requested_page, QuotePage *page) {
     *page = (QuotePage){0};
     if (!json_storage_lock(storage)) {
         return false;
     }
     json_t *quotes = json_storage_load_quotes(storage);
-    bool ok = false;
-    if (quotes == NULL) {
-        goto cleanup;
-    }
+    bool ok = quotes != NULL;
     page->total = json_array_size(quotes);
-    if (page->total == 0U) {
-        ok = true;
-        goto cleanup;
+    if (ok && page->total > 0U) {
+        page->pages = ((page->total - 1U) / QUOTES_PAGE_SIZE) + 1U;
+        page->page = requested_page > 0 ? (size_t)requested_page : 1U;
+        if (page->page > page->pages) {
+            page->page = page->pages;
+        }
+        size_t offset = (page->page - 1U) * QUOTES_PAGE_SIZE;
+        size_t remaining = page->total - offset;
+        page->count = remaining > QUOTES_PAGE_SIZE ? QUOTES_PAGE_SIZE : remaining;
+        page->first_number = offset + 1U;
+        page->items = arena_alloc(arena, page->count * sizeof(*page->items));
+        ok = page->items != NULL;
+        for (size_t index = 0U; ok && index < page->count; ++index) {
+            page->items[index] = arena_strdup(
+                arena,
+                json_string_value(json_array_get(quotes, offset + index))
+            );
+            ok = page->items[index] != NULL;
+        }
     }
-    page->pages = ((page->total - 1U) / QUOTES_PAGE_SIZE) + 1U;
-    page->page = requested_page > 0 ? (size_t)requested_page : 1U;
-    if (page->page > page->pages) {
-        page->page = page->pages;
-    }
-    size_t offset = (page->page - 1U) * QUOTES_PAGE_SIZE;
-    size_t remaining = page->total - offset;
-    page->count = remaining > QUOTES_PAGE_SIZE ? QUOTES_PAGE_SIZE : remaining;
-    page->first_number = offset + 1U;
-    page->items = calloc(page->count, sizeof(*page->items));
-    ok = page->items != NULL;
-    for (size_t index = 0U; ok && index < page->count; ++index) {
-        page->items[index] = string_duplicate(
-            json_string_value(json_array_get(quotes, offset + index))
-        );
-        ok = page->items[index] != NULL;
-    }
-
-cleanup:
     json_decref(quotes);
     json_storage_unlock(storage);
-    if (!ok) {
-        quote_page_free(page);
-    }
     return ok;
 }
 
-bool quote_random(Storage *storage, char **quote) {
+bool quote_random(Storage *storage, Arena *arena, char **quote) {
     *quote = NULL;
     if (!json_storage_lock(storage)) {
         return false;
     }
     json_t *quotes = json_storage_load_quotes(storage);
-    bool ok = false;
-    if (quotes == NULL) {
-        goto cleanup;
-    }
+    bool ok = quotes != NULL;
     size_t count = json_array_size(quotes);
-    ok = true;
-    if (count > 0U) {
+    if (ok && count > 0U) {
         size_t index = (size_t)(json_storage_next_quote_random(storage) % count);
-        *quote = string_duplicate(json_string_value(json_array_get(quotes, index)));
+        *quote = arena_strdup(arena, json_string_value(json_array_get(quotes, index)));
         ok = *quote != NULL;
     }
-
-cleanup:
     json_decref(quotes);
     json_storage_unlock(storage);
     return ok;
 }
 
-bool quote_delete(Storage *storage, const char *selector, char **removed_quote) {
+bool quote_delete(Storage *storage, Arena *arena, const char *selector, char **removed_quote) {
     *removed_quote = NULL;
     if (!json_storage_lock(storage)) {
         return false;
     }
     json_t *quotes = json_storage_load_quotes(storage);
     json_t *updated = NULL;
-    bool ok = false;
-    if (quotes == NULL) {
-        goto cleanup;
-    }
+    bool ok = quotes != NULL;
     size_t count = json_array_size(quotes);
     size_t selected = SIZE_MAX;
     char *end = NULL;
@@ -208,22 +176,11 @@ bool quote_delete(Storage *storage, const char *selector, char **removed_quote) 
             }
         }
     }
-    if (selected == SIZE_MAX) {
-        ok = true;
-        goto cleanup;
-    }
-
-    const char *removed = json_string_value(json_array_get(quotes, selected));
-    updated = copy_quotes(quotes, selected, NULL);
-    if (removed != NULL) {
-        *removed_quote = string_duplicate(removed);
-    }
-    ok = updated != NULL && *removed_quote != NULL && json_storage_save_quotes(storage, updated);
-
-cleanup:
-    if (!ok) {
-        free(*removed_quote);
-        *removed_quote = NULL;
+    if (ok && selected != SIZE_MAX) {
+        *removed_quote = arena_strdup(arena, json_string_value(json_array_get(quotes, selected)));
+        updated = copy_quotes(quotes, selected, NULL);
+        ok = *removed_quote != NULL && updated != NULL &&
+             json_storage_save_quotes(storage, updated);
     }
     json_decref(updated);
     json_decref(quotes);

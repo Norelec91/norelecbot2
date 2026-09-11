@@ -101,15 +101,3 @@ bool dynamic_string_appendf(DynamicString *string, const char *format, ...) {
     string->length += size;
     return true;
 }
-
-char *string_duplicate(const char *text) {
-    if (text == NULL) {
-        return NULL;
-    }
-    size_t length = strlen(text);
-    char *copy = malloc(length + 1U);
-    if (copy != NULL) {
-        memcpy(copy, text, length + 1U);
-    }
-    return copy;
-}

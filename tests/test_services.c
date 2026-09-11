@@ -31,14 +31,14 @@ int main(void) {
     test_paths("telegram-service-test", conquister_path, quotes_path);
 
     Storage storage = {0};
+    Arena arena = {0};
     assert(storage_open(&storage, conquister_path, quotes_path));
 
     QuotePage page;
-    assert(quote_page_load(&storage, 1, &page));
+    assert(quote_page_load(&storage, &arena, 1, &page));
     assert(page.total == 0U);
-    quote_page_free(&page);
     char *random_quote = NULL;
-    assert(quote_random(&storage, &random_quote));
+    assert(quote_random(&storage, &arena, &random_quote));
     assert(random_quote == NULL);
 
     ClaimResult claim;
@@ -50,13 +50,12 @@ int main(void) {
     assert(claim.earned == 1000);
 
     Leaderboard leaderboard;
-    assert(conquister_leaderboard(&storage, 10U, &leaderboard));
+    assert(conquister_leaderboard(&storage, &arena, 10U, &leaderboard));
     assert(leaderboard.count == 1U);
     assert(strcmp(leaderboard.entries[0].username, "alice") == 0);
     assert(leaderboard.entries[0].score == 1000);
     assert(strcmp(leaderboard.current_username, "bob") == 0);
     assert(leaderboard.current_since == 1100);
-    leaderboard_free(&leaderboard);
 
     ConquisterUser user;
     assert(conquister_user(&storage, "ALICE", &user));
@@ -73,42 +72,38 @@ int main(void) {
     assert(quote_add(&storage, "alice", "quote di prova", 1000, &addition));
     assert(addition.status == QUOTE_ADDED);
     assert(addition.available_score == 0);
-    assert(quote_random(&storage, &random_quote));
+    assert(quote_random(&storage, &arena, &random_quote));
     assert(random_quote != NULL && strcmp(random_quote, "quote di prova") == 0);
-    free(random_quote);
 
     assert(conquister_claim(&storage, 1, "alice", 1101, &claim));
     assert(conquister_claim(&storage, 2, "bob", 2101, &claim));
     assert(quote_add(&storage, "alice", "quote di prova", 1000, &addition));
     assert(addition.status == QUOTE_DUPLICATE);
-    assert(quote_page_load(&storage, 1, &page));
+    assert(quote_page_load(&storage, &arena, 1, &page));
     assert(page.count == 1U);
     assert(strcmp(page.items[0], "quote di prova") == 0);
-    quote_page_free(&page);
 
     char *removed = NULL;
-    assert(quote_delete(&storage, "1", &removed));
+    assert(quote_delete(&storage, &arena, "1", &removed));
     assert(removed != NULL && strcmp(removed, "quote di prova") == 0);
-    free(removed);
-    assert(quote_page_load(&storage, 1, &page));
+    assert(quote_delete(&storage, &arena, "1", &removed));
+    assert(removed == NULL);
+    assert(quote_page_load(&storage, &arena, 1, &page));
     assert(page.total == 0U);
-    quote_page_free(&page);
 
     storage_close(&storage);
     assert_json_formats(conquister_path, quotes_path);
     assert(storage_open(&storage, conquister_path, quotes_path));
-    assert(conquister_leaderboard(&storage, 10U, &leaderboard));
+    assert(conquister_leaderboard(&storage, &arena, 10U, &leaderboard));
     assert(leaderboard.count > 0U);
     assert(strcmp(leaderboard.entries[0].username, "alice") == 0);
-    leaderboard_free(&leaderboard);
-    assert(conquister_leaderboard(&storage, 1U, &leaderboard));
+    assert(conquister_leaderboard(&storage, &arena, 1U, &leaderboard));
     assert(leaderboard.count == 1U);
-    leaderboard_free(&leaderboard);
-    assert(conquister_leaderboard(&storage, 0U, &leaderboard));
+    assert(conquister_leaderboard(&storage, &arena, 0U, &leaderboard));
     assert(leaderboard.count == 2U);
     assert(strcmp(leaderboard.entries[1].username, "bob") == 0);
-    leaderboard_free(&leaderboard);
     storage_close(&storage);
+    arena_free(&arena);
 
     test_paths_remove(conquister_path, quotes_path);
     puts("service tests: ok");

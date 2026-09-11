@@ -1,6 +1,7 @@
 #ifndef NORELECBOT_TELEGRAM_COMMANDS_H
 #define NORELECBOT_TELEGRAM_COMMANDS_H
 
+#include "arena.h"
 #include "config.h"
 #include "dynamic_string.h"
 #include "storage.h"
@@ -16,6 +17,7 @@ typedef enum {
 
 typedef struct {
     Storage *storage;
+    Arena *arena;
     const AppConfig *config;
     int64_t user_id;
     const char *username;

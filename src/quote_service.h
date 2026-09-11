@@ -1,6 +1,7 @@
 #ifndef NORELECBOT_QUOTE_SERVICE_H
 #define NORELECBOT_QUOTE_SERVICE_H
 
+#include "arena.h"
 #include "storage.h"
 
 #include <stdbool.h>
@@ -34,9 +35,9 @@ bool quote_add(
     int cost,
     QuoteAddResult *result
 );
-bool quote_page_load(Storage *storage, int requested_page, QuotePage *page);
-void quote_page_free(QuotePage *page);
-bool quote_random(Storage *storage, char **quote);
-bool quote_delete(Storage *storage, const char *selector, char **removed_quote);
+/* Returned strings and page items live in arena. */
+bool quote_page_load(Storage *storage, Arena *arena, int requested_page, QuotePage *page);
+bool quote_random(Storage *storage, Arena *arena, char **quote);
+bool quote_delete(Storage *storage, Arena *arena, const char *selector, char **removed_quote);
 
 #endif

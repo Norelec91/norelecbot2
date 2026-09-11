@@ -1,6 +1,7 @@
 #ifndef NORELECBOT_CONQUISTER_SERVICE_H
 #define NORELECBOT_CONQUISTER_SERVICE_H
 
+#include "arena.h"
 #include "storage.h"
 
 #include <stdbool.h>
@@ -50,9 +51,13 @@ bool conquister_claim(
     int64_t now,
     ClaimResult *result
 );
-/* limit 0 returns every entry. */
-bool conquister_leaderboard(Storage *storage, size_t limit, Leaderboard *leaderboard);
-void leaderboard_free(Leaderboard *leaderboard);
+/* Entries live in arena; limit 0 returns every entry. */
+bool conquister_leaderboard(
+    Storage *storage,
+    Arena *arena,
+    size_t limit,
+    Leaderboard *leaderboard
+);
 /* Case-insensitive lookup; rank is 0 when the user has no score yet. */
 bool conquister_user(Storage *storage, const char *username, ConquisterUser *user);
 

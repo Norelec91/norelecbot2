@@ -17,6 +17,4 @@ bool dynamic_string_append(DynamicString *string, const char *text);
 bool dynamic_string_append_n(DynamicString *string, const char *text, size_t length);
 bool dynamic_string_appendf(DynamicString *string, const char *format, ...);
 
-char *string_duplicate(const char *text);
-
 #endif

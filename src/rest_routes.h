@@ -1,6 +1,7 @@
 #ifndef NORELECBOT_REST_ROUTES_H
 #define NORELECBOT_REST_ROUTES_H
 
+#include "arena.h"
 #include "dynamic_string.h"
 #include "storage.h"
 
@@ -8,6 +9,7 @@
 
 typedef struct {
     Storage *storage;
+    Arena *arena;
 } RestRouteContext;
 
 typedef struct {

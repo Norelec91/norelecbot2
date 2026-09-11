@@ -22,10 +22,6 @@ int main(void) {
     assert(strcmp(value.data, "abc") == 0);
     dynamic_string_free(&value);
 
-    char *copy = string_duplicate("test");
-    assert(copy != NULL && strcmp(copy, "test") == 0);
-    free(copy);
-
     puts("dynamic string tests: ok");
     return 0;
 }

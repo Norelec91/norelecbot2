@@ -4,7 +4,6 @@
 #include "quote_service.h"
 
 #include <jansson.h>
-#include <stdlib.h>
 #include <string.h>
 
 typedef bool (*RestRouteHandler)(
@@ -25,12 +24,14 @@ static bool set_response(RestRouteResponse *response, unsigned int status_code, 
     return dynamic_string_append(response->body, body);
 }
 
+static int append_chunk(const char *buffer, size_t size, void *body) {
+    return dynamic_string_append_n(body, buffer, size) ? 0 : -1;
+}
+
 /* Takes ownership of root; a NULL root (failed json_pack) reports an internal error. */
 static bool append_json(DynamicString *body, json_t *root) {
-    char *encoded = root != NULL ? json_dumps(root, JSON_COMPACT) : NULL;
-    bool ok = encoded != NULL && dynamic_string_append(body, encoded) &&
+    bool ok = root != NULL && json_dump_callback(root, append_chunk, body, JSON_COMPACT) == 0 &&
               dynamic_string_append(body, "\n");
-    free(encoded);
     json_decref(root);
     return ok;
 }
@@ -95,16 +96,14 @@ static bool handle_quote(
 ) {
     (void)argument;
     char *quote = NULL;
-    if (!quote_random(context->storage, &quote)) {
+    if (!quote_random(context->storage, context->arena, &quote)) {
         return false;
     }
     if (quote == NULL) {
         return set_response(response, 404, "{\"error\":\"no quotes available\"}\n");
     }
     response->status_code = 200;
-    bool ok = append_json(response->body, json_pack("{s:s}", "quote", quote));
-    free(quote);
-    return ok;
+    return append_json(response->body, json_pack("{s:s}", "quote", quote));
 }
 
 static bool handle_leaderboard(
@@ -114,13 +113,11 @@ static bool handle_leaderboard(
 ) {
     (void)argument;
     Leaderboard leaderboard;
-    if (!conquister_leaderboard(context->storage, 0U, &leaderboard)) {
+    if (!conquister_leaderboard(context->storage, context->arena, 0U, &leaderboard)) {
         return false;
     }
     response->status_code = 200;
-    bool ok = json_leaderboard_body(response->body, &leaderboard);
-    leaderboard_free(&leaderboard);
-    return ok;
+    return json_leaderboard_body(response->body, &leaderboard);
 }
 
 static bool handle_user(
@@ -156,8 +153,8 @@ bool rest_route_dispatch(
     const char *path,
     RestRouteResponse *response
 ) {
-    if (context == NULL || context->storage == NULL || method == NULL || path == NULL ||
-        response == NULL || response->body == NULL) {
+    if (context == NULL || context->storage == NULL || context->arena == NULL || method == NULL ||
+        path == NULL || response == NULL || response->body == NULL) {
         return false;
     }
     dynamic_string_reset(response->body);

@@ -22,7 +22,7 @@ typedef struct {
     TelegramCommandHandler handler;
 } TelegramCommandDefinition;
 
-static char *trim_copy(const char *text) {
+static char *trim_copy(Arena *arena, const char *text) {
     while (isspace((unsigned char)*text) != 0) {
         ++text;
     }
@@ -30,12 +30,10 @@ static char *trim_copy(const char *text) {
     while (length > 0U && isspace((unsigned char)text[length - 1U]) != 0) {
         --length;
     }
-    char *copy = malloc(length + 1U);
-    if (copy == NULL) {
-        return NULL;
+    char *copy = arena_alloc(arena, length + 1U);
+    if (copy != NULL) {
+        memcpy(copy, text, length);
     }
-    memcpy(copy, text, length);
-    copy[length] = '\0';
     return copy;
 }
 
@@ -97,12 +95,10 @@ static bool missing_username_reply(DynamicString *reply) {
 static bool append_random_quote(const TelegramCommandContext *context, DynamicString *reply) {
     char *quote = NULL;
     // The claim is already saved: a missing or unreadable quote must not turn the reply into an error.
-    if (!quote_random(context->storage, &quote) || quote == NULL) {
+    if (!quote_random(context->storage, context->arena, &quote) || quote == NULL) {
         return true;
     }
-    bool ok = dynamic_string_appendf(reply, "\n\n%s", quote);
-    free(quote);
-    return ok;
+    return dynamic_string_appendf(reply, "\n\n%s", quote);
 }
 
 static bool handle_claim(
@@ -164,7 +160,12 @@ static bool handle_leaderboard(
 ) {
     (void)argument;
     Leaderboard leaderboard;
-    if (!conquister_leaderboard(context->storage, TELEGRAM_LEADERBOARD_SIZE, &leaderboard)) {
+    if (!conquister_leaderboard(
+            context->storage,
+            context->arena,
+            TELEGRAM_LEADERBOARD_SIZE,
+            &leaderboard
+        )) {
         return false;
     }
     bool ok = true;
@@ -204,7 +205,6 @@ static bool handle_leaderboard(
             );
         }
     }
-    leaderboard_free(&leaderboard);
     return ok;
 }
 
@@ -268,7 +268,7 @@ static bool handle_quotes(
         ? (int)requested
         : 1;
     QuotePage quotes;
-    if (!quote_page_load(context->storage, page, &quotes)) {
+    if (!quote_page_load(context->storage, context->arena, page, &quotes)) {
         return false;
     }
     bool ok = true;
@@ -298,7 +298,6 @@ static bool handle_quotes(
             ok = dynamic_string_append(reply, "\n\nUsa /quotes <pagina> per le altre pagine.");
         }
     }
-    quote_page_free(&quotes);
     return ok;
 }
 
@@ -314,15 +313,13 @@ static bool handle_delete_quote(
         return dynamic_string_append(reply, "Uso: /delquote <numero da /quotes | testo esatto>.");
     }
     char *removed = NULL;
-    if (!quote_delete(context->storage, argument, &removed)) {
+    if (!quote_delete(context->storage, context->arena, argument, &removed)) {
         return false;
     }
     if (removed == NULL) {
         return dynamic_string_append(reply, "Citazione non trovata.");
     }
-    bool ok = dynamic_string_appendf(reply, "Citazione eliminata: %s", removed);
-    free(removed);
-    return ok;
+    return dynamic_string_appendf(reply, "Citazione eliminata: %s", removed);
 }
 
 static const TelegramCommandDefinition TELEGRAM_COMMANDS[] = {
@@ -337,17 +334,16 @@ TelegramCommandResult telegram_command_dispatch(
     const char *text,
     DynamicString *reply
 ) {
-    if (context == NULL || context->storage == NULL || context->config == NULL || text == NULL ||
-        reply == NULL) {
+    if (context == NULL || context->storage == NULL || context->arena == NULL ||
+        context->config == NULL || text == NULL || reply == NULL) {
         return TELEGRAM_COMMAND_ERROR;
     }
-    char *message = trim_copy(text);
+    char *message = trim_copy(context->arena, text);
     if (message == NULL) {
         return TELEGRAM_COMMAND_ERROR;
     }
     dynamic_string_reset(reply);
     if (*message == '\0') {
-        free(message);
         return TELEGRAM_COMMAND_IGNORED;
     }
 
@@ -369,14 +365,7 @@ TelegramCommandResult telegram_command_dispatch(
         }
     }
     if (handler == NULL) {
-        free(message);
         return TELEGRAM_COMMAND_IGNORED;
     }
-
-    bool ok = handler(context, argument, reply);
-    free(message);
-    if (!ok) {
-        return TELEGRAM_COMMAND_ERROR;
-    }
-    return TELEGRAM_COMMAND_REPLIED;
+    return handler(context, argument, reply) ? TELEGRAM_COMMAND_REPLIED : TELEGRAM_COMMAND_ERROR;
 }

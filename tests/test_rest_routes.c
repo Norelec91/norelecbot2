@@ -25,7 +25,8 @@ int main(void) {
     assert(storage_open(&storage, conquister_path, quotes_path));
     DynamicString body = {0};
     assert(dynamic_string_init(&body, 256U));
-    RestRouteContext context = {.storage = &storage};
+    Arena arena = {0};
+    RestRouteContext context = {.storage = &storage, .arena = &arena};
     RestRouteResponse response = {.status_code = 0, .body = &body};
 
     assert(!rest_route_dispatch(NULL, "GET", "/health", &response));
@@ -91,6 +92,7 @@ int main(void) {
     assert(response.status_code == 404);
 
     dynamic_string_free(&body);
+    arena_free(&arena);
     storage_close(&storage);
     test_paths_remove(conquister_path, quotes_path);
     puts("REST route tests: ok");

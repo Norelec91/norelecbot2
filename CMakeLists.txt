@@ -68,6 +68,7 @@ else()
 endif()
 
 set(CORE_SOURCES
+    src/arena.c
     src/dynamic_string.c
     src/platform.c
     src/logging.c
@@ -100,6 +101,9 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(test-arena tests/test_arena.c)
+    target_link_libraries(test-arena PRIVATE norelecbot_core)
+
     add_executable(test-dynamic-string tests/test_dynamic_string.c)
     target_link_libraries(test-dynamic-string PRIVATE norelecbot_core)
 
@@ -118,6 +122,7 @@ if(BUILD_TESTING)
     add_executable(test-rest-routes tests/test_rest_routes.c)
     target_link_libraries(test-rest-routes PRIVATE norelecbot_core)
 
+    add_test(NAME arena COMMAND test-arena)
     add_test(NAME dynamic-string COMMAND test-dynamic-string)
     add_test(NAME platform COMMAND test-platform)
     add_test(NAME config COMMAND test-config)

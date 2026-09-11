@@ -92,7 +92,8 @@ static enum MHD_Result handle_request(
     if (!dynamic_string_init(&body, 256U)) {
         return MHD_NO;
     }
-    RestRouteContext route_context = {.storage = server->storage};
+    Arena arena = {0};
+    RestRouteContext route_context = {.storage = server->storage, .arena = &arena};
     RestRouteResponse route_response = {.status_code = 500, .body = &body};
     bool response_ready = rest_route_dispatch(
         &route_context,
@@ -100,6 +101,7 @@ static enum MHD_Result handle_request(
         url,
         &route_response
     );
+    arena_free(&arena);
     if (!response_ready) {
         route_response.status_code = 500;
         dynamic_string_reset(&body);
