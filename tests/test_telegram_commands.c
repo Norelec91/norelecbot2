@@ -47,7 +47,7 @@ int main(void) {
     assert(strstr(reply.data, "Classifica") != NULL);
     assert(strstr(reply.data, "palle @TheConquister37") == NULL);
     assert(telegram_command_dispatch(&context, "/quotes 8", &reply) == TELEGRAM_COMMAND_REPLIED);
-    assert(strcmp(reply.data, "Nessun quote in collezione.") == 0);
+    assert(strcmp(reply.data, "Solo il proprietario può vedere le citazioni.") == 0);
     assert(telegram_command_dispatch(&context, "/addquote", &reply) == TELEGRAM_COMMAND_REPLIED);
     assert(strstr(reply.data, "Uso: /addquote") != NULL);
     assert(strstr(reply.data, "1000 palle.") != NULL);
@@ -58,7 +58,9 @@ int main(void) {
     context.username = "owner";
     assert(telegram_command_dispatch(&context, "/delquote 1", &reply) ==
            TELEGRAM_COMMAND_REPLIED);
-    assert(strcmp(reply.data, "Quote non trovato.") == 0);
+    assert(strcmp(reply.data, "Citazione non trovata.") == 0);
+    assert(telegram_command_dispatch(&context, "/quotes 8", &reply) == TELEGRAM_COMMAND_REPLIED);
+    assert(strcmp(reply.data, "Nessuna citazione in collezione.") == 0);
 
     QuoteAddResult addition;
     assert(quote_add(&storage, "owner", "citazione di prova", 0, &addition));
@@ -77,6 +79,7 @@ int main(void) {
     assert(strstr(reply.data, "!\n\ncitazione di prova") != NULL);
     assert(telegram_command_dispatch(&context, "/classifica", &reply) == TELEGRAM_COMMAND_REPLIED);
     assert(strstr(reply.data, "🏆 Classifica @TheConquister37:\n\n1. ") != NULL);
+    assert(strstr(reply.data, " — 📜 1 citazione\n") != NULL);
     assert(strstr(reply.data, "\n\n🪐 In @TheConquister37 ora: bob") != NULL);
 
     dynamic_string_free(&reply);

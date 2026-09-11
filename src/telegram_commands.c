@@ -187,8 +187,9 @@ static bool handle_leaderboard(
             if (ok && entry->quotes_added > 0) {
                 ok = dynamic_string_appendf(
                     reply,
-                    " — 📜 %lld quote",
-                    (long long)entry->quotes_added
+                    " — 📜 %lld %s",
+                    (long long)entry->quotes_added,
+                    entry->quotes_added == 1 ? "citazione" : "citazioni"
                 );
             }
         }
@@ -233,18 +234,18 @@ static bool handle_add_quote(
     if (result.status == QUOTE_INSUFFICIENT_SCORE) {
         return dynamic_string_appendf(
             reply,
-            "%s ti servono %d palle per aggiungere un quote (ne hai %lld).",
+            "%s ti servono %d palle per aggiungere una citazione (ne hai %lld).",
             context->username,
             context->config->quote_cost,
             (long long)result.available_score
         );
     }
     if (result.status == QUOTE_DUPLICATE) {
-        return dynamic_string_append(reply, "Quote già presente o non salvabile: nessun addebito.");
+        return dynamic_string_append(reply, "Citazione già presente o non salvabile: nessun addebito.");
     }
     return dynamic_string_appendf(
         reply,
-        "%s hai speso %d palle e aggiunto il quote alla collezione!\n\n%s",
+        "%s hai speso %d palle e aggiunto la citazione alla collezione!\n\n%s",
         context->username,
         context->config->quote_cost,
         argument
@@ -256,6 +257,9 @@ static bool handle_quotes(
     const char *argument,
     DynamicString *reply
 ) {
+    if (context->user_id != context->config->owner_id) {
+        return dynamic_string_append(reply, "Solo il proprietario può vedere le citazioni.");
+    }
     char *end = NULL;
     long requested = strtol(argument, &end, 10);
     int page = end != argument && *end == '\0' && requested > 0 && requested <= INT32_MAX
@@ -267,12 +271,12 @@ static bool handle_quotes(
     }
     bool ok = true;
     if (quotes.total == 0U) {
-        ok = dynamic_string_append(reply, "Nessun quote in collezione.");
+        ok = dynamic_string_append(reply, "Nessuna citazione in collezione.");
     } else {
         size_t last_number = quotes.first_number + quotes.count - 1U;
         ok = dynamic_string_appendf(
             reply,
-            "📜 Quotes %zu-%zu di %zu (pagina %zu/%zu):",
+            "📜 Citazioni %zu-%zu di %zu (pagina %zu/%zu):",
             quotes.first_number,
             last_number,
             quotes.total,
@@ -302,7 +306,7 @@ static bool handle_delete_quote(
     DynamicString *reply
 ) {
     if (context->user_id != context->config->owner_id) {
-        return dynamic_string_append(reply, "Solo il proprietario può eliminare i quote.");
+        return dynamic_string_append(reply, "Solo il proprietario può eliminare le citazioni.");
     }
     if (*argument == '\0') {
         return dynamic_string_append(reply, "Uso: /delquote <numero da /quotes | testo esatto>.");
@@ -312,9 +316,9 @@ static bool handle_delete_quote(
         return false;
     }
     if (removed == NULL) {
-        return dynamic_string_append(reply, "Quote non trovato.");
+        return dynamic_string_append(reply, "Citazione non trovata.");
     }
-    bool ok = dynamic_string_appendf(reply, "Quote eliminato: %s", removed);
+    bool ok = dynamic_string_appendf(reply, "Citazione eliminata: %s", removed);
     free(removed);
     return ok;
 }
