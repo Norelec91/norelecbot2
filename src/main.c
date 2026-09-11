@@ -66,7 +66,6 @@ int main(void) {
 
     stop_requested = 1;
     http_server_stop(&http);
-    telegram_wait_for_sends();
     storage_close(&storage);
     curl_global_cleanup();
     log_info("NorelecBot stopped");

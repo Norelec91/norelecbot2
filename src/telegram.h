@@ -7,6 +7,5 @@
 #include <signal.h>
 
 int telegram_run(Storage *storage, const AppConfig *config, volatile sig_atomic_t *stop);
-void telegram_wait_for_sends(void);
 
 #endif

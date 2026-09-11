@@ -13,41 +13,6 @@
 
 #define POLL_TIMEOUT_SECONDS 6L
 
-typedef struct {
-    char token[256];
-    int64_t chat_id;
-    char *text;
-} SendJob;
-
-static PlatformMutex sends_mutex;
-static PlatformCondition sends_finished;
-static bool sends_ready = false;
-static size_t active_sends = 0U;
-
-static bool initialize_sends(void) {
-    if (sends_ready) {
-        return true;
-    }
-    if (!platform_mutex_init(&sends_mutex)) {
-        return false;
-    }
-    if (!platform_condition_init(&sends_finished)) {
-        platform_mutex_destroy(&sends_mutex);
-        return false;
-    }
-    sends_ready = true;
-    return true;
-}
-
-static void finish_send(SendJob *job) {
-    free(job->text);
-    free(job);
-    (void)platform_mutex_lock(&sends_mutex);
-    --active_sends;
-    (void)platform_condition_broadcast(&sends_finished);
-    (void)platform_mutex_unlock(&sends_mutex);
-}
-
 static size_t receive_data(char *data, size_t size, size_t count, void *context) {
     if (size != 0U && count > SIZE_MAX / size) {
         return 0U;
@@ -126,59 +91,20 @@ cleanup:
     return root;
 }
 
-static int send_worker(void *context) {
-    SendJob *job = context;
-    char chat_id[32];
-    (void)snprintf(chat_id, sizeof(chat_id), "%lld", (long long)job->chat_id);
-    const char *names[] = {"chat_id", "text", "disable_web_page_preview"};
-    const char *values[] = {chat_id, job->text, "true"};
-    json_object *response = telegram_api(job->token, "sendMessage", names, values, 3U,
-                                         POLL_TIMEOUT_SECONDS);
-    json_object_put(response);
-    finish_send(job);
-    return 0;
-}
-
 static void send_message(const AppConfig *config, int64_t chat_id, const char *text) {
-    if (!sends_ready) {
-        log_error("Telegram reply synchronization is not initialized");
-        return;
-    }
-    SendJob *job = calloc(1U, sizeof(*job));
-    if (job == NULL) {
-        log_error("Out of memory while queueing Telegram reply");
-        return;
-    }
-    (void)snprintf(job->token, sizeof(job->token), "%s", config->bot_token);
-    job->chat_id = chat_id;
-    job->text = string_duplicate(text);
-    if (job->text == NULL) {
-        free(job);
-        log_error("Out of memory while queueing Telegram reply");
-        return;
-    }
-    (void)platform_mutex_lock(&sends_mutex);
-    ++active_sends;
-    (void)platform_mutex_unlock(&sends_mutex);
-    if (!platform_thread_start_detached(send_worker, job)) {
-        log_error("Could not start Telegram reply thread");
-        finish_send(job);
-        return;
-    }
-}
-
-void telegram_wait_for_sends(void) {
-    if (!sends_ready) {
-        return;
-    }
-    (void)platform_mutex_lock(&sends_mutex);
-    while (active_sends > 0U) {
-        (void)platform_condition_wait(&sends_finished, &sends_mutex);
-    }
-    (void)platform_mutex_unlock(&sends_mutex);
-    platform_condition_destroy(&sends_finished);
-    platform_mutex_destroy(&sends_mutex);
-    sends_ready = false;
+    char chat_id_text[32];
+    (void)snprintf(chat_id_text, sizeof(chat_id_text), "%lld", (long long)chat_id);
+    const char *names[] = {"chat_id", "text", "disable_web_page_preview"};
+    const char *values[] = {chat_id_text, text, "true"};
+    json_object *response = telegram_api(
+        config->bot_token,
+        "sendMessage",
+        names,
+        values,
+        3U,
+        POLL_TIMEOUT_SECONDS
+    );
+    json_object_put(response);
 }
 
 static json_object *get_updates(const AppConfig *config, int64_t offset, long poll_timeout) {
@@ -253,10 +179,6 @@ static json_object *updates_array(json_object *root) {
 }
 
 int telegram_run(Storage *storage, const AppConfig *config, volatile sig_atomic_t *stop) {
-    if (!initialize_sends()) {
-        log_error("Could not initialize Telegram reply synchronization");
-        return -1;
-    }
     log_info("Telegram poller started (trigger=%s)", TELEGRAM_CONQUISTER_TRIGGER);
     int64_t offset = -1;
     json_object *backlog = get_updates(config, -1, 0L);
