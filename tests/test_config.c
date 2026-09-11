@@ -9,14 +9,14 @@
 
 static void write_file(const char *path, const char *content) {
     FILE *file = fopen(path, "wb");
-    assert(file != NULL);
+    assert(file != nullptr);
     int written = fputs(content, file);
     int closed = fclose(file);
     assert(written >= 0 && closed == 0);
 }
 
 int main(void) {
-    AppConfig config = {0};
+    AppConfig config = {};
     assert(!config_load(&config, "missing-required-config-test.env"));
 
     const char *path = "config-quote-cost-test.env";

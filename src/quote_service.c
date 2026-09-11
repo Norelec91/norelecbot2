@@ -4,18 +4,18 @@
 #include "logging.h"
 #include "text.h"
 
-#include <limits.h>
+#include <stdckdint.h>
 #include <stdint.h>
 #include <string.h>
 
-#define QUOTES_PAGE_SIZE 30U
+static constexpr size_t QUOTES_PAGE_SIZE = 30;
 
 static bool quote_exists(json_t *quotes, const char *quote) {
     size_t index;
     json_t *entry;
     json_array_foreach(quotes, index, entry) {
         const char *existing = json_string_value(entry);
-        if (existing != NULL && strcmp(existing, quote) == 0) {
+        if (existing != nullptr && strcmp(existing, quote) == 0) {
             return true;
         }
     }
@@ -24,13 +24,13 @@ static bool quote_exists(json_t *quotes, const char *quote) {
 
 static json_t *copy_quotes(json_t *quotes, size_t skipped, const char *addition) {
     json_t *updated = json_copy(quotes);
-    if (updated == NULL) {
-        return NULL;
+    if (updated == nullptr) {
+        return nullptr;
     }
     if ((skipped != SIZE_MAX && json_array_remove(updated, skipped) != 0) ||
-        (addition != NULL && json_array_append_new(updated, json_string(addition)) != 0)) {
+        (addition != nullptr && json_array_append_new(updated, json_string(addition)) != 0)) {
         json_decref(updated);
-        return NULL;
+        return nullptr;
     }
     return updated;
 }
@@ -42,15 +42,15 @@ bool quote_add(
     int cost,
     QuoteAddResult *result
 ) {
-    *result = (QuoteAddResult){0};
+    *result = (QuoteAddResult){};
     if (!json_storage_lock(storage)) {
         return false;
     }
     json_t *state = json_storage_load_conquister(storage);
     json_t *quotes = json_storage_load_quotes(storage);
-    json_t *updated_quotes = NULL;
+    json_t *updated_quotes = nullptr;
     bool ok = false;
-    if (state == NULL || quotes == NULL) {
+    if (state == nullptr || quotes == nullptr) {
         goto cleanup;
     }
 
@@ -70,10 +70,11 @@ bool quote_add(
 
     updated_quotes = copy_quotes(quotes, SIZE_MAX, quote);
     json_t *quotes_added = json_object_get(state, "quotes_added");
-    int64_t added = json_integer_member(quotes_added, username, 0);
-    if (updated_quotes == NULL || added == INT64_MAX ||
+    int64_t added = 0;
+    if (updated_quotes == nullptr ||
+        ckd_add(&added, json_integer_member(quotes_added, username, 0), 1) ||
         !json_set_integer(scores, username, score - cost) ||
-        !json_set_integer(quotes_added, username, added + 1)) {
+        !json_set_integer(quotes_added, username, added)) {
         goto cleanup;
     }
     if (!json_storage_save_quotes(storage, updated_quotes)) {
@@ -99,12 +100,12 @@ cleanup:
 }
 
 bool quote_page_load(Storage *storage, Arena *arena, int requested_page, QuotePage *page) {
-    *page = (QuotePage){0};
+    *page = (QuotePage){};
     if (!json_storage_lock(storage)) {
         return false;
     }
     json_t *quotes = json_storage_load_quotes(storage);
-    bool ok = quotes != NULL;
+    bool ok = quotes != nullptr;
     page->total = json_array_size(quotes);
     if (ok && page->total > 0U) {
         page->pages = ((page->total - 1U) / QUOTES_PAGE_SIZE) + 1U;
@@ -116,14 +117,14 @@ bool quote_page_load(Storage *storage, Arena *arena, int requested_page, QuotePa
         size_t remaining = page->total - offset;
         page->count = remaining > QUOTES_PAGE_SIZE ? QUOTES_PAGE_SIZE : remaining;
         page->first_number = offset + 1U;
-        page->items = arena_alloc(arena, page->count * sizeof(*page->items));
-        ok = page->items != NULL;
+        page->items = arena_alloc_array(arena, page->count, sizeof(*page->items));
+        ok = page->items != nullptr;
         for (size_t index = 0U; ok && index < page->count; ++index) {
             page->items[index] = arena_strdup(
                 arena,
                 json_string_value(json_array_get(quotes, offset + index))
             );
-            ok = page->items[index] != NULL;
+            ok = page->items[index] != nullptr;
         }
     }
     json_decref(quotes);
@@ -132,17 +133,17 @@ bool quote_page_load(Storage *storage, Arena *arena, int requested_page, QuotePa
 }
 
 bool quote_random(Storage *storage, Arena *arena, char **quote) {
-    *quote = NULL;
+    *quote = nullptr;
     if (!json_storage_lock(storage)) {
         return false;
     }
     json_t *quotes = json_storage_load_quotes(storage);
-    bool ok = quotes != NULL;
+    bool ok = quotes != nullptr;
     size_t count = json_array_size(quotes);
     if (ok && count > 0U) {
         size_t index = (size_t)(json_storage_next_quote_random(storage) % count);
         *quote = arena_strdup(arena, json_string_value(json_array_get(quotes, index)));
-        ok = *quote != NULL;
+        ok = *quote != nullptr;
     }
     json_decref(quotes);
     json_storage_unlock(storage);
@@ -150,13 +151,13 @@ bool quote_random(Storage *storage, Arena *arena, char **quote) {
 }
 
 bool quote_delete(Storage *storage, Arena *arena, const char *selector, char **removed_quote) {
-    *removed_quote = NULL;
+    *removed_quote = nullptr;
     if (!json_storage_lock(storage)) {
         return false;
     }
     json_t *quotes = json_storage_load_quotes(storage);
-    json_t *updated = NULL;
-    bool ok = quotes != NULL;
+    json_t *updated = nullptr;
+    bool ok = quotes != nullptr;
     size_t count = json_array_size(quotes);
     size_t selected = SIZE_MAX;
     int64_t position = 0;
@@ -167,7 +168,7 @@ bool quote_delete(Storage *storage, Arena *arena, const char *selector, char **r
         json_t *entry;
         json_array_foreach(quotes, index, entry) {
             const char *quote = json_string_value(entry);
-            if (quote != NULL && strcmp(quote, selector) == 0) {
+            if (quote != nullptr && strcmp(quote, selector) == 0) {
                 selected = index;
                 break;
             }
@@ -175,8 +176,8 @@ bool quote_delete(Storage *storage, Arena *arena, const char *selector, char **r
     }
     if (ok && selected != SIZE_MAX) {
         *removed_quote = arena_strdup(arena, json_string_value(json_array_get(quotes, selected)));
-        updated = copy_quotes(quotes, selected, NULL);
-        ok = *removed_quote != NULL && updated != NULL &&
+        updated = copy_quotes(quotes, selected, nullptr);
+        ok = *removed_quote != nullptr && updated != nullptr &&
              json_storage_save_quotes(storage, updated);
     }
     json_decref(updated);

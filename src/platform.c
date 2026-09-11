@@ -30,18 +30,18 @@ typedef struct {
 } ThreadStart;
 
 bool platform_mutex_init(PlatformMutex *mutex) {
-    if (mutex == NULL) {
+    if (mutex == nullptr) {
         return false;
     }
-    mutex->native = NULL;
+    mutex->native = nullptr;
     NativeMutex *native = malloc(sizeof(*native));
-    if (native == NULL) {
+    if (native == nullptr) {
         return false;
     }
 #ifdef _WIN32
     InitializeCriticalSection(native);
 #else
-    if (pthread_mutex_init(native, NULL) != 0) {
+    if (pthread_mutex_init(native, nullptr) != 0) {
         free(native);
         return false;
     }
@@ -51,7 +51,7 @@ bool platform_mutex_init(PlatformMutex *mutex) {
 }
 
 void platform_mutex_destroy(PlatformMutex *mutex) {
-    if (mutex == NULL || mutex->native == NULL) {
+    if (mutex == nullptr || mutex->native == nullptr) {
         return;
     }
     NativeMutex *native = mutex->native;
@@ -61,11 +61,11 @@ void platform_mutex_destroy(PlatformMutex *mutex) {
     (void)pthread_mutex_destroy(native);
 #endif
     free(native);
-    mutex->native = NULL;
+    mutex->native = nullptr;
 }
 
 bool platform_mutex_lock(PlatformMutex *mutex) {
-    if (mutex == NULL || mutex->native == NULL) {
+    if (mutex == nullptr || mutex->native == nullptr) {
         return false;
     }
     NativeMutex *native = mutex->native;
@@ -78,7 +78,7 @@ bool platform_mutex_lock(PlatformMutex *mutex) {
 }
 
 bool platform_mutex_unlock(PlatformMutex *mutex) {
-    if (mutex == NULL || mutex->native == NULL) {
+    if (mutex == nullptr || mutex->native == nullptr) {
         return false;
     }
     NativeMutex *native = mutex->native;
@@ -91,18 +91,18 @@ bool platform_mutex_unlock(PlatformMutex *mutex) {
 }
 
 bool platform_condition_init(PlatformCondition *condition) {
-    if (condition == NULL) {
+    if (condition == nullptr) {
         return false;
     }
-    condition->native = NULL;
+    condition->native = nullptr;
     NativeCondition *native = malloc(sizeof(*native));
-    if (native == NULL) {
+    if (native == nullptr) {
         return false;
     }
 #ifdef _WIN32
     InitializeConditionVariable(native);
 #else
-    if (pthread_cond_init(native, NULL) != 0) {
+    if (pthread_cond_init(native, nullptr) != 0) {
         free(native);
         return false;
     }
@@ -112,7 +112,7 @@ bool platform_condition_init(PlatformCondition *condition) {
 }
 
 void platform_condition_destroy(PlatformCondition *condition) {
-    if (condition == NULL || condition->native == NULL) {
+    if (condition == nullptr || condition->native == nullptr) {
         return;
     }
     NativeCondition *native = condition->native;
@@ -120,12 +120,12 @@ void platform_condition_destroy(PlatformCondition *condition) {
     (void)pthread_cond_destroy(native);
 #endif
     free(native);
-    condition->native = NULL;
+    condition->native = nullptr;
 }
 
 bool platform_condition_wait(PlatformCondition *condition, PlatformMutex *mutex) {
-    if (condition == NULL || condition->native == NULL || mutex == NULL ||
-        mutex->native == NULL) {
+    if (condition == nullptr || condition->native == nullptr || mutex == nullptr ||
+        mutex->native == nullptr) {
         return false;
     }
     NativeCondition *native_condition = condition->native;
@@ -138,7 +138,7 @@ bool platform_condition_wait(PlatformCondition *condition, PlatformMutex *mutex)
 }
 
 bool platform_condition_broadcast(PlatformCondition *condition) {
-    if (condition == NULL || condition->native == NULL) {
+    if (condition == nullptr || condition->native == nullptr) {
         return false;
     }
     NativeCondition *native = condition->native;
@@ -165,21 +165,21 @@ static void *run_thread(void *argument) {
     void *context = start->context;
     free(start);
     (void)function(context);
-    return NULL;
+    return nullptr;
 }
 #endif
 
 bool platform_thread_start_detached(PlatformThreadFunction function, void *context) {
-    if (function == NULL) {
+    if (function == nullptr) {
         return false;
     }
     ThreadStart *start = malloc(sizeof(*start));
-    if (start == NULL) {
+    if (start == nullptr) {
         return false;
     }
     *start = (ThreadStart){.function = function, .context = context};
 #ifdef _WIN32
-    uintptr_t thread = _beginthreadex(NULL, 0U, run_thread, start, 0U, NULL);
+    uintptr_t thread = _beginthreadex(nullptr, 0U, run_thread, start, 0U, nullptr);
     if (thread == 0U) {
         free(start);
         return false;
@@ -187,7 +187,7 @@ bool platform_thread_start_detached(PlatformThreadFunction function, void *conte
     (void)CloseHandle((HANDLE)thread);
 #else
     pthread_t thread;
-    if (pthread_create(&thread, NULL, run_thread, start) != 0) {
+    if (pthread_create(&thread, nullptr, run_thread, start) != 0) {
         free(start);
         return false;
     }
@@ -210,13 +210,13 @@ void platform_sleep_milliseconds(unsigned long milliseconds) {
 }
 
 bool platform_local_time(time_t timestamp, struct tm *result) {
-    if (result == NULL) {
+    if (result == nullptr) {
         return false;
     }
 #ifdef _WIN32
     return localtime_s(result, &timestamp) == 0;
 #else
-    return localtime_r(&timestamp, result) != NULL;
+    return localtime_r(&timestamp, result) != nullptr;
 #endif
 }
 

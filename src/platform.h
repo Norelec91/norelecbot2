@@ -14,19 +14,19 @@ typedef struct {
 
 typedef int (*PlatformThreadFunction)(void *context);
 
-bool platform_mutex_init(PlatformMutex *mutex);
+[[nodiscard]] bool platform_mutex_init(PlatformMutex *mutex);
 void platform_mutex_destroy(PlatformMutex *mutex);
-bool platform_mutex_lock(PlatformMutex *mutex);
-bool platform_mutex_unlock(PlatformMutex *mutex);
+[[nodiscard]] bool platform_mutex_lock(PlatformMutex *mutex);
+[[nodiscard]] bool platform_mutex_unlock(PlatformMutex *mutex);
 
-bool platform_condition_init(PlatformCondition *condition);
+[[nodiscard]] bool platform_condition_init(PlatformCondition *condition);
 void platform_condition_destroy(PlatformCondition *condition);
-bool platform_condition_wait(PlatformCondition *condition, PlatformMutex *mutex);
-bool platform_condition_broadcast(PlatformCondition *condition);
+[[nodiscard]] bool platform_condition_wait(PlatformCondition *condition, PlatformMutex *mutex);
+[[nodiscard]] bool platform_condition_broadcast(PlatformCondition *condition);
 
-bool platform_thread_start_detached(PlatformThreadFunction function, void *context);
+[[nodiscard]] bool platform_thread_start_detached(PlatformThreadFunction function, void *context);
 void platform_sleep_milliseconds(unsigned long milliseconds);
-bool platform_local_time(time_t timestamp, struct tm *result);
-bool platform_replace_file(const char *source, const char *destination);
+[[nodiscard]] bool platform_local_time(time_t timestamp, struct tm *result);
+[[nodiscard]] bool platform_replace_file(const char *source, const char *destination);
 
 #endif

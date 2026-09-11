@@ -10,7 +10,7 @@
 
 static bool ensure_object_member(json_t *parent, const char *name) {
     json_t *value = json_object_get(parent, name);
-    if (value != NULL) {
+    if (value != nullptr) {
         return json_is_object(value);
     }
     return json_object_set_new(parent, name, json_object()) == 0;
@@ -21,7 +21,7 @@ static bool normalize_conquister(json_t *state) {
         return false;
     }
     json_t *current = json_object_get(state, "current");
-    if (current == NULL) {
+    if (current == nullptr) {
         if (json_object_set_new(state, "current", json_null()) != 0) {
             return false;
         }
@@ -34,7 +34,7 @@ static bool normalize_conquister(json_t *state) {
 
 static bool file_missing(const char *path, const char *description) {
     FILE *file = fopen(path, "rb");
-    if (file != NULL) {
+    if (file != nullptr) {
         (void)fclose(file);
         return false;
     }
@@ -51,14 +51,14 @@ json_t *json_storage_load_conquister(Storage *storage) {
     }
     json_error_t error;
     json_t *state = json_load_file(path, 0, &error);
-    if (state == NULL || !normalize_conquister(state)) {
+    if (state == nullptr || !normalize_conquister(state)) {
         log_error(
             "Conquister state %s is not valid: %s",
             path,
-            state == NULL ? error.text : "unexpected structure"
+            state == nullptr ? error.text : "unexpected structure"
         );
         json_decref(state);
-        return NULL;
+        return nullptr;
     }
     return state;
 }
@@ -70,23 +70,23 @@ json_t *json_storage_load_quotes(Storage *storage) {
     }
     json_error_t error;
     json_t *quotes = json_load_file(path, 0, &error);
-    if (quotes == NULL || !json_is_array(quotes)) {
+    if (quotes == nullptr || !json_is_array(quotes)) {
         log_error(
             "Quote collection %s is not a JSON array: %s",
             path,
-            quotes == NULL ? error.text : "unexpected structure"
+            quotes == nullptr ? error.text : "unexpected structure"
         );
         json_decref(quotes);
-        return NULL;
+        return nullptr;
     }
     size_t index;
     json_t *entry;
     json_array_foreach(quotes, index, entry) {
         const char *text = json_string_value(entry);
-        if (text == NULL || *text == '\0') {
+        if (text == nullptr || *text == '\0') {
             log_error("Quote collection %s contains an invalid entry", path);
             json_decref(quotes);
-            return NULL;
+            return nullptr;
         }
     }
     return quotes;
@@ -154,7 +154,7 @@ bool json_set_integer(json_t *object, const char *name, int64_t value) {
 }
 
 bool storage_open(Storage *storage, const char *conquister_path, const char *quotes_path) {
-    *storage = (Storage){0};
+    *storage = (Storage){};
     if (!text_copy(storage->conquister_path, sizeof(storage->conquister_path), conquister_path) ||
         !text_copy(storage->quotes_path, sizeof(storage->quotes_path), quotes_path)) {
         log_error("JSON storage path is too long");
@@ -165,7 +165,7 @@ bool storage_open(Storage *storage, const char *conquister_path, const char *quo
         return false;
     }
 
-    struct timespec now = {0};
+    struct timespec now = {};
     (void)timespec_get(&now, TIME_UTC);
     storage->quote_random_state = (uint64_t)now.tv_sec ^ ((uint64_t)now.tv_nsec << 32U) ^
                                   (uint64_t)(uintptr_t)storage;
@@ -179,7 +179,7 @@ bool storage_open(Storage *storage, const char *conquister_path, const char *quo
     }
     json_t *state = json_storage_load_conquister(storage);
     json_t *quotes = json_storage_load_quotes(storage);
-    bool valid = state != NULL && quotes != NULL;
+    bool valid = state != nullptr && quotes != nullptr;
     json_decref(state);
     json_decref(quotes);
     json_storage_unlock(storage);

@@ -9,8 +9,8 @@
 #include <string.h>
 
 static void write_quotes(const char *path, const char *quote) {
-    json_t *quotes = quote != NULL ? json_pack("[s]", quote) : json_array();
-    assert(quotes != NULL);
+    json_t *quotes = quote != nullptr ? json_pack("[s]", quote) : json_array();
+    assert(quotes != nullptr);
     assert(json_dump_file(quotes, path, JSON_INDENT(2)) == 0);
     json_decref(quotes);
 }
@@ -19,17 +19,17 @@ int main(void) {
     char conquister_path[1024];
     char quotes_path[1024];
     test_paths("rest-route-test", conquister_path, quotes_path);
-    write_quotes(quotes_path, NULL);
+    write_quotes(quotes_path, nullptr);
 
-    Storage storage = {0};
+    Storage storage = {};
     assert(storage_open(&storage, conquister_path, quotes_path));
-    DynamicString body = {0};
+    DynamicString body = {};
     assert(dynamic_string_init(&body, 256U));
-    Arena arena = {0};
+    Arena arena = {};
     RestRouteContext context = {.storage = &storage, .arena = &arena};
     RestRouteResponse response = {.status_code = 0, .body = &body};
 
-    assert(!rest_route_dispatch(NULL, "GET", "/health", &response));
+    assert(!rest_route_dispatch(nullptr, "GET", "/health", &response));
     assert(rest_route_dispatch(&context, "GET", "/health", &response));
     assert(response.status_code == 200);
     assert(strcmp(body.data, "{\"status\":\"ok\"}\n") == 0);
@@ -41,7 +41,7 @@ int main(void) {
 
     assert(rest_route_dispatch(&context, "GET", "/quote", &response));
     assert(response.status_code == 404);
-    assert(strstr(body.data, "no quotes available") != NULL);
+    assert(strstr(body.data, "no quotes available") != nullptr);
     write_quotes(quotes_path, "quote di prova");
     assert(rest_route_dispatch(&context, "GET", "/quote", &response));
     assert(response.status_code == 200);

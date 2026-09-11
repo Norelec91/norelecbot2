@@ -1,11 +1,10 @@
 #include "arena.h"
 
-#include <stdalign.h>
-#include <stdint.h>
+#include <stdckdint.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define ARENA_BLOCK_SIZE 4096U
+static constexpr size_t ARENA_BLOCK_SIZE = 4096;
 
 struct ArenaBlock {
     ArenaBlock *next;
@@ -16,20 +15,22 @@ struct ArenaBlock {
 
 void *arena_alloc(Arena *arena, size_t size) {
     const size_t alignment = alignof(max_align_t);
-    if (size == 0U) {
-        size = 1U;
+    size_t rounded = 0U;
+    if (ckd_add(&rounded, size == 0U ? 1U : size, alignment - 1U)) {
+        return nullptr;
     }
-    if (size > SIZE_MAX - offsetof(ArenaBlock, data) - alignment) {
-        return NULL;
-    }
-    size = (size + alignment - 1U) / alignment * alignment;
+    rounded -= rounded % alignment;
 
     ArenaBlock *block = arena->blocks;
-    if (block == NULL || block->capacity - block->used < size) {
-        size_t capacity = size > ARENA_BLOCK_SIZE ? size : ARENA_BLOCK_SIZE;
-        block = malloc(offsetof(ArenaBlock, data) + capacity);
-        if (block == NULL) {
-            return NULL;
+    if (block == nullptr || block->capacity - block->used < rounded) {
+        size_t capacity = rounded > ARENA_BLOCK_SIZE ? rounded : ARENA_BLOCK_SIZE;
+        size_t bytes = 0U;
+        if (ckd_add(&bytes, offsetof(ArenaBlock, data), capacity)) {
+            return nullptr;
+        }
+        block = malloc(bytes);
+        if (block == nullptr) {
+            return nullptr;
         }
         block->next = arena->blocks;
         block->used = 0U;
@@ -37,25 +38,30 @@ void *arena_alloc(Arena *arena, size_t size) {
         arena->blocks = block;
     }
     void *memory = (unsigned char *)block->data + block->used;
-    block->used += size;
-    memset(memory, 0, size);
+    block->used += rounded;
+    memset(memory, 0, rounded);
     return memory;
 }
 
+void *arena_alloc_array(Arena *arena, size_t count, size_t size) {
+    size_t bytes = 0U;
+    return ckd_mul(&bytes, count, size) ? nullptr : arena_alloc(arena, bytes);
+}
+
 char *arena_strdup(Arena *arena, const char *text) {
-    if (text == NULL) {
-        return NULL;
+    if (text == nullptr) {
+        return nullptr;
     }
     size_t length = strlen(text);
     char *copy = arena_alloc(arena, length + 1U);
-    if (copy != NULL) {
+    if (copy != nullptr) {
         memcpy(copy, text, length + 1U);
     }
     return copy;
 }
 
 void arena_free(Arena *arena) {
-    while (arena->blocks != NULL) {
+    while (arena->blocks != nullptr) {
         ArenaBlock *next = arena->blocks->next;
         free(arena->blocks);
         arena->blocks = next;

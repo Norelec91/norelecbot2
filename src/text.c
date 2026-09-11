@@ -35,7 +35,7 @@ bool text_copy(char *destination, size_t capacity, const char *text) {
 }
 
 bool text_parse_int64(const char *text, int64_t *value) {
-    char *end = NULL;
+    char *end = nullptr;
     errno = 0;
     long long parsed = strtoll(text, &end, 10);
     if (end == text || errno != 0) {

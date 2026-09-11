@@ -14,7 +14,7 @@ typedef struct {
     bool initialized;
 } Storage;
 
-bool storage_open(Storage *storage, const char *conquister_path, const char *quotes_path);
+[[nodiscard]] bool storage_open(Storage *storage, const char *conquister_path, const char *quotes_path);
 void storage_close(Storage *storage);
 
 #endif

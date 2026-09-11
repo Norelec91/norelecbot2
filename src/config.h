@@ -15,6 +15,6 @@ typedef struct {
     char quotes_path[1024];
 } AppConfig;
 
-bool config_load(AppConfig *config, const char *dotenv_path);
+[[nodiscard]] bool config_load(AppConfig *config, const char *dotenv_path);
 
 #endif

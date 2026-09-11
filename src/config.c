@@ -9,8 +9,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define DEFAULT_API_PORT 8000
-#define DEFAULT_QUOTE_COST 1000
+static constexpr int DEFAULT_API_PORT = 8000;
+static constexpr int DEFAULT_QUOTE_COST = 1000;
 
 static bool apply_setting(AppConfig *config, const char *name, const char *value) {
     if (strcmp(name, "NORELECBOT_TELEGRAM_TOKEN") == 0) {
@@ -97,10 +97,10 @@ static bool read_line(FILE *file, DynamicString *line, bool *available) {
 
 static bool apply_dotenv(AppConfig *config, const char *path) {
     FILE *file = fopen(path, "r");
-    if (file == NULL) {
+    if (file == nullptr) {
         return false;
     }
-    DynamicString line = {0};
+    DynamicString line = {};
     if (!dynamic_string_init(&line, 256U)) {
         (void)fclose(file);
         return false;
@@ -121,7 +121,7 @@ static bool apply_dotenv(AppConfig *config, const char *path) {
             continue;
         }
         char *equals = strchr(entry, '=');
-        if (equals == NULL) {
+        if (equals == nullptr) {
             continue;
         }
         *equals = '\0';
@@ -159,7 +159,7 @@ static bool apply_environment(AppConfig *config) {
     size_t count = sizeof(names) / sizeof(names[0]);
     for (size_t index = 0U; index < count; ++index) {
         const char *value = getenv(names[index]);
-        if (value != NULL && !apply_setting(config, names[index], value)) {
+        if (value != nullptr && !apply_setting(config, names[index], value)) {
             return false;
         }
     }
@@ -167,7 +167,7 @@ static bool apply_environment(AppConfig *config) {
 }
 
 bool config_load(AppConfig *config, const char *dotenv_path) {
-    if (config == NULL || dotenv_path == NULL) {
+    if (config == nullptr || dotenv_path == nullptr) {
         return false;
     }
     *config = (AppConfig){

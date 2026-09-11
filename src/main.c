@@ -11,13 +11,12 @@
 
 static volatile sig_atomic_t stop_requested = 0;
 
-static void request_stop(int signal_number) {
-    (void)signal_number;
+static void request_stop([[maybe_unused]] int signal_number) {
     stop_requested = 1;
 }
 
 int main(void) {
-    AppConfig config = {0};
+    AppConfig config = {};
     if (!config_load(&config, ".env")) {
         return EXIT_FAILURE;
     }
@@ -25,7 +24,7 @@ int main(void) {
         log_error("Could not initialize libcurl");
         return EXIT_FAILURE;
     }
-    Storage storage = {0};
+    Storage storage = {};
     if (!storage_open(&storage, config.conquister_path, config.quotes_path)) {
         curl_global_cleanup();
         return EXIT_FAILURE;
@@ -34,7 +33,7 @@ int main(void) {
     (void)signal(SIGINT, request_stop);
     (void)signal(SIGTERM, request_stop);
 
-    HttpServer http = {0};
+    HttpServer http = {};
     if (!http_server_start(
             &http,
             config.api_host,

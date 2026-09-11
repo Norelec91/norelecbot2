@@ -12,7 +12,7 @@ typedef struct {
     Storage *storage;
 } HttpServer;
 
-bool http_server_start(
+[[nodiscard]] bool http_server_start(
     HttpServer *server,
     const char *host,
     int port,

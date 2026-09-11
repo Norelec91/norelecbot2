@@ -9,7 +9,7 @@
 #include <string.h>
 #include <time.h>
 
-#define TELEGRAM_LEADERBOARD_SIZE 10U
+static constexpr size_t TELEGRAM_LEADERBOARD_SIZE = 10;
 
 typedef bool (*TelegramCommandHandler)(
     const TelegramCommandContext *context,
@@ -24,7 +24,7 @@ typedef struct {
 
 static char *trim_copy(Arena *arena, const char *text) {
     char *copy = arena_strdup(arena, text);
-    return copy != NULL ? text_trim(copy) : NULL;
+    return copy != nullptr ? text_trim(copy) : nullptr;
 }
 
 static void command_and_argument(char *text, char command[64], char **argument) {
@@ -35,7 +35,7 @@ static void command_and_argument(char *text, char command[64], char **argument) 
     memcpy(command, text, length);
     command[length] = '\0';
     char *suffix = strchr(command, '@');
-    if (suffix != NULL) {
+    if (suffix != nullptr) {
         *suffix = '\0';
     }
     for (char *cursor = command; *cursor != '\0'; ++cursor) {
@@ -57,9 +57,9 @@ static bool missing_username_reply(DynamicString *reply) {
 }
 
 static bool append_random_quote(const TelegramCommandContext *context, DynamicString *reply) {
-    char *quote = NULL;
+    char *quote = nullptr;
     // The claim is already saved: a missing or unreadable quote must not turn the reply into an error.
-    if (!quote_random(context->storage, context->arena, &quote) || quote == NULL) {
+    if (!quote_random(context->storage, context->arena, &quote) || quote == nullptr) {
         return true;
     }
     return dynamic_string_appendf(reply, "\n\n%s", quote);
@@ -67,11 +67,10 @@ static bool append_random_quote(const TelegramCommandContext *context, DynamicSt
 
 static bool handle_claim(
     const TelegramCommandContext *context,
-    const char *argument,
+    [[maybe_unused]] const char *argument,
     DynamicString *reply
 ) {
-    (void)argument;
-    if (context->username == NULL || *context->username == '\0') {
+    if (context->username == nullptr || *context->username == '\0') {
         return missing_username_reply(reply);
     }
     ClaimResult result;
@@ -79,7 +78,7 @@ static bool handle_claim(
             context->storage,
             context->user_id,
             context->username,
-            (int64_t)time(NULL),
+            (int64_t)time(nullptr),
             &result
         )) {
         return false;
@@ -119,10 +118,9 @@ static bool handle_claim(
 
 static bool handle_leaderboard(
     const TelegramCommandContext *context,
-    const char *argument,
+    [[maybe_unused]] const char *argument,
     DynamicString *reply
 ) {
-    (void)argument;
     Leaderboard leaderboard;
     if (!conquister_leaderboard(
             context->storage,
@@ -160,7 +158,7 @@ static bool handle_leaderboard(
                 );
             }
         }
-        if (ok && leaderboard.current_username != NULL) {
+        if (ok && leaderboard.current_username != nullptr) {
             ok = dynamic_string_appendf(
                 reply,
                 "\n\n🪐 In %s ora: %s",
@@ -177,7 +175,7 @@ static bool handle_add_quote(
     const char *argument,
     DynamicString *reply
 ) {
-    if (context->username == NULL || *context->username == '\0') {
+    if (context->username == nullptr || *context->username == '\0') {
         return missing_username_reply(reply);
     }
     if (*argument == '\0') {
@@ -275,11 +273,11 @@ static bool handle_delete_quote(
     if (*argument == '\0') {
         return dynamic_string_append(reply, "Uso: /delquote <numero da /quotes | testo esatto>.");
     }
-    char *removed = NULL;
+    char *removed = nullptr;
     if (!quote_delete(context->storage, context->arena, argument, &removed)) {
         return false;
     }
-    if (removed == NULL) {
+    if (removed == nullptr) {
         return dynamic_string_append(reply, "Citazione non trovata.");
     }
     return dynamic_string_appendf(reply, "Citazione eliminata: %s", removed);
@@ -297,12 +295,12 @@ TelegramCommandResult telegram_command_dispatch(
     const char *text,
     DynamicString *reply
 ) {
-    if (context == NULL || context->storage == NULL || context->arena == NULL ||
-        context->config == NULL || text == NULL || reply == NULL) {
+    if (context == nullptr || context->storage == nullptr || context->arena == nullptr ||
+        context->config == nullptr || text == nullptr || reply == nullptr) {
         return TELEGRAM_COMMAND_ERROR;
     }
     char *message = trim_copy(context->arena, text);
-    if (message == NULL) {
+    if (message == nullptr) {
         return TELEGRAM_COMMAND_ERROR;
     }
     dynamic_string_reset(reply);
@@ -310,13 +308,13 @@ TelegramCommandResult telegram_command_dispatch(
         return TELEGRAM_COMMAND_IGNORED;
     }
 
-    TelegramCommandHandler handler = NULL;
+    TelegramCommandHandler handler = nullptr;
     const char *argument = "";
     if (strcmp(message, TELEGRAM_CONQUISTER_TRIGGER) == 0) {
         handler = handle_claim;
     } else {
         char command[64];
-        char *parsed_argument = NULL;
+        char *parsed_argument = nullptr;
         command_and_argument(message, command, &parsed_argument);
         argument = parsed_argument;
         size_t command_count = sizeof(TELEGRAM_COMMANDS) / sizeof(TELEGRAM_COMMANDS[0]);
@@ -327,7 +325,7 @@ TelegramCommandResult telegram_command_dispatch(
             }
         }
     }
-    if (handler == NULL) {
+    if (handler == nullptr) {
         return TELEGRAM_COMMAND_IGNORED;
     }
     return handler(context, argument, reply) ? TELEGRAM_COMMAND_REPLIED : TELEGRAM_COMMAND_ERROR;

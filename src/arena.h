@@ -5,13 +5,14 @@
 
 typedef struct ArenaBlock ArenaBlock;
 
-/* Start from {0}; allocations are zeroed and released together by arena_free. */
+/* Start from {}; allocations are zeroed and released together by arena_free. */
 typedef struct {
     ArenaBlock *blocks;
 } Arena;
 
-void *arena_alloc(Arena *arena, size_t size);
-char *arena_strdup(Arena *arena, const char *text);
+[[nodiscard]] void *arena_alloc(Arena *arena, size_t size);
+[[nodiscard]] void *arena_alloc_array(Arena *arena, size_t count, size_t size);
+[[nodiscard]] char *arena_strdup(Arena *arena, const char *text);
 void arena_free(Arena *arena);
 
 #endif

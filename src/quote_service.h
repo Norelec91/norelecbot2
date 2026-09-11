@@ -28,7 +28,7 @@ typedef struct {
     size_t first_number;
 } QuotePage;
 
-bool quote_add(
+[[nodiscard]] bool quote_add(
     Storage *storage,
     const char *username,
     const char *quote,
@@ -36,8 +36,8 @@ bool quote_add(
     QuoteAddResult *result
 );
 /* Returned strings and page items live in arena. */
-bool quote_page_load(Storage *storage, Arena *arena, int requested_page, QuotePage *page);
-bool quote_random(Storage *storage, Arena *arena, char **quote);
-bool quote_delete(Storage *storage, Arena *arena, const char *selector, char **removed_quote);
+[[nodiscard]] bool quote_page_load(Storage *storage, Arena *arena, int requested_page, QuotePage *page);
+[[nodiscard]] bool quote_random(Storage *storage, Arena *arena, char **quote);
+[[nodiscard]] bool quote_delete(Storage *storage, Arena *arena, const char *selector, char **removed_quote);
 
 #endif

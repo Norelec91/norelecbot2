@@ -28,7 +28,7 @@ static bool open_storage(void) {
         "quotes_added", "Norelec", (json_int_t)1
     );
     json_t *quotes = json_pack("[s, s]", "Pillola azzurra", "con \"virgolette\" / e slash");
-    bool ok = state != NULL && quotes != NULL &&
+    bool ok = state != nullptr && quotes != nullptr &&
               json_dump_file(state, conquister_path, 0) == 0 &&
               json_dump_file(quotes, quotes_path, 0) == 0 &&
               storage_open(&storage, conquister_path, quotes_path);
@@ -52,15 +52,15 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     static const char *const methods[] = {"GET", "POST", "HEAD", "PUT"};
     const char *method = methods[data[0] % 4U];
     char *path = malloc(size);
-    DynamicString body = {0};
-    if (path == NULL || !dynamic_string_init(&body, 64U)) {
+    DynamicString body = {};
+    if (path == nullptr || !dynamic_string_init(&body, 64U)) {
         free(path);
         return 0;
     }
     memcpy(path, data + 1, size - 1U);
     path[size - 1U] = '\0';
 
-    Arena arena = {0};
+    Arena arena = {};
     RestRouteContext context = {.storage = &storage, .arena = &arena};
     RestRouteResponse response = {.status_code = 0, .body = &body};
     if (!rest_route_dispatch(&context, method, path, &response)) {
@@ -74,7 +74,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     }
     json_error_t error;
     json_t *parsed = json_loads(body.data, 0, &error);
-    if (parsed == NULL) {
+    if (parsed == nullptr) {
         fail("body is not valid JSON", method, path, body.data);
     }
     json_decref(parsed);

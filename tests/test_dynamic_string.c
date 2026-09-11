@@ -10,7 +10,7 @@
 #include <string.h>
 
 int main(void) {
-    DynamicString value = {0};
+    DynamicString value = {};
     assert(dynamic_string_init(&value, 2U));
     assert(dynamic_string_append(&value, "abc"));
     assert(dynamic_string_appendf(&value, "-%d", 42));

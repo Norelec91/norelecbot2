@@ -7,24 +7,25 @@
 
 #include <curl/curl.h>
 #include <jansson.h>
+#include <stdckdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define POLL_TIMEOUT_SECONDS 6L
+static constexpr long POLL_TIMEOUT_SECONDS = 6;
 
 static size_t receive_data(char *data, size_t size, size_t count, void *context) {
-    if (size != 0U && count > SIZE_MAX / size) {
+    size_t bytes = 0U;
+    if (ckd_mul(&bytes, size, count)) {
         return 0U;
     }
-    size_t bytes = size * count;
     DynamicString *response = context;
     return dynamic_string_append_n(response, data, bytes) ? bytes : 0U;
 }
 
 static bool form_field(DynamicString *form, CURL *curl, const char *name, const char *value) {
     char *encoded = curl_easy_escape(curl, value, 0);
-    if (encoded == NULL) {
+    if (encoded == nullptr) {
         return false;
     }
     bool ok = (form->length == 0U || dynamic_string_append(form, "&")) &&
@@ -42,21 +43,21 @@ static json_t *telegram_api(
     long timeout
 ) {
     CURL *curl = curl_easy_init();
-    if (curl == NULL) {
+    if (curl == nullptr) {
         log_error("Could not initialize libcurl");
-        return NULL;
+        return nullptr;
     }
 
-    DynamicString url = {0};
-    DynamicString form = {0};
-    DynamicString response = {0};
+    DynamicString url = {};
+    DynamicString form = {};
+    DynamicString response = {};
     bool ready = dynamic_string_init(&url, 384U) && dynamic_string_init(&form, 256U) &&
                  dynamic_string_init(&response, 1024U) &&
                  dynamic_string_appendf(&url, "https://api.telegram.org/bot%s/%s", token, method);
     for (size_t index = 0U; ready && index < field_count; ++index) {
         ready = form_field(&form, curl, names[index], values[index]);
     }
-    json_t *root = NULL;
+    json_t *root = nullptr;
     if (!ready) {
         log_error("Out of memory while preparing Telegram request");
         goto cleanup;
@@ -79,7 +80,7 @@ static json_t *telegram_api(
     } else {
         json_error_t error;
         root = json_loads(response.data, 0, &error);
-        if (root == NULL) {
+        if (root == nullptr) {
             log_warning("Telegram %s returned invalid JSON: %s", method, error.text);
         }
     }
@@ -129,15 +130,15 @@ static void process_message(Storage *storage, const AppConfig *config, json_t *m
     json_t *sender = json_object_get(message, "from");
     json_t *chat_id_value = json_object_get(json_object_get(message, "chat"), "id");
     json_t *user_id_value = json_object_get(sender, "id");
-    if (text == NULL || !json_is_integer(chat_id_value) || !json_is_integer(user_id_value)) {
+    if (text == nullptr || !json_is_integer(chat_id_value) || !json_is_integer(user_id_value)) {
         return;
     }
     int64_t chat_id = (int64_t)json_integer_value(chat_id_value);
-    DynamicString reply = {0};
+    DynamicString reply = {};
     if (!dynamic_string_init(&reply, 1024U)) {
         return;
     }
-    Arena arena = {0};
+    Arena arena = {};
     TelegramCommandContext context = {
         .storage = storage,
         .arena = &arena,
@@ -157,7 +158,7 @@ static void process_message(Storage *storage, const AppConfig *config, json_t *m
 
 static json_t *updates_array(json_t *root) {
     json_t *result = json_object_get(root, "result");
-    return json_is_true(json_object_get(root, "ok")) && json_is_array(result) ? result : NULL;
+    return json_is_true(json_object_get(root, "ok")) && json_is_array(result) ? result : nullptr;
 }
 
 static void advance_offset(json_t *update, int64_t *offset) {
@@ -181,7 +182,7 @@ int telegram_run(Storage *storage, const AppConfig *config, const volatile sig_a
     while (*stop == 0) {
         json_t *root = get_updates(config, offset, POLL_TIMEOUT_SECONDS);
         array = updates_array(root);
-        if (array == NULL) {
+        if (array == nullptr) {
             json_decref(root);
             platform_sleep_milliseconds(1000UL);
             continue;

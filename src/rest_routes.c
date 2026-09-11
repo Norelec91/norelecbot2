@@ -28,9 +28,9 @@ static int append_chunk(const char *buffer, size_t size, void *body) {
     return dynamic_string_append_n(body, buffer, size) ? 0 : -1;
 }
 
-/* Takes ownership of root; a NULL root (failed json_pack) reports an internal error. */
+/* Takes ownership of root; a nullptr root (failed json_pack) reports an internal error. */
 static bool append_json(DynamicString *body, json_t *root) {
-    bool ok = root != NULL && json_dump_callback(root, append_chunk, body, JSON_COMPACT) == 0 &&
+    bool ok = root != nullptr && json_dump_callback(root, append_chunk, body, JSON_COMPACT) == 0 &&
               dynamic_string_append(body, "\n");
     json_decref(root);
     return ok;
@@ -45,17 +45,17 @@ static bool json_user_body(DynamicString *body, const ConquisterUser *user) {
         "quotes_added", (json_int_t)user->quotes_added,
         "in_conquister", user->in_conquister
     );
-    if (root != NULL && user->in_conquister &&
+    if (root != nullptr && user->in_conquister &&
         json_object_set_new(root, "since", json_integer((json_int_t)user->since)) != 0) {
         json_decref(root);
-        root = NULL;
+        root = nullptr;
     }
     return append_json(body, root);
 }
 
 static bool json_leaderboard_body(DynamicString *body, const Leaderboard *leaderboard) {
     json_t *entries = json_array();
-    for (size_t index = 0U; entries != NULL && index < leaderboard->count; ++index) {
+    for (size_t index = 0U; entries != nullptr && index < leaderboard->count; ++index) {
         const LeaderboardEntry *entry = &leaderboard->entries[index];
         json_t *item = json_pack(
             "{s:I, s:s, s:I, s:I}",
@@ -66,10 +66,10 @@ static bool json_leaderboard_body(DynamicString *body, const Leaderboard *leader
         );
         if (json_array_append_new(entries, item) != 0) {
             json_decref(entries);
-            entries = NULL;
+            entries = nullptr;
         }
     }
-    json_t *current = leaderboard->current_username != NULL
+    json_t *current = leaderboard->current_username != nullptr
         ? json_pack(
               "{s:s, s:I}",
               "username", leaderboard->current_username,
@@ -80,26 +80,23 @@ static bool json_leaderboard_body(DynamicString *body, const Leaderboard *leader
 }
 
 static bool handle_health(
-    const RestRouteContext *context,
-    const char *argument,
+    [[maybe_unused]] const RestRouteContext *context,
+    [[maybe_unused]] const char *argument,
     RestRouteResponse *response
 ) {
-    (void)context;
-    (void)argument;
     return set_response(response, 200, "{\"status\":\"ok\"}\n");
 }
 
 static bool handle_quote(
     const RestRouteContext *context,
-    const char *argument,
+    [[maybe_unused]] const char *argument,
     RestRouteResponse *response
 ) {
-    (void)argument;
-    char *quote = NULL;
+    char *quote = nullptr;
     if (!quote_random(context->storage, context->arena, &quote)) {
         return false;
     }
-    if (quote == NULL) {
+    if (quote == nullptr) {
         return set_response(response, 404, "{\"error\":\"no quotes available\"}\n");
     }
     response->status_code = 200;
@@ -108,10 +105,9 @@ static bool handle_quote(
 
 static bool handle_leaderboard(
     const RestRouteContext *context,
-    const char *argument,
+    [[maybe_unused]] const char *argument,
     RestRouteResponse *response
 ) {
-    (void)argument;
     Leaderboard leaderboard;
     if (!conquister_leaderboard(context->storage, context->arena, 0U, &leaderboard)) {
         return false;
@@ -126,7 +122,7 @@ static bool handle_user(
     RestRouteResponse *response
 ) {
     const char *username = *argument == '@' ? argument + 1 : argument;
-    if (*username == '\0' || strchr(username, '/') != NULL) {
+    if (*username == '\0' || strchr(username, '/') != nullptr) {
         return set_response(response, 404, "{\"error\":\"not found\"}\n");
     }
     ConquisterUser user;
@@ -153,8 +149,8 @@ bool rest_route_dispatch(
     const char *path,
     RestRouteResponse *response
 ) {
-    if (context == NULL || context->storage == NULL || context->arena == NULL || method == NULL ||
-        path == NULL || response == NULL || response->body == NULL) {
+    if (context == nullptr || context->storage == nullptr || context->arena == nullptr || method == nullptr ||
+        path == nullptr || response == nullptr || response->body == nullptr) {
         return false;
     }
     dynamic_string_reset(response->body);

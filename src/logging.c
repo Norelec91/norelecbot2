@@ -7,7 +7,7 @@
 #include <time.h>
 
 static void log_line(const char *level, const char *format, va_list arguments) {
-    time_t now = time(NULL);
+    time_t now = time(nullptr);
     char timestamp[32] = "unknown-time";
     struct tm broken_down;
     if (platform_local_time(now, &broken_down)) {

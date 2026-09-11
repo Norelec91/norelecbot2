@@ -14,7 +14,7 @@ static void test_paths(
     char conquister_path[1024],
     char quotes_path[1024]
 ) {
-    struct timespec now = {0};
+    struct timespec now = {};
     assert(timespec_get(&now, TIME_UTC) == TIME_UTC);
     int conquister_length = snprintf(
         conquister_path,

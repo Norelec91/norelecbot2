@@ -18,7 +18,7 @@ typedef struct {
 } RestRouteResponse;
 
 /* Produces a complete HTTP response, including 404; false means an internal failure. */
-bool rest_route_dispatch(
+[[nodiscard]] bool rest_route_dispatch(
     const RestRouteContext *context,
     const char *method,
     const char *path,

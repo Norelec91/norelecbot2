@@ -44,7 +44,7 @@ typedef struct {
     int64_t since;
 } ConquisterUser;
 
-bool conquister_claim(
+[[nodiscard]] bool conquister_claim(
     Storage *storage,
     int64_t user_id,
     const char *username,
@@ -52,13 +52,13 @@ bool conquister_claim(
     ClaimResult *result
 );
 /* Entries live in arena; limit 0 returns every entry. */
-bool conquister_leaderboard(
+[[nodiscard]] bool conquister_leaderboard(
     Storage *storage,
     Arena *arena,
     size_t limit,
     Leaderboard *leaderboard
 );
 /* Case-insensitive lookup; rank is 0 when the user has no score yet. */
-bool conquister_user(Storage *storage, const char *username, ConquisterUser *user);
+[[nodiscard]] bool conquister_user(Storage *storage, const char *username, ConquisterUser *user);
 
 #endif

@@ -10,11 +10,11 @@ typedef struct {
     size_t capacity;
 } DynamicString;
 
-bool dynamic_string_init(DynamicString *string, size_t initial_capacity);
+[[nodiscard]] bool dynamic_string_init(DynamicString *string, size_t initial_capacity);
 void dynamic_string_free(DynamicString *string);
 void dynamic_string_reset(DynamicString *string);
-bool dynamic_string_append(DynamicString *string, const char *text);
-bool dynamic_string_append_n(DynamicString *string, const char *text, size_t length);
-bool dynamic_string_appendf(DynamicString *string, const char *format, ...);
+[[nodiscard]] bool dynamic_string_append(DynamicString *string, const char *text);
+[[nodiscard]] bool dynamic_string_append_n(DynamicString *string, const char *text, size_t length);
+[[nodiscard]] bool dynamic_string_appendf(DynamicString *string, const char *format, ...);
 
 #endif

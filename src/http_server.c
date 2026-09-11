@@ -50,7 +50,7 @@ static enum MHD_Result queue_json_response(
         body->data,
         MHD_RESPMEM_MUST_COPY
     );
-    if (response == NULL) {
+    if (response == nullptr) {
         return MHD_NO;
     }
     enum MHD_Result headers_ok = MHD_add_response_header(
@@ -77,22 +77,18 @@ static enum MHD_Result handle_request(
     struct MHD_Connection *connection,
     const char *url,
     const char *method,
-    const char *version,
-    const char *upload_data,
-    size_t *upload_data_size,
-    void **request_context
+    [[maybe_unused]] const char *version,
+    [[maybe_unused]] const char *upload_data,
+    [[maybe_unused]] size_t *upload_data_size,
+    [[maybe_unused]] void **request_context
 ) {
-    (void)version;
-    (void)upload_data;
-    (void)upload_data_size;
-    (void)request_context;
 
     const HttpServer *server = context;
-    DynamicString body = {0};
+    DynamicString body = {};
     if (!dynamic_string_init(&body, 256U)) {
         return MHD_NO;
     }
-    Arena arena = {0};
+    Arena arena = {};
     RestRouteContext route_context = {.storage = server->storage, .arena = &arena};
     RestRouteResponse route_response = {.status_code = 500, .body = &body};
     bool response_ready = rest_route_dispatch(
@@ -128,12 +124,12 @@ static bool resolve_address(
 ) {
     char service[16];
     (void)snprintf(service, sizeof(service), "%d", port);
-    struct addrinfo hints = {0};
+    struct addrinfo hints = {};
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE | AI_NUMERICSERV;
 
-    struct addrinfo *addresses = NULL;
+    struct addrinfo *addresses = nullptr;
     int status = getaddrinfo(host, service, &hints, &addresses);
     if (status != 0) {
         log_error("API server address resolution failed with code %d", status);
@@ -141,10 +137,10 @@ static bool resolve_address(
     }
 
     const struct addrinfo *selected = addresses;
-    while (selected != NULL && selected->ai_addrlen > sizeof(*address)) {
+    while (selected != nullptr && selected->ai_addrlen > sizeof(*address)) {
         selected = selected->ai_next;
     }
-    if (selected == NULL) {
+    if (selected == nullptr) {
         freeaddrinfo(addresses);
         log_error("API server found no usable address for %s", host);
         return false;
@@ -165,7 +161,7 @@ bool http_server_start(
     int port,
     Storage *storage
 ) {
-    *server = (HttpServer){0};
+    *server = (HttpServer){};
     server->storage = storage;
     if (!network_initialize()) {
         log_error("Could not initialize networking");
@@ -182,8 +178,8 @@ bool http_server_start(
     server->daemon = MHD_start_daemon(
         flags,
         (uint16_t)port,
-        NULL,
-        NULL,
+        nullptr,
+        nullptr,
         handle_request,
         server,
         MHD_OPTION_SOCK_ADDR,
@@ -192,7 +188,7 @@ bool http_server_start(
         2U,
         MHD_OPTION_END
     );
-    if (server->daemon == NULL) {
+    if (server->daemon == nullptr) {
         network_cleanup();
         log_error("API server could not listen on %s:%d", host, port);
         return false;
@@ -203,10 +199,10 @@ bool http_server_start(
 }
 
 void http_server_stop(HttpServer *server) {
-    if (server->daemon == NULL) {
+    if (server->daemon == nullptr) {
         return;
     }
     MHD_stop_daemon(server->daemon);
-    server->daemon = NULL;
+    server->daemon = nullptr;
     network_cleanup();
 }

@@ -29,7 +29,8 @@ run_build clang-fuzz -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang \
     -DNORELECBOT_FUZZ=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
 echo "==> cppcheck"
-cppcheck --enable=warning,style,performance,portability --std=c11 --quiet --error-exitcode=1 \
+# cppcheck 2.17 does not treat C23 nullptr comparisons as null checks (false leak reports).
+cppcheck --enable=warning,style,performance,portability --std=c23 -Dnullptr=NULL --quiet --error-exitcode=1 \
     --suppress=missingIncludeSystem --suppress=unusedFunction --suppress=normalCheckLevelMaxBranches \
     --suppress=knownConditionTrueFalse:src/http_server.c \
     --suppress=constParameterPointer:src/platform.c \

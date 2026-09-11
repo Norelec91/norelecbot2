@@ -24,7 +24,7 @@ typedef struct {
 } TelegramCommandContext;
 
 /* Ignored messages produce no reply; recognized messages always do. */
-TelegramCommandResult telegram_command_dispatch(
+[[nodiscard]] TelegramCommandResult telegram_command_dispatch(
     const TelegramCommandContext *context,
     const char *text,
     DynamicString *reply

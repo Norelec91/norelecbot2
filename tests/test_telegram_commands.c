@@ -8,14 +8,14 @@
 #include <string.h>
 
 int main(void) {
-    AppConfig config = {0};
+    AppConfig config = {};
     test_paths("telegram-command-test", config.conquister_path, config.quotes_path);
     config.owner_id = 99;
     config.quote_cost = 1000;
 
-    Storage storage = {0};
-    Arena arena = {0};
-    DynamicString reply = {0};
+    Storage storage = {};
+    Arena arena = {};
+    DynamicString reply = {};
     assert(storage_open(&storage, config.conquister_path, config.quotes_path));
     assert(dynamic_string_init(&reply, 256U));
     TelegramCommandContext context = {
@@ -26,7 +26,7 @@ int main(void) {
         .username = "alice",
     };
 
-    assert(telegram_command_dispatch(NULL, "ciao", &reply) == TELEGRAM_COMMAND_ERROR);
+    assert(telegram_command_dispatch(nullptr, "ciao", &reply) == TELEGRAM_COMMAND_ERROR);
     assert(telegram_command_dispatch(&context, "ciao", &reply) == TELEGRAM_COMMAND_IGNORED);
     assert(telegram_command_dispatch(&context, "   ", &reply) == TELEGRAM_COMMAND_IGNORED);
     assert(telegram_command_dispatch(&context, "/classifica", &reply) == TELEGRAM_COMMAND_REPLIED);
@@ -34,28 +34,28 @@ int main(void) {
                reply.data,
                "Classifica vuota. Scrivi \"We @TheConquister37\" per entrare in @TheConquister37!"
            ) == 0);
-    context.username = NULL;
+    context.username = nullptr;
     assert(telegram_command_dispatch(&context, "We @TheConquister37", &reply) ==
            TELEGRAM_COMMAND_REPLIED);
-    assert(strstr(reply.data, "Imposta uno username") != NULL);
+    assert(strstr(reply.data, "Imposta uno username") != nullptr);
     context.username = "alice";
     assert(telegram_command_dispatch(&context, "We @TheConquister37", &reply) ==
            TELEGRAM_COMMAND_REPLIED);
-    assert(strstr(reply.data, "alice sei in ") != NULL);
-    assert(strchr(reply.data, '\n') == NULL);
+    assert(strstr(reply.data, "alice sei in ") != nullptr);
+    assert(strchr(reply.data, '\n') == nullptr);
 
     assert(telegram_command_dispatch(&context, "  /CLASSIFICA@ExampleBot  ", &reply) ==
            TELEGRAM_COMMAND_REPLIED);
-    assert(strstr(reply.data, "Classifica") != NULL);
-    assert(strstr(reply.data, "palle @TheConquister37") == NULL);
+    assert(strstr(reply.data, "Classifica") != nullptr);
+    assert(strstr(reply.data, "palle @TheConquister37") == nullptr);
     assert(telegram_command_dispatch(&context, "/quotes 8", &reply) == TELEGRAM_COMMAND_REPLIED);
     assert(strcmp(reply.data, "Solo il proprietario può vedere le citazioni.") == 0);
     assert(telegram_command_dispatch(&context, "/addquote", &reply) == TELEGRAM_COMMAND_REPLIED);
-    assert(strstr(reply.data, "Uso: /addquote") != NULL);
-    assert(strstr(reply.data, "1000 palle.") != NULL);
+    assert(strstr(reply.data, "Uso: /addquote") != nullptr);
+    assert(strstr(reply.data, "1000 palle.") != nullptr);
     assert(telegram_command_dispatch(&context, "/delquote 1", &reply) ==
            TELEGRAM_COMMAND_REPLIED);
-    assert(strstr(reply.data, "Solo il proprietario") != NULL);
+    assert(strstr(reply.data, "Solo il proprietario") != nullptr);
     context.user_id = 99;
     context.username = "owner";
     assert(telegram_command_dispatch(&context, "/delquote 1", &reply) ==
@@ -71,24 +71,24 @@ int main(void) {
     context.username = "alice";
     assert(telegram_command_dispatch(&context, "We @TheConquister37", &reply) ==
            TELEGRAM_COMMAND_REPLIED);
-    assert(strstr(reply.data, "alice sei già in") != NULL);
-    assert(strstr(reply.data, "citazione di prova") == NULL);
+    assert(strstr(reply.data, "alice sei già in") != nullptr);
+    assert(strstr(reply.data, "citazione di prova") == nullptr);
     context.user_id = 2;
     context.username = "bob";
     assert(telegram_command_dispatch(&context, "We @TheConquister37", &reply) ==
            TELEGRAM_COMMAND_REPLIED);
-    assert(strstr(reply.data, "bob sei in ") != NULL);
-    assert(strstr(reply.data, "!\n\ncitazione di prova") != NULL);
+    assert(strstr(reply.data, "bob sei in ") != nullptr);
+    assert(strstr(reply.data, "!\n\ncitazione di prova") != nullptr);
     assert(telegram_command_dispatch(&context, "/classifica", &reply) == TELEGRAM_COMMAND_REPLIED);
-    assert(strstr(reply.data, "🏆 Classifica @TheConquister37:\n\n1. ") != NULL);
-    assert(strstr(reply.data, " — 📜 1 citazione\n") != NULL);
-    assert(strstr(reply.data, "\n\n🪐 In @TheConquister37 ora: bob") != NULL);
+    assert(strstr(reply.data, "🏆 Classifica @TheConquister37:\n\n1. ") != nullptr);
+    assert(strstr(reply.data, " — 📜 1 citazione\n") != nullptr);
+    assert(strstr(reply.data, "\n\n🪐 In @TheConquister37 ora: bob") != nullptr);
 
     dynamic_string_free(&reply);
     arena_free(&arena);
     storage_close(&storage);
     FILE *saved = fopen(config.conquister_path, "rb");
-    assert(saved != NULL);
+    assert(saved != nullptr);
     int closed = fclose(saved);
     assert(closed == 0);
     test_paths_remove(config.conquister_path, config.quotes_path);
