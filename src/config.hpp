@@ -17,6 +17,8 @@ struct AppConfig {
     static constexpr std::string_view default_quotes_path = "quotes.json";
 
     std::string bot_token;
+    /* 0 leaves the choice to the system, 1 forces IPv4, 2 forces IPv6. */
+    int telegram_ip_version = 0;
     bool conquister_enabled = false;
     std::int64_t owner_id = 0;
     int quote_cost = default_quote_cost;

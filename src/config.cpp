@@ -44,6 +44,9 @@ constexpr std::array settings{
     Setting{"NORELECBOT_TELEGRAM_TOKEN", [](AppConfig &config, std::string_view value) {
         return set_text(config.bot_token, value, {});
     }},
+    Setting{"NORELECBOT_TELEGRAM_IP_VERSION", [](AppConfig &config, std::string_view value) {
+        return set_number(config.telegram_ip_version, value, 0, 0, 2);
+    }},
     Setting{"NORELECBOT_CONQUISTER_ENABLED", [](AppConfig &config, std::string_view value) {
         config.conquister_enabled =
             !value.empty() && value != "0" && !text::equals_ignore_case(value, "false");
