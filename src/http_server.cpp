@@ -30,6 +30,12 @@ HttpServer::HttpServer(const std::string &host, int port, Storage &storage)
     server_->set_read_timeout(connection_timeout_seconds);
     server_->set_write_timeout(connection_timeout_seconds);
     server_->set_keep_alive_timeout(connection_timeout_seconds);
+    // httplib's default is SO_REUSEPORT alone, which cannot rebind next to TIME_WAIT connections left by
+    // a SO_REUSEADDR socket and lets two instances share the port; use SO_REUSEADDR like most servers.
+    server_->set_socket_options([](auto listener) {
+        const int enable = 1;
+        setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char *>(&enable), sizeof(enable));
+    });
     // Every method and path goes through the route table, which also produces the JSON 404s.
     server_->set_pre_routing_handler([&storage](const httplib::Request &request, httplib::Response &response) {
         const RestResponse result = dispatch_or_error(storage, request.method, request.path);
