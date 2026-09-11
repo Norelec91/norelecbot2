@@ -26,8 +26,9 @@ static int worker(void *context) {
 static void write_text(const char *path, const char *text) {
     FILE *file = fopen(path, "wb");
     assert(file != NULL);
-    assert(fputs(text, file) != EOF);
-    assert(fclose(file) == 0);
+    int written = fputs(text, file);
+    int closed = fclose(file);
+    assert(written != EOF && closed == 0);
 }
 
 int main(void) {
@@ -35,7 +36,8 @@ int main(void) {
     assert(platform_mutex_init(&state.mutex));
     assert(platform_condition_init(&state.condition));
     assert(platform_mutex_lock(&state.mutex));
-    assert(platform_thread_start_detached(worker, &state));
+    bool started = platform_thread_start_detached(worker, &state);
+    assert(started);
     while (!state.finished) {
         assert(platform_condition_wait(&state.condition, &state.mutex));
     }
@@ -54,13 +56,15 @@ int main(void) {
     char contents[4] = {0};
     FILE *file = fopen(destination, "rb");
     assert(file != NULL);
-    assert(fread(contents, 1U, 3U, file) == 3U);
-    assert(fclose(file) == 0);
+    size_t read = fread(contents, 1U, 3U, file);
+    int closed = fclose(file);
+    assert(read == 3U && closed == 0);
     assert(strcmp(contents, "new") == 0);
     test_paths_remove(source, destination);
 
     struct tm local;
-    assert(platform_local_time(time(NULL), &local));
+    bool converted = platform_local_time(time(NULL), &local);
+    assert(converted);
     platform_sleep_milliseconds(1UL);
     puts("platform tests: ok");
     return 0;

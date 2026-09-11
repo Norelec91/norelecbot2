@@ -49,7 +49,7 @@ char *arena_strdup(Arena *arena, const char *text) {
     size_t length = strlen(text);
     char *copy = arena_alloc(arena, length + 1U);
     if (copy != NULL) {
-        memcpy(copy, text, length);
+        memcpy(copy, text, length + 1U);
     }
     return copy;
 }

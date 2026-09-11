@@ -167,7 +167,7 @@ static void advance_offset(json_t *update, int64_t *offset) {
     }
 }
 
-int telegram_run(Storage *storage, const AppConfig *config, volatile sig_atomic_t *stop) {
+int telegram_run(Storage *storage, const AppConfig *config, const volatile sig_atomic_t *stop) {
     log_info("Telegram poller started (trigger=%s)", TELEGRAM_CONQUISTER_TRIGGER);
     int64_t offset = -1;
     json_t *backlog = get_updates(config, -1, 0L);

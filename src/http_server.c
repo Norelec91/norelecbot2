@@ -87,7 +87,7 @@ static enum MHD_Result handle_request(
     (void)upload_data_size;
     (void)request_context;
 
-    HttpServer *server = context;
+    const HttpServer *server = context;
     DynamicString body = {0};
     if (!dynamic_string_init(&body, 256U)) {
         return MHD_NO;

@@ -6,6 +6,6 @@
 
 #include <signal.h>
 
-int telegram_run(Storage *storage, const AppConfig *config, volatile sig_atomic_t *stop);
+int telegram_run(Storage *storage, const AppConfig *config, const volatile sig_atomic_t *stop);
 
 #endif

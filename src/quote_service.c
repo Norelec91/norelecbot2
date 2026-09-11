@@ -2,11 +2,10 @@
 
 #include "json_storage_internal.h"
 #include "logging.h"
+#include "text.h"
 
-#include <errno.h>
 #include <limits.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
 
 #define QUOTES_PAGE_SIZE 30U
@@ -160,11 +159,9 @@ bool quote_delete(Storage *storage, Arena *arena, const char *selector, char **r
     bool ok = quotes != NULL;
     size_t count = json_array_size(quotes);
     size_t selected = SIZE_MAX;
-    char *end = NULL;
-    errno = 0;
-    unsigned long position = strtoul(selector, &end, 10);
-    if (errno == 0 && end != selector && *end == '\0' && position > 0U && position <= count) {
-        selected = (size_t)(position - 1U);
+    int64_t position = 0;
+    if (text_parse_int64(selector, &position) && position > 0 && (uint64_t)position <= count) {
+        selected = (size_t)(position - 1);
     } else {
         size_t index;
         json_t *entry;

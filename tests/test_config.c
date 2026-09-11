@@ -10,8 +10,9 @@
 static void write_file(const char *path, const char *content) {
     FILE *file = fopen(path, "wb");
     assert(file != NULL);
-    assert(fputs(content, file) >= 0);
-    assert(fclose(file) == 0);
+    int written = fputs(content, file);
+    int closed = fclose(file);
+    assert(written >= 0 && closed == 0);
 }
 
 int main(void) {
@@ -38,7 +39,8 @@ int main(void) {
     write_file(path, "NORELECBOT_QUOTE_COST=2147483648\n");
     assert(!config_load(&config, path));
 
-    assert(remove(path) == 0);
+    int removed = remove(path);
+    assert(removed == 0);
     puts("config tests: ok");
     return 0;
 }

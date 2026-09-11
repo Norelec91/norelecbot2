@@ -4,6 +4,7 @@
 .vscode/
 .DS_Store
 bin/
+build-check/
 
 # Local deployment notes and target host.
 DEPLOY.md

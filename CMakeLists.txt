@@ -47,6 +47,7 @@ else()
 endif()
 
 option(NORELECBOT_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+option(NORELECBOT_FUZZ "Build the libFuzzer targets (requires clang)" OFF)
 
 if(MSVC)
     add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
@@ -61,9 +62,12 @@ else()
         -Wstrict-prototypes
         -Werror
     )
-    if(NORELECBOT_SANITIZE)
+    if(NORELECBOT_SANITIZE OR NORELECBOT_FUZZ)
         add_compile_options(-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer)
         add_link_options(-fsanitize=address,undefined)
+    endif()
+    if(NORELECBOT_FUZZ)
+        add_compile_options(-fsanitize=fuzzer-no-link)
     endif()
 endif()
 
@@ -78,6 +82,7 @@ set(CORE_SOURCES
     src/quote_service.c
     src/telegram_commands.c
     src/rest_routes.c
+    src/text.c
 )
 
 add_library(norelecbot_core STATIC ${CORE_SOURCES})
@@ -97,6 +102,12 @@ target_link_libraries(norelecbot PRIVATE
 
 if(WIN32)
     target_link_libraries(norelecbot PRIVATE ws2_32)
+endif()
+
+if(NORELECBOT_FUZZ)
+    add_executable(fuzz-rest-routes fuzz/fuzz_rest_routes.c)
+    target_link_libraries(fuzz-rest-routes PRIVATE norelecbot_core)
+    target_link_options(fuzz-rest-routes PRIVATE -fsanitize=fuzzer)
 endif()
 
 include(CTest)
@@ -122,6 +133,9 @@ if(BUILD_TESTING)
     add_executable(test-rest-routes tests/test_rest_routes.c)
     target_link_libraries(test-rest-routes PRIVATE norelecbot_core)
 
+    add_executable(test-text tests/test_text.c)
+    target_link_libraries(test-text PRIVATE norelecbot_core)
+
     add_test(NAME arena COMMAND test-arena)
     add_test(NAME dynamic-string COMMAND test-dynamic-string)
     add_test(NAME platform COMMAND test-platform)
@@ -129,4 +143,5 @@ if(BUILD_TESTING)
     add_test(NAME services COMMAND test-services)
     add_test(NAME telegram-commands COMMAND test-telegram-commands)
     add_test(NAME rest-routes COMMAND test-rest-routes)
+    add_test(NAME text COMMAND test-text)
 endif()

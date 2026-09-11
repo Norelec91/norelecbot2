@@ -1,6 +1,7 @@
 #include "json_storage_internal.h"
 
 #include "logging.h"
+#include "text.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -112,11 +113,11 @@ static bool save_json(const char *path, json_t *value) {
     return true;
 }
 
-bool json_storage_save_conquister(Storage *storage, json_t *state) {
+bool json_storage_save_conquister(const Storage *storage, json_t *state) {
     return save_json(storage->conquister_path, state);
 }
 
-bool json_storage_save_quotes(Storage *storage, json_t *quotes) {
+bool json_storage_save_quotes(const Storage *storage, json_t *quotes) {
     return save_json(storage->quotes_path, quotes);
 }
 
@@ -152,15 +153,10 @@ bool json_set_integer(json_t *object, const char *name, int64_t value) {
     return json_object_set_new(object, name, json_integer((json_int_t)value)) == 0;
 }
 
-static bool copy_path(char *destination, size_t capacity, const char *source) {
-    int length = snprintf(destination, capacity, "%s", source);
-    return length >= 0 && (size_t)length < capacity;
-}
-
 bool storage_open(Storage *storage, const char *conquister_path, const char *quotes_path) {
     *storage = (Storage){0};
-    if (!copy_path(storage->conquister_path, sizeof(storage->conquister_path), conquister_path) ||
-        !copy_path(storage->quotes_path, sizeof(storage->quotes_path), quotes_path)) {
+    if (!text_copy(storage->conquister_path, sizeof(storage->conquister_path), conquister_path) ||
+        !text_copy(storage->quotes_path, sizeof(storage->quotes_path), quotes_path)) {
         log_error("JSON storage path is too long");
         return false;
     }

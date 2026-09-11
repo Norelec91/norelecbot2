@@ -2,8 +2,8 @@
 
 #include "json_storage_internal.h"
 #include "logging.h"
+#include "text.h"
 
-#include <ctype.h>
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -146,17 +146,6 @@ bool conquister_leaderboard(
     json_decref(state);
     json_storage_unlock(storage);
     return ok;
-}
-
-static bool text_equals_ignore_case(const char *left, const char *right) {
-    while (*left != '\0' && *right != '\0') {
-        if (tolower((unsigned char)*left) != tolower((unsigned char)*right)) {
-            return false;
-        }
-        ++left;
-        ++right;
-    }
-    return *left == *right;
 }
 
 static const char *find_key_ignore_case(json_t *object, const char *name) {

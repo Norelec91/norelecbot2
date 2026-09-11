@@ -89,7 +89,8 @@ int main(void) {
     storage_close(&storage);
     FILE *saved = fopen(config.conquister_path, "rb");
     assert(saved != NULL);
-    assert(fclose(saved) == 0);
+    int closed = fclose(saved);
+    assert(closed == 0);
     test_paths_remove(config.conquister_path, config.quotes_path);
     puts("Telegram command tests: ok");
     return 0;

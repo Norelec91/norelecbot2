@@ -2,9 +2,8 @@
 
 #include "dynamic_string.h"
 #include "logging.h"
+#include "text.h"
 
-#include <ctype.h>
-#include <errno.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,51 +12,9 @@
 #define DEFAULT_API_PORT 8000
 #define DEFAULT_QUOTE_COST 1000
 
-static char *trim(char *text) {
-    while (isspace((unsigned char)*text) != 0) {
-        ++text;
-    }
-    char *end = text + strlen(text);
-    while (end > text && isspace((unsigned char)end[-1]) != 0) {
-        --end;
-    }
-    *end = '\0';
-    return text;
-}
-
-static bool text_equals_ignore_case(const char *left, const char *right) {
-    while (*left != '\0' && *right != '\0') {
-        if (tolower((unsigned char)*left) != tolower((unsigned char)*right)) {
-            return false;
-        }
-        ++left;
-        ++right;
-    }
-    return *left == *right;
-}
-
-static bool copy_text(char *destination, size_t capacity, const char *text) {
-    int length = snprintf(destination, capacity, "%s", text);
-    return length >= 0 && (size_t)length < capacity;
-}
-
-static bool parse_integer(const char *text, int64_t *output) {
-    char *end = NULL;
-    errno = 0;
-    long long value = strtoll(text, &end, 10);
-    while (isspace((unsigned char)*end) != 0) {
-        ++end;
-    }
-    if (errno != 0 || end == text || *end != '\0') {
-        return false;
-    }
-    *output = (int64_t)value;
-    return true;
-}
-
 static bool apply_setting(AppConfig *config, const char *name, const char *value) {
     if (strcmp(name, "NORELECBOT_TELEGRAM_TOKEN") == 0) {
-        return copy_text(config->bot_token, sizeof(config->bot_token), value);
+        return text_copy(config->bot_token, sizeof(config->bot_token), value);
     }
     if (strcmp(name, "NORELECBOT_CONQUISTER_ENABLED") == 0) {
         config->conquister_enabled = *value != '\0' && strcmp(value, "0") != 0 &&
@@ -69,11 +26,11 @@ static bool apply_setting(AppConfig *config, const char *name, const char *value
             config->owner_id = 0;
             return true;
         }
-        return parse_integer(value, &config->owner_id);
+        return text_parse_int64(value, &config->owner_id);
     }
     if (strcmp(name, "NORELECBOT_QUOTE_COST") == 0) {
         int64_t cost = DEFAULT_QUOTE_COST;
-        if (*value != '\0' && !parse_integer(value, &cost)) {
+        if (*value != '\0' && !text_parse_int64(value, &cost)) {
             return false;
         }
         if (cost < 0 || cost > INT_MAX) {
@@ -83,7 +40,7 @@ static bool apply_setting(AppConfig *config, const char *name, const char *value
         return true;
     }
     if (strcmp(name, "NORELECBOT_API_HOST") == 0) {
-        return copy_text(
+        return text_copy(
             config->api_host,
             sizeof(config->api_host),
             *value == '\0' ? "0.0.0.0" : value
@@ -91,7 +48,7 @@ static bool apply_setting(AppConfig *config, const char *name, const char *value
     }
     if (strcmp(name, "NORELECBOT_API_PORT") == 0) {
         int64_t port = DEFAULT_API_PORT;
-        if (*value != '\0' && !parse_integer(value, &port)) {
+        if (*value != '\0' && !text_parse_int64(value, &port)) {
             return false;
         }
         if (port < 1 || port > 65535) {
@@ -101,14 +58,14 @@ static bool apply_setting(AppConfig *config, const char *name, const char *value
         return true;
     }
     if (strcmp(name, "NORELECBOT_CONQUISTER_FILE") == 0) {
-        return copy_text(
+        return text_copy(
             config->conquister_path,
             sizeof(config->conquister_path),
             *value == '\0' ? "conquister.json" : value
         );
     }
     if (strcmp(name, "NORELECBOT_QUOTES_FILE") == 0) {
-        return copy_text(
+        return text_copy(
             config->quotes_path,
             sizeof(config->quotes_path),
             *value == '\0' ? "quotes.json" : value
@@ -119,6 +76,10 @@ static bool apply_setting(AppConfig *config, const char *name, const char *value
 
 static bool read_line(FILE *file, DynamicString *line, bool *available) {
     dynamic_string_reset(line);
+    *available = false;
+    if (feof(file) != 0) {
+        return true;
+    }
     int character = fgetc(file);
     while (character != EOF && character != '\n') {
         char byte = (char)character;
@@ -155,7 +116,7 @@ static bool apply_dotenv(AppConfig *config, const char *path) {
         if (!available) {
             break;
         }
-        char *entry = trim(line.data);
+        char *entry = text_trim(line.data);
         if (*entry == '\0' || *entry == '#') {
             continue;
         }
@@ -164,8 +125,8 @@ static bool apply_dotenv(AppConfig *config, const char *path) {
             continue;
         }
         *equals = '\0';
-        char *name = trim(entry);
-        char *value = trim(equals + 1);
+        const char *name = text_trim(entry);
+        char *value = text_trim(equals + 1);
         size_t length = strlen(value);
         if (length >= 2U && ((value[0] == '"' && value[length - 1U] == '"') ||
                             (value[0] == '\'' && value[length - 1U] == '\''))) {
@@ -213,9 +174,9 @@ bool config_load(AppConfig *config, const char *dotenv_path) {
         .quote_cost = DEFAULT_QUOTE_COST,
         .api_port = DEFAULT_API_PORT,
     };
-    if (!copy_text(config->api_host, sizeof(config->api_host), "0.0.0.0") ||
-        !copy_text(config->conquister_path, sizeof(config->conquister_path), "conquister.json") ||
-        !copy_text(config->quotes_path, sizeof(config->quotes_path), "quotes.json")) {
+    if (!text_copy(config->api_host, sizeof(config->api_host), "0.0.0.0") ||
+        !text_copy(config->conquister_path, sizeof(config->conquister_path), "conquister.json") ||
+        !text_copy(config->quotes_path, sizeof(config->quotes_path), "quotes.json")) {
         log_error("Could not initialize configuration defaults");
         return false;
     }

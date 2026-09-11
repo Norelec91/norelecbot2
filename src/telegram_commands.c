@@ -2,10 +2,10 @@
 
 #include "conquister_service.h"
 #include "quote_service.h"
+#include "text.h"
 
 #include <ctype.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
@@ -23,18 +23,8 @@ typedef struct {
 } TelegramCommandDefinition;
 
 static char *trim_copy(Arena *arena, const char *text) {
-    while (isspace((unsigned char)*text) != 0) {
-        ++text;
-    }
-    size_t length = strlen(text);
-    while (length > 0U && isspace((unsigned char)text[length - 1U]) != 0) {
-        --length;
-    }
-    char *copy = arena_alloc(arena, length + 1U);
-    if (copy != NULL) {
-        memcpy(copy, text, length);
-    }
-    return copy;
+    char *copy = arena_strdup(arena, text);
+    return copy != NULL ? text_trim(copy) : NULL;
 }
 
 static void command_and_argument(char *text, char command[64], char **argument) {
@@ -56,32 +46,6 @@ static void command_and_argument(char *text, char command[64], char **argument) 
         ++cursor;
     }
     *argument = cursor;
-}
-
-static size_t utf8_prefix_bytes(const char *text, size_t max_codepoints) {
-    size_t bytes = 0U;
-    size_t codepoints = 0U;
-    while (text[bytes] != '\0' && codepoints < max_codepoints) {
-        unsigned char lead = (unsigned char)text[bytes];
-        size_t width = 1U;
-        if ((lead & 0xE0U) == 0xC0U) {
-            width = 2U;
-        } else if ((lead & 0xF0U) == 0xE0U) {
-            width = 3U;
-        } else if ((lead & 0xF8U) == 0xF0U) {
-            width = 4U;
-        }
-        for (size_t index = 1U; index < width; ++index) {
-            if ((unsigned char)text[bytes + index] < 0x80U ||
-                (unsigned char)text[bytes + index] > 0xBFU) {
-                width = 1U;
-                break;
-            }
-        }
-        bytes += width;
-        ++codepoints;
-    }
-    return bytes;
 }
 
 static bool missing_username_reply(DynamicString *reply) {
@@ -262,9 +226,8 @@ static bool handle_quotes(
     if (context->user_id != context->config->owner_id) {
         return dynamic_string_append(reply, "Solo il proprietario può vedere le citazioni.");
     }
-    char *end = NULL;
-    long requested = strtol(argument, &end, 10);
-    int page = end != argument && *end == '\0' && requested > 0 && requested <= INT32_MAX
+    int64_t requested = 0;
+    int page = text_parse_int64(argument, &requested) && requested > 0 && requested <= INT32_MAX
         ? (int)requested
         : 1;
     QuotePage quotes;
@@ -287,9 +250,9 @@ static bool handle_quotes(
         );
         for (size_t index = 0U; ok && index < quotes.count; ++index) {
             const char *quote = quotes.items[index];
-            size_t first_eighty = utf8_prefix_bytes(quote, 80U);
+            size_t first_eighty = text_utf8_prefix_bytes(quote, 80U);
             bool truncated = quote[first_eighty] != '\0';
-            size_t bytes = truncated ? utf8_prefix_bytes(quote, 77U) : strlen(quote);
+            size_t bytes = truncated ? text_utf8_prefix_bytes(quote, 77U) : strlen(quote);
             ok = dynamic_string_appendf(reply, "\n%zu. ", quotes.first_number + index) &&
                  dynamic_string_append_n(reply, quote, bytes) &&
                  (!truncated || dynamic_string_append(reply, "…"));

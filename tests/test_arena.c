@@ -12,7 +12,7 @@
 
 int main(void) {
     Arena arena = {0};
-    char *small = arena_alloc(&arena, 3U);
+    const char *small = arena_alloc(&arena, 3U);
     assert(small != NULL && small[0] == '\0' && small[2] == '\0');
 
     for (size_t index = 0U; index < 1000U; ++index) {
@@ -26,7 +26,7 @@ int main(void) {
     assert(large != NULL && large[99999] == 0U);
     memset(large, 0xff, 100000U);
 
-    char *copy = arena_strdup(&arena, "citazione");
+    const char *copy = arena_strdup(&arena, "citazione");
     assert(copy != NULL && strcmp(copy, "citazione") == 0);
     assert(arena_strdup(&arena, NULL) == NULL);
     assert(arena_alloc(&arena, SIZE_MAX) == NULL);
