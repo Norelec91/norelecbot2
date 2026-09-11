@@ -15,36 +15,28 @@ find_package(CURL REQUIRED)
 find_package(Threads REQUIRED)
 find_package(PkgConfig QUIET)
 
-if(PkgConfig_FOUND)
-    pkg_check_modules(JANSSON QUIET IMPORTED_TARGET jansson)
-    pkg_check_modules(MICROHTTPD QUIET IMPORTED_TARGET libmicrohttpd)
-endif()
-
-if(TARGET PkgConfig::JANSSON)
-    set(JANSSON_TARGET PkgConfig::JANSSON)
-else()
-    find_path(JANSSON_INCLUDE_DIR NAMES jansson.h REQUIRED)
-    find_library(JANSSON_LIBRARY NAMES jansson REQUIRED)
-    add_library(jansson_external UNKNOWN IMPORTED)
-    set_target_properties(jansson_external PROPERTIES
-        IMPORTED_LOCATION "${JANSSON_LIBRARY}"
-        INTERFACE_INCLUDE_DIRECTORIES "${JANSSON_INCLUDE_DIR}"
+# Sets <prefix>_TARGET from pkg-config, or from the header and library names (Windows, vcpkg).
+function(norelecbot_find_library prefix package header)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(${prefix} QUIET IMPORTED_TARGET ${package})
+    endif()
+    if(TARGET PkgConfig::${prefix})
+        set(${prefix}_TARGET PkgConfig::${prefix} PARENT_SCOPE)
+        return()
+    endif()
+    string(TOLOWER "${prefix}_external" target)
+    find_path(${prefix}_INCLUDE_DIR NAMES ${header} REQUIRED)
+    find_library(${prefix}_LIBRARY NAMES ${ARGN} REQUIRED)
+    add_library(${target} UNKNOWN IMPORTED)
+    set_target_properties(${target} PROPERTIES
+        IMPORTED_LOCATION "${${prefix}_LIBRARY}"
+        INTERFACE_INCLUDE_DIRECTORIES "${${prefix}_INCLUDE_DIR}"
     )
-    set(JANSSON_TARGET jansson_external)
-endif()
+    set(${prefix}_TARGET ${target} PARENT_SCOPE)
+endfunction()
 
-if(TARGET PkgConfig::MICROHTTPD)
-    set(MICROHTTPD_TARGET PkgConfig::MICROHTTPD)
-else()
-    find_path(MICROHTTPD_INCLUDE_DIR NAMES microhttpd.h REQUIRED)
-    find_library(MICROHTTPD_LIBRARY NAMES microhttpd libmicrohttpd REQUIRED)
-    add_library(microhttpd_external UNKNOWN IMPORTED)
-    set_target_properties(microhttpd_external PROPERTIES
-        IMPORTED_LOCATION "${MICROHTTPD_LIBRARY}"
-        INTERFACE_INCLUDE_DIRECTORIES "${MICROHTTPD_INCLUDE_DIR}"
-    )
-    set(MICROHTTPD_TARGET microhttpd_external)
-endif()
+norelecbot_find_library(JANSSON jansson jansson.h jansson)
+norelecbot_find_library(MICROHTTPD libmicrohttpd microhttpd.h microhttpd libmicrohttpd)
 
 option(NORELECBOT_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 option(NORELECBOT_FUZZ "Build the libFuzzer targets (requires clang)" OFF)
@@ -112,36 +104,10 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
-    add_executable(test-arena tests/test_arena.c)
-    target_link_libraries(test-arena PRIVATE norelecbot_core)
-
-    add_executable(test-dynamic-string tests/test_dynamic_string.c)
-    target_link_libraries(test-dynamic-string PRIVATE norelecbot_core)
-
-    add_executable(test-platform tests/test_platform.c)
-    target_link_libraries(test-platform PRIVATE norelecbot_core)
-
-    add_executable(test-config tests/test_config.c)
-    target_link_libraries(test-config PRIVATE norelecbot_core)
-
-    add_executable(test-services tests/test_services.c)
-    target_link_libraries(test-services PRIVATE norelecbot_core)
-
-    add_executable(test-telegram-commands tests/test_telegram_commands.c)
-    target_link_libraries(test-telegram-commands PRIVATE norelecbot_core)
-
-    add_executable(test-rest-routes tests/test_rest_routes.c)
-    target_link_libraries(test-rest-routes PRIVATE norelecbot_core)
-
-    add_executable(test-text tests/test_text.c)
-    target_link_libraries(test-text PRIVATE norelecbot_core)
-
-    add_test(NAME arena COMMAND test-arena)
-    add_test(NAME dynamic-string COMMAND test-dynamic-string)
-    add_test(NAME platform COMMAND test-platform)
-    add_test(NAME config COMMAND test-config)
-    add_test(NAME services COMMAND test-services)
-    add_test(NAME telegram-commands COMMAND test-telegram-commands)
-    add_test(NAME rest-routes COMMAND test-rest-routes)
-    add_test(NAME text COMMAND test-text)
+    foreach(test arena dynamic-string platform config services telegram-commands rest-routes text)
+        string(REPLACE "-" "_" source "${test}")
+        add_executable(test-${test} tests/test_${source}.c)
+        target_link_libraries(test-${test} PRIVATE norelecbot_core)
+        add_test(NAME ${test} COMMAND test-${test})
+    endforeach()
 endif()
