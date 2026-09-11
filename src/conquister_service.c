@@ -4,6 +4,7 @@
 #include "json_storage_internal.h"
 #include "logging.h"
 
+#include <ctype.h>
 #include <json-c/json.h>
 #include <limits.h>
 #include <stdint.h>
@@ -179,5 +180,83 @@ cleanup:
     if (!ok) {
         leaderboard_free(leaderboard);
     }
+    return ok;
+}
+
+static bool text_equals_ignore_case(const char *left, const char *right) {
+    while (*left != '\0' && *right != '\0') {
+        if (tolower((unsigned char)*left) != tolower((unsigned char)*right)) {
+            return false;
+        }
+        ++left;
+        ++right;
+    }
+    return *left == *right;
+}
+
+static const char *find_key_ignore_case(json_object *object, const char *name) {
+    if (object == NULL) {
+        return NULL;
+    }
+    json_object_object_foreach(object, key, value) {
+        (void)value;
+        if (text_equals_ignore_case(key, name)) {
+            return key;
+        }
+    }
+    return NULL;
+}
+
+bool conquister_user(Storage *storage, const char *username, ConquisterUser *user) {
+    *user = (ConquisterUser){0};
+    if (!json_storage_lock(storage)) {
+        return false;
+    }
+    json_object *state = json_storage_load_conquister(storage);
+    bool ok = state != NULL;
+    if (!ok) {
+        goto cleanup;
+    }
+
+    const char *name = NULL;
+    json_object *current = json_member(state, "current");
+    json_object *holder_value = json_member(current, "username");
+    const char *holder = holder_value != NULL ? json_object_get_string(holder_value) : NULL;
+    if (holder != NULL && *holder != '\0' && text_equals_ignore_case(holder, username)) {
+        name = holder;
+        user->in_conquister = true;
+        user->since = json_integer(current, "since", 0);
+    }
+    json_object *scores = json_member(state, "scores");
+    json_object *quotes_added = json_member(state, "quotes_added");
+    const char *score_name = find_key_ignore_case(scores, username);
+    const char *quotes_name = find_key_ignore_case(quotes_added, username);
+    if (name == NULL) {
+        name = score_name != NULL ? score_name : quotes_name;
+    }
+    if (name == NULL) {
+        goto cleanup;
+    }
+
+    user->found = true;
+    (void)snprintf(user->username, sizeof(user->username), "%s", name);
+    if (score_name != NULL) {
+        ScoreEntry self = {.username = score_name, .score = json_integer(scores, score_name, 0)};
+        user->score = self.score;
+        user->rank = 1U;
+        json_object_object_foreach(scores, key, value) {
+            ScoreEntry other = {.username = key, .score = json_object_get_int64(value)};
+            if (compare_scores(&other, &self) < 0) {
+                ++user->rank;
+            }
+        }
+    }
+    if (quotes_name != NULL) {
+        user->quotes_added = json_integer(quotes_added, quotes_name, 0);
+    }
+
+cleanup:
+    json_object_put(state);
+    json_storage_unlock(storage);
     return ok;
 }

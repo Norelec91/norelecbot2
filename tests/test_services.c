@@ -60,6 +60,17 @@ int main(void) {
     assert(strcmp(leaderboard.current_username, "bob") == 0);
     leaderboard_free(&leaderboard);
 
+    ConquisterUser user;
+    assert(conquister_user(&storage, "ALICE", &user));
+    assert(user.found && strcmp(user.username, "alice") == 0);
+    assert(user.score == 1000 && user.rank == 1U && user.quotes_added == 0);
+    assert(!user.in_conquister);
+    assert(conquister_user(&storage, "bob", &user));
+    assert(user.found && user.in_conquister && user.since == 1100);
+    assert(user.score == 0 && user.rank == 0U);
+    assert(conquister_user(&storage, "carol", &user));
+    assert(!user.found);
+
     QuoteAddResult addition;
     assert(quote_add(&storage, "alice", "quote di prova", 1000, &addition));
     assert(addition.status == QUOTE_ADDED);

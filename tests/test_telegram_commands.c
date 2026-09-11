@@ -39,7 +39,7 @@ int main(void) {
     context.username = "alice";
     assert(telegram_command_dispatch(&context, "We @TheConquister37", &reply) ==
            TELEGRAM_COMMAND_REPLIED);
-    assert(strstr(reply.data, "alice sei entrato") != NULL);
+    assert(strstr(reply.data, "alice sei in ") != NULL);
     assert(strchr(reply.data, '\n') == NULL);
 
     assert(telegram_command_dispatch(&context, "  /CLASSIFICA@ExampleBot  ", &reply) ==
@@ -75,7 +75,7 @@ int main(void) {
     context.username = "bob";
     assert(telegram_command_dispatch(&context, "We @TheConquister37", &reply) ==
            TELEGRAM_COMMAND_REPLIED);
-    assert(strstr(reply.data, "bob sei entrato") != NULL);
+    assert(strstr(reply.data, "bob sei in ") != NULL);
     assert(strstr(reply.data, "!\n\ncitazione di prova") != NULL);
     assert(telegram_command_dispatch(&context, "/classifica", &reply) == TELEGRAM_COMMAND_REPLIED);
     assert(strstr(reply.data, "🏆 Classifica @TheConquister37:\n\n1. ") != NULL);

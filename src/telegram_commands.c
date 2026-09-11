@@ -148,7 +148,7 @@ static bool handle_claim(
     }
     return dynamic_string_appendf(
                reply,
-               "%s sei entrato in %s!",
+               "%s sei in %s!",
                context->username,
                TELEGRAM_CONQUISTER_PLACE
            ) &&

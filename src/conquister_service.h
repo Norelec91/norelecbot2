@@ -32,6 +32,16 @@ typedef struct {
     char *current_username;
 } Leaderboard;
 
+typedef struct {
+    bool found;
+    char username[CONQUISTER_USERNAME_MAX + 1U];
+    int64_t score;
+    size_t rank;
+    int64_t quotes_added;
+    bool in_conquister;
+    int64_t since;
+} ConquisterUser;
+
 bool conquister_claim(
     Storage *storage,
     int64_t user_id,
@@ -41,5 +51,7 @@ bool conquister_claim(
 );
 bool conquister_leaderboard(Storage *storage, Leaderboard *leaderboard);
 void leaderboard_free(Leaderboard *leaderboard);
+/* Case-insensitive lookup; rank is 0 when the user has no score yet. */
+bool conquister_user(Storage *storage, const char *username, ConquisterUser *user);
 
 #endif

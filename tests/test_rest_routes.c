@@ -1,3 +1,4 @@
+#include "conquister_service.h"
 #include "rest_routes.h"
 #include "test_paths.h"
 
@@ -47,6 +48,34 @@ int main(void) {
     assert(rest_route_dispatch(&context, "GET", "/quote", &response));
     assert(response.status_code == 200);
     assert(strcmp(body.data, "{\"quote\":\"quote di prova\"}\n") == 0);
+
+    ClaimResult claim;
+    assert(conquister_claim(&storage, 7, "Norelec", 100, &claim));
+    assert(conquister_claim(&storage, 8, "bob", 150, &claim));
+    assert(rest_route_dispatch(&context, "GET", "/user/norelec", &response));
+    assert(response.status_code == 200);
+    assert(strcmp(
+               body.data,
+               "{\"username\":\"Norelec\",\"score\":50,\"rank\":1,\"quotes_added\":0,"
+               "\"in_conquister\":false}\n"
+           ) == 0);
+    assert(rest_route_dispatch(&context, "GET", "/user/@bob", &response));
+    assert(response.status_code == 200);
+    assert(strcmp(
+               body.data,
+               "{\"username\":\"bob\",\"score\":0,\"rank\":null,\"quotes_added\":0,"
+               "\"in_conquister\":true,\"since\":150}\n"
+           ) == 0);
+    assert(rest_route_dispatch(&context, "GET", "/user/nessuno", &response));
+    assert(response.status_code == 404);
+    assert(strcmp(body.data, "{\"error\":\"user not found\"}\n") == 0);
+    assert(rest_route_dispatch(&context, "GET", "/user/", &response));
+    assert(response.status_code == 404);
+    assert(strcmp(body.data, "{\"error\":\"not found\"}\n") == 0);
+    assert(rest_route_dispatch(&context, "GET", "/user/bob/extra", &response));
+    assert(response.status_code == 404);
+    assert(rest_route_dispatch(&context, "POST", "/user/bob", &response));
+    assert(response.status_code == 404);
 
     dynamic_string_free(&body);
     storage_close(&storage);
