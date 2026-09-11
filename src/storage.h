@@ -1,13 +1,12 @@
 #ifndef NORELECBOT_STORAGE_H
 #define NORELECBOT_STORAGE_H
 
-#include "platform.h"
-
 #include <stdbool.h>
 #include <stdint.h>
+#include <threads.h>
 
 typedef struct {
-    PlatformMutex mutex;
+    mtx_t mutex;
     char conquister_path[1024];
     char quotes_path[1024];
     uint64_t quote_random_state;

@@ -1,6 +1,7 @@
 #include "json_storage_internal.h"
 
 #include "logging.h"
+#include "platform.h"
 #include "text.h"
 
 #include <errno.h>
@@ -122,7 +123,7 @@ bool json_storage_save_quotes(const Storage *storage, json_t *quotes) {
 }
 
 bool json_storage_lock(Storage *storage) {
-    if (!platform_mutex_lock(&storage->mutex)) {
+    if (!storage->initialized || mtx_lock(&storage->mutex) != thrd_success) {
         log_error("Could not lock JSON storage");
         return false;
     }
@@ -130,7 +131,7 @@ bool json_storage_lock(Storage *storage) {
 }
 
 void json_storage_unlock(Storage *storage) {
-    if (!platform_mutex_unlock(&storage->mutex)) {
+    if (!storage->initialized || mtx_unlock(&storage->mutex) != thrd_success) {
         log_error("Could not unlock JSON storage");
     }
 }
@@ -160,10 +161,11 @@ bool storage_open(Storage *storage, const char *conquister_path, const char *quo
         log_error("JSON storage path is too long");
         return false;
     }
-    if (!platform_mutex_init(&storage->mutex)) {
+    if (mtx_init(&storage->mutex, mtx_plain) != thrd_success) {
         log_error("Could not initialize JSON storage mutex");
         return false;
     }
+    storage->initialized = true;
 
     struct timespec now = {};
     (void)timespec_get(&now, TIME_UTC);
@@ -174,7 +176,7 @@ bool storage_open(Storage *storage, const char *conquister_path, const char *quo
     }
 
     if (!json_storage_lock(storage)) {
-        platform_mutex_destroy(&storage->mutex);
+        storage_close(storage);
         return false;
     }
     json_t *state = json_storage_load_conquister(storage);
@@ -184,11 +186,10 @@ bool storage_open(Storage *storage, const char *conquister_path, const char *quo
     json_decref(quotes);
     json_storage_unlock(storage);
     if (!valid) {
-        platform_mutex_destroy(&storage->mutex);
+        storage_close(storage);
         return false;
     }
 
-    storage->initialized = true;
     log_info(
         "JSON storage ready (conquister=%s, quotes=%s)",
         storage->conquister_path,
@@ -201,6 +202,6 @@ void storage_close(Storage *storage) {
     if (!storage->initialized) {
         return;
     }
-    platform_mutex_destroy(&storage->mutex);
+    mtx_destroy(&storage->mutex);
     storage->initialized = false;
 }
