@@ -84,11 +84,12 @@ static enum MHD_Result handle_request(
 ) {
 
     const HttpServer *server = context;
+    Arena arena = {};
     DynamicString body = {};
-    if (!dynamic_string_init(&body, 256U)) {
+    if (!dynamic_string_init(&body, &arena, 256U)) {
+        arena_free(&arena);
         return MHD_NO;
     }
-    Arena arena = {};
     RestRouteContext route_context = {.storage = server->storage, .arena = &arena};
     RestRouteResponse route_response = {.status_code = 500, .body = &body};
     bool response_ready = rest_route_dispatch(
@@ -97,12 +98,11 @@ static enum MHD_Result handle_request(
         url,
         &route_response
     );
-    arena_free(&arena);
     if (!response_ready) {
         route_response.status_code = 500;
         dynamic_string_reset(&body);
         if (!dynamic_string_append(&body, "{\"error\":\"storage error\"}\n")) {
-            dynamic_string_free(&body);
+            arena_free(&arena);
             return MHD_NO;
         }
     }
@@ -112,7 +112,7 @@ static enum MHD_Result handle_request(
         route_response.status_code,
         &body
     );
-    dynamic_string_free(&body);
+    arena_free(&arena);
     return result;
 }
 

@@ -17,7 +17,7 @@ int main(void) {
     Arena arena = {};
     DynamicString reply = {};
     assert(storage_open(&storage, config.conquister_path, config.quotes_path));
-    assert(dynamic_string_init(&reply, 256U));
+    assert(dynamic_string_init(&reply, &arena, 256U));
     TelegramCommandContext context = {
         .storage = &storage,
         .arena = &arena,
@@ -84,7 +84,6 @@ int main(void) {
     assert(strstr(reply.data, " — 📜 1 citazione\n") != nullptr);
     assert(strstr(reply.data, "\n\n🪐 In @TheConquister37 ora: bob") != nullptr);
 
-    dynamic_string_free(&reply);
     arena_free(&arena);
     storage_close(&storage);
     FILE *saved = fopen(config.conquister_path, "rb");

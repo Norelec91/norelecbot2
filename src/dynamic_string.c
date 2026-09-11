@@ -3,7 +3,6 @@
 #include <stdarg.h>
 #include <stdckdint.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 static constexpr size_t DYNAMIC_STRING_DEFAULT_CAPACITY = 64;
@@ -20,33 +19,28 @@ static bool dynamic_string_reserve(DynamicString *string, size_t required) {
             return false;
         }
     }
-    char *data = realloc(string->data, capacity);
+    char *data = arena_alloc(string->arena, capacity);
     if (data == nullptr) {
         return false;
+    }
+    if (string->data != nullptr) {
+        memcpy(data, string->data, string->length + 1U);
     }
     string->data = data;
     string->capacity = capacity;
     return true;
 }
 
-bool dynamic_string_init(DynamicString *string, size_t initial_capacity) {
-    if (string == nullptr) {
+bool dynamic_string_init(DynamicString *string, Arena *arena, size_t initial_capacity) {
+    if (string == nullptr || arena == nullptr) {
         return false;
     }
-    *string = (DynamicString){};
+    *string = (DynamicString){.arena = arena};
     if (!dynamic_string_reserve(string, initial_capacity > 0U ? initial_capacity : 1U)) {
         return false;
     }
     string->data[0] = '\0';
     return true;
-}
-
-void dynamic_string_free(DynamicString *string) {
-    if (string == nullptr) {
-        return;
-    }
-    free(string->data);
-    *string = (DynamicString){};
 }
 
 void dynamic_string_reset(DynamicString *string) {

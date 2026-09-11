@@ -23,9 +23,9 @@ int main(void) {
 
     Storage storage = {};
     assert(storage_open(&storage, conquister_path, quotes_path));
-    DynamicString body = {};
-    assert(dynamic_string_init(&body, 256U));
     Arena arena = {};
+    DynamicString body = {};
+    assert(dynamic_string_init(&body, &arena, 256U));
     RestRouteContext context = {.storage = &storage, .arena = &arena};
     RestRouteResponse response = {.status_code = 0, .body = &body};
 
@@ -91,7 +91,6 @@ int main(void) {
     assert(rest_route_dispatch(&context, "POST", "/user/bob", &response));
     assert(response.status_code == 404);
 
-    dynamic_string_free(&body);
     arena_free(&arena);
     storage_close(&storage);
     test_paths_remove(conquister_path, quotes_path);

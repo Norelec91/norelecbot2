@@ -52,15 +52,16 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     static const char *const methods[] = {"GET", "POST", "HEAD", "PUT"};
     const char *method = methods[data[0] % 4U];
     char *path = malloc(size);
+    Arena arena = {};
     DynamicString body = {};
-    if (path == nullptr || !dynamic_string_init(&body, 64U)) {
+    if (path == nullptr || !dynamic_string_init(&body, &arena, 64U)) {
+        arena_free(&arena);
         free(path);
         return 0;
     }
     memcpy(path, data + 1, size - 1U);
     path[size - 1U] = '\0';
 
-    Arena arena = {};
     RestRouteContext context = {.storage = &storage, .arena = &arena};
     RestRouteResponse response = {.status_code = 0, .body = &body};
     if (!rest_route_dispatch(&context, method, path, &response)) {
@@ -80,7 +81,6 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     json_decref(parsed);
 
     arena_free(&arena);
-    dynamic_string_free(&body);
     free(path);
     return 0;
 }

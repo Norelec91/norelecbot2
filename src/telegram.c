@@ -48,11 +48,13 @@ static json_t *telegram_api(
         return nullptr;
     }
 
+    Arena arena = {};
     DynamicString url = {};
     DynamicString form = {};
     DynamicString response = {};
-    bool ready = dynamic_string_init(&url, 384U) && dynamic_string_init(&form, 256U) &&
-                 dynamic_string_init(&response, 1024U) &&
+    bool ready = dynamic_string_init(&url, &arena, 384U) &&
+                 dynamic_string_init(&form, &arena, 256U) &&
+                 dynamic_string_init(&response, &arena, 1024U) &&
                  dynamic_string_appendf(&url, "https://api.telegram.org/bot%s/%s", token, method);
     for (size_t index = 0U; ready && index < field_count; ++index) {
         ready = form_field(&form, curl, names[index], values[index]);
@@ -86,9 +88,7 @@ static json_t *telegram_api(
     }
 
 cleanup:
-    dynamic_string_free(&url);
-    dynamic_string_free(&form);
-    dynamic_string_free(&response);
+    arena_free(&arena);
     curl_easy_cleanup(curl);
     return root;
 }
@@ -134,11 +134,12 @@ static void process_message(Storage *storage, const AppConfig *config, json_t *m
         return;
     }
     int64_t chat_id = (int64_t)json_integer_value(chat_id_value);
+    Arena arena = {};
     DynamicString reply = {};
-    if (!dynamic_string_init(&reply, 1024U)) {
+    if (!dynamic_string_init(&reply, &arena, 1024U)) {
+        arena_free(&arena);
         return;
     }
-    Arena arena = {};
     TelegramCommandContext context = {
         .storage = storage,
         .arena = &arena,
@@ -147,13 +148,12 @@ static void process_message(Storage *storage, const AppConfig *config, json_t *m
         .username = json_string_value(json_object_get(sender, "username")),
     };
     TelegramCommandResult result = telegram_command_dispatch(&context, text, &reply);
-    arena_free(&arena);
     if (result == TELEGRAM_COMMAND_REPLIED) {
         send_message(config, chat_id, reply.data);
     } else if (result == TELEGRAM_COMMAND_ERROR) {
         send_message(config, chat_id, "Errore interno: riprova tra poco.");
     }
-    dynamic_string_free(&reply);
+    arena_free(&arena);
 }
 
 static json_t *updates_array(json_t *root) {

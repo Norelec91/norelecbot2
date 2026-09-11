@@ -127,8 +127,10 @@ static bool apply_dotenv(AppConfig *config, const char *path) {
     if (file == nullptr) {
         return false;
     }
+    Arena arena = {};
     DynamicString line = {};
-    if (!dynamic_string_init(&line, 256U)) {
+    if (!dynamic_string_init(&line, &arena, 256U)) {
+        arena_free(&arena);
         (void)fclose(file);
         return false;
     }
@@ -165,7 +167,7 @@ static bool apply_dotenv(AppConfig *config, const char *path) {
     if (ferror(file) != 0) {
         ok = false;
     }
-    dynamic_string_free(&line);
+    arena_free(&arena);
     if (fclose(file) != 0) {
         ok = false;
     }
