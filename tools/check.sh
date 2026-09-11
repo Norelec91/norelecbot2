@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Quality gate: GCC and clang builds with tests, sanitizers, cppcheck, clang-tidy and REST fuzzing.
+# Quality gate: GCC and clang builds with tests, sanitizers, cppcheck, clang-tidy, a restart check and REST fuzzing.
 # Needs cmake, gcc, clang, clang-tidy, cppcheck, libFuzzer and the build dependencies.
 #
 #   tools/check.sh                   FUZZ_SECONDS=60 by default
@@ -38,6 +38,9 @@ cppcheck --enable=warning,style,performance,portability --language=c++ --std=c++
 
 echo "==> clang-tidy"
 clang-tidy -p "$OUT/clang-fuzz" --quiet src/*.cpp tests/*.cpp fuzz/*.cpp 2> >(grep -v "warnings generated" >&2)
+
+echo "==> restart check"
+tools/check_restart.sh bin/norelecbot
 
 echo "==> fuzz REST routes for ${FUZZ_SECONDS}s"
 corpus="$OUT/fuzz-corpus"
