@@ -1,0 +1,376 @@
+#include "telegram_commands.h"
+
+#include "conquister_service.h"
+#include "quote_service.h"
+
+#include <ctype.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+typedef bool (*TelegramCommandHandler)(
+    const TelegramCommandContext *context,
+    const char *argument,
+    DynamicString *reply
+);
+
+typedef struct {
+    const char *name;
+    TelegramCommandHandler handler;
+} TelegramCommandDefinition;
+
+static char *trim_copy(const char *text) {
+    while (isspace((unsigned char)*text) != 0) {
+        ++text;
+    }
+    size_t length = strlen(text);
+    while (length > 0U && isspace((unsigned char)text[length - 1U]) != 0) {
+        --length;
+    }
+    char *copy = malloc(length + 1U);
+    if (copy == NULL) {
+        return NULL;
+    }
+    memcpy(copy, text, length);
+    copy[length] = '\0';
+    return copy;
+}
+
+static void command_and_argument(char *text, char command[64], char **argument) {
+    size_t length = strcspn(text, " \t\r\n");
+    if (length >= 64U) {
+        length = 63U;
+    }
+    memcpy(command, text, length);
+    command[length] = '\0';
+    char *suffix = strchr(command, '@');
+    if (suffix != NULL) {
+        *suffix = '\0';
+    }
+    for (char *cursor = command; *cursor != '\0'; ++cursor) {
+        *cursor = (char)tolower((unsigned char)*cursor);
+    }
+    char *cursor = text + strcspn(text, " \t\r\n");
+    while (isspace((unsigned char)*cursor) != 0) {
+        ++cursor;
+    }
+    *argument = cursor;
+}
+
+static size_t utf8_prefix_bytes(const char *text, size_t max_codepoints) {
+    size_t bytes = 0U;
+    size_t codepoints = 0U;
+    while (text[bytes] != '\0' && codepoints < max_codepoints) {
+        unsigned char lead = (unsigned char)text[bytes];
+        size_t width = 1U;
+        if ((lead & 0xE0U) == 0xC0U) {
+            width = 2U;
+        } else if ((lead & 0xF0U) == 0xE0U) {
+            width = 3U;
+        } else if ((lead & 0xF8U) == 0xF0U) {
+            width = 4U;
+        }
+        for (size_t index = 1U; index < width; ++index) {
+            if ((unsigned char)text[bytes + index] < 0x80U ||
+                (unsigned char)text[bytes + index] > 0xBFU) {
+                width = 1U;
+                break;
+            }
+        }
+        bytes += width;
+        ++codepoints;
+    }
+    return bytes;
+}
+
+static bool missing_username_reply(DynamicString *reply) {
+    return dynamic_string_appendf(
+        reply,
+        "Imposta uno username Telegram per giocare a %s.",
+        TELEGRAM_CONQUISTER_PLACE
+    );
+}
+
+static bool append_random_quote(const TelegramCommandContext *context, DynamicString *reply) {
+    char *quote = NULL;
+    // The claim is already saved: a missing or unreadable quote must not turn the reply into an error.
+    if (!quote_random(context->storage, &quote) || quote == NULL) {
+        return true;
+    }
+    bool ok = dynamic_string_appendf(reply, "\n\n%s", quote);
+    free(quote);
+    return ok;
+}
+
+static bool handle_claim(
+    const TelegramCommandContext *context,
+    const char *argument,
+    DynamicString *reply
+) {
+    (void)argument;
+    if (context->username == NULL || *context->username == '\0') {
+        return missing_username_reply(reply);
+    }
+    ClaimResult result;
+    if (!conquister_claim(
+            context->storage,
+            context->user_id,
+            context->username,
+            (int64_t)time(NULL),
+            &result
+        )) {
+        return false;
+    }
+    if (result.status == CLAIM_ALREADY_HELD) {
+        return dynamic_string_appendf(
+            reply,
+            "%s sei già in %s!",
+            context->username,
+            TELEGRAM_CONQUISTER_PLACE
+        );
+    }
+    if (result.previous_username[0] != '\0' &&
+        (!dynamic_string_appendf(
+            reply,
+            "%s hai cacciato @%s da %s.\n",
+            context->username,
+            result.previous_username,
+            TELEGRAM_CONQUISTER_PLACE
+        ) ||
+         !dynamic_string_appendf(
+             reply,
+             "%s hai guadagnato %lld palle!\n",
+             result.previous_username,
+             (long long)result.earned
+         ))) {
+        return false;
+    }
+    return dynamic_string_appendf(
+               reply,
+               "%s sei entrato in %s!",
+               context->username,
+               TELEGRAM_CONQUISTER_PLACE
+           ) &&
+           append_random_quote(context, reply);
+}
+
+static bool handle_leaderboard(
+    const TelegramCommandContext *context,
+    const char *argument,
+    DynamicString *reply
+) {
+    (void)argument;
+    Leaderboard leaderboard;
+    if (!conquister_leaderboard(context->storage, &leaderboard)) {
+        return false;
+    }
+    bool ok = true;
+    if (leaderboard.count == 0U) {
+        ok = dynamic_string_appendf(
+            reply,
+            "Classifica vuota. Scrivi \"%s\" per entrare in %s!",
+            TELEGRAM_CONQUISTER_TRIGGER,
+            TELEGRAM_CONQUISTER_PLACE
+        );
+    } else {
+        ok = dynamic_string_appendf(reply, "🏆 Classifica %s:\n", TELEGRAM_CONQUISTER_PLACE);
+        for (size_t index = 0U; ok && index < leaderboard.count; ++index) {
+            LeaderboardEntry *entry = &leaderboard.entries[index];
+            ok = dynamic_string_appendf(
+                reply,
+                "\n%zu. %s — %lld palle",
+                index + 1U,
+                entry->username,
+                (long long)entry->score
+            );
+            if (ok && entry->quotes_added > 0) {
+                ok = dynamic_string_appendf(
+                    reply,
+                    " — 📜 %lld quote",
+                    (long long)entry->quotes_added
+                );
+            }
+        }
+        if (ok && leaderboard.current_username != NULL) {
+            ok = dynamic_string_appendf(
+                reply,
+                "\n\n🪐 In %s ora: %s",
+                TELEGRAM_CONQUISTER_PLACE,
+                leaderboard.current_username
+            );
+        }
+    }
+    leaderboard_free(&leaderboard);
+    return ok;
+}
+
+static bool handle_add_quote(
+    const TelegramCommandContext *context,
+    const char *argument,
+    DynamicString *reply
+) {
+    if (context->username == NULL || *context->username == '\0') {
+        return missing_username_reply(reply);
+    }
+    if (*argument == '\0') {
+        return dynamic_string_appendf(
+            reply,
+            "Uso: /addquote <testo>. Costa %d palle.",
+            context->config->quote_cost
+        );
+    }
+    QuoteAddResult result;
+    if (!quote_add(
+            context->storage,
+            context->username,
+            argument,
+            context->config->quote_cost,
+            &result
+        )) {
+        return false;
+    }
+    if (result.status == QUOTE_INSUFFICIENT_SCORE) {
+        return dynamic_string_appendf(
+            reply,
+            "%s ti servono %d palle per aggiungere un quote (ne hai %lld).",
+            context->username,
+            context->config->quote_cost,
+            (long long)result.available_score
+        );
+    }
+    if (result.status == QUOTE_DUPLICATE) {
+        return dynamic_string_append(reply, "Quote già presente o non salvabile: nessun addebito.");
+    }
+    return dynamic_string_appendf(
+        reply,
+        "%s hai speso %d palle e aggiunto il quote alla collezione!\n\n%s",
+        context->username,
+        context->config->quote_cost,
+        argument
+    );
+}
+
+static bool handle_quotes(
+    const TelegramCommandContext *context,
+    const char *argument,
+    DynamicString *reply
+) {
+    char *end = NULL;
+    long requested = strtol(argument, &end, 10);
+    int page = end != argument && *end == '\0' && requested > 0 && requested <= INT32_MAX
+        ? (int)requested
+        : 1;
+    QuotePage quotes;
+    if (!quote_page_load(context->storage, page, &quotes)) {
+        return false;
+    }
+    bool ok = true;
+    if (quotes.total == 0U) {
+        ok = dynamic_string_append(reply, "Nessun quote in collezione.");
+    } else {
+        size_t last_number = quotes.first_number + quotes.count - 1U;
+        ok = dynamic_string_appendf(
+            reply,
+            "📜 Quotes %zu-%zu di %zu (pagina %zu/%zu):",
+            quotes.first_number,
+            last_number,
+            quotes.total,
+            quotes.page,
+            quotes.pages
+        );
+        for (size_t index = 0U; ok && index < quotes.count; ++index) {
+            const char *quote = quotes.items[index];
+            size_t first_eighty = utf8_prefix_bytes(quote, 80U);
+            bool truncated = quote[first_eighty] != '\0';
+            size_t bytes = truncated ? utf8_prefix_bytes(quote, 77U) : strlen(quote);
+            ok = dynamic_string_appendf(reply, "\n%zu. ", quotes.first_number + index) &&
+                 dynamic_string_append_n(reply, quote, bytes) &&
+                 (!truncated || dynamic_string_append(reply, "…"));
+        }
+        if (ok && quotes.pages > 1U) {
+            ok = dynamic_string_append(reply, "\n\nUsa /quotes <pagina> per le altre pagine.");
+        }
+    }
+    quote_page_free(&quotes);
+    return ok;
+}
+
+static bool handle_delete_quote(
+    const TelegramCommandContext *context,
+    const char *argument,
+    DynamicString *reply
+) {
+    if (context->user_id != context->config->owner_id) {
+        return dynamic_string_append(reply, "Solo il proprietario può eliminare i quote.");
+    }
+    if (*argument == '\0') {
+        return dynamic_string_append(reply, "Uso: /delquote <numero da /quotes | testo esatto>.");
+    }
+    char *removed = NULL;
+    if (!quote_delete(context->storage, argument, &removed)) {
+        return false;
+    }
+    if (removed == NULL) {
+        return dynamic_string_append(reply, "Quote non trovato.");
+    }
+    bool ok = dynamic_string_appendf(reply, "Quote eliminato: %s", removed);
+    free(removed);
+    return ok;
+}
+
+static const TelegramCommandDefinition TELEGRAM_COMMANDS[] = {
+    {"/classifica", handle_leaderboard},
+    {"/addquote", handle_add_quote},
+    {"/quotes", handle_quotes},
+    {"/delquote", handle_delete_quote},
+};
+
+TelegramCommandResult telegram_command_dispatch(
+    const TelegramCommandContext *context,
+    const char *text,
+    DynamicString *reply
+) {
+    if (context == NULL || context->storage == NULL || context->config == NULL || text == NULL ||
+        reply == NULL) {
+        return TELEGRAM_COMMAND_ERROR;
+    }
+    char *message = trim_copy(text);
+    if (message == NULL) {
+        return TELEGRAM_COMMAND_ERROR;
+    }
+    dynamic_string_reset(reply);
+    if (*message == '\0') {
+        free(message);
+        return TELEGRAM_COMMAND_IGNORED;
+    }
+
+    TelegramCommandHandler handler = NULL;
+    const char *argument = "";
+    if (strcmp(message, TELEGRAM_CONQUISTER_TRIGGER) == 0) {
+        handler = handle_claim;
+    } else {
+        char command[64];
+        char *parsed_argument = NULL;
+        command_and_argument(message, command, &parsed_argument);
+        argument = parsed_argument;
+        size_t command_count = sizeof(TELEGRAM_COMMANDS) / sizeof(TELEGRAM_COMMANDS[0]);
+        for (size_t index = 0U; index < command_count; ++index) {
+            if (strcmp(command, TELEGRAM_COMMANDS[index].name) == 0) {
+                handler = TELEGRAM_COMMANDS[index].handler;
+                break;
+            }
+        }
+    }
+    if (handler == NULL) {
+        free(message);
+        return TELEGRAM_COMMAND_IGNORED;
+    }
+
+    bool ok = handler(context, argument, reply);
+    free(message);
+    if (!ok) {
+        return TELEGRAM_COMMAND_ERROR;
+    }
+    return TELEGRAM_COMMAND_REPLIED;
+}

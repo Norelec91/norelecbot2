@@ -1,0 +1,16 @@
+.env
+.claude/
+.idea/
+.vscode/
+.DS_Store
+bin/
+
+# Local deployment notes and target host.
+DEPLOY.md
+deploy/host
+
+# Runtime JSON state and atomic-write temporary files.
+conquister.json
+conquister.json.tmp
+quotes.json
+quotes.json.tmp

@@ -1,0 +1,9 @@
+{
+  "name": "norelecbot",
+  "version-string": "1.0.0",
+  "dependencies": [
+    "curl",
+    "json-c",
+    "libmicrohttpd"
+  ]
+}

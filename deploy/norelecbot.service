@@ -1,0 +1,14 @@
+[Unit]
+Description=NorelecBot Telegram bot and REST API
+
+[Service]
+Type=simple
+WorkingDirectory=%h/norelecbot
+ExecStart=%h/norelecbot/bin/norelecbot
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target
