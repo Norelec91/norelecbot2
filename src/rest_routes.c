@@ -72,6 +72,41 @@ static bool json_user_body(DynamicString *body, const ConquisterUser *user) {
     return ok;
 }
 
+static bool json_leaderboard_body(DynamicString *body, const Leaderboard *leaderboard) {
+    json_object *root = json_object_new_object();
+    json_object *entries = json_object_new_array();
+    if (root == NULL || entries == NULL) {
+        json_object_put(root);
+        json_object_put(entries);
+        return false;
+    }
+    bool ok = add_member(root, "entries", entries);
+    for (size_t index = 0U; ok && index < leaderboard->count; ++index) {
+        const LeaderboardEntry *entry = &leaderboard->entries[index];
+        json_object *item = json_object_new_object();
+        if (item == NULL || json_object_array_add(entries, item) != 0) {
+            json_object_put(item);
+            ok = false;
+            break;
+        }
+        ok = add_member(item, "rank", json_object_new_int64((int64_t)index + 1)) &&
+             add_member(item, "username", json_object_new_string(entry->username)) &&
+             add_member(item, "score", json_object_new_int64(entry->score)) &&
+             add_member(item, "quotes_added", json_object_new_int64(entry->quotes_added));
+    }
+    if (ok && leaderboard->current_username != NULL) {
+        json_object *current = json_object_new_object();
+        ok = add_member(root, "current", current) &&
+             add_member(current, "username", json_object_new_string(leaderboard->current_username)) &&
+             add_member(current, "since", json_object_new_int64(leaderboard->current_since));
+    } else if (ok) {
+        json_object_object_add(root, "current", NULL);
+    }
+    ok = ok && append_json(body, root);
+    json_object_put(root);
+    return ok;
+}
+
 static bool handle_health(
     const RestRouteContext *context,
     const char *argument,
@@ -101,6 +136,22 @@ static bool handle_quote(
     return ok;
 }
 
+static bool handle_leaderboard(
+    const RestRouteContext *context,
+    const char *argument,
+    RestRouteResponse *response
+) {
+    (void)argument;
+    Leaderboard leaderboard;
+    if (!conquister_leaderboard(context->storage, 0U, &leaderboard)) {
+        return false;
+    }
+    response->status_code = 200;
+    bool ok = json_leaderboard_body(response->body, &leaderboard);
+    leaderboard_free(&leaderboard);
+    return ok;
+}
+
 static bool handle_user(
     const RestRouteContext *context,
     const char *argument,
@@ -124,6 +175,7 @@ static bool handle_user(
 static const RestRouteDefinition REST_ROUTES[] = {
     {"GET", "/health", handle_health},
     {"GET", "/quote", handle_quote},
+    {"GET", "/leaderboard", handle_leaderboard},
     {"GET", "/user/", handle_user},
 };
 

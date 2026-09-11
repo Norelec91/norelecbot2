@@ -53,11 +53,12 @@ int main(void) {
     assert(claim.earned == 1000);
 
     Leaderboard leaderboard;
-    assert(conquister_leaderboard(&storage, &leaderboard));
+    assert(conquister_leaderboard(&storage, 10U, &leaderboard));
     assert(leaderboard.count == 1U);
     assert(strcmp(leaderboard.entries[0].username, "alice") == 0);
     assert(leaderboard.entries[0].score == 1000);
     assert(strcmp(leaderboard.current_username, "bob") == 0);
+    assert(leaderboard.current_since == 1100);
     leaderboard_free(&leaderboard);
 
     ConquisterUser user;
@@ -99,9 +100,16 @@ int main(void) {
     storage_close(&storage);
     assert_json_formats(conquister_path, quotes_path);
     assert(storage_open(&storage, conquister_path, quotes_path));
-    assert(conquister_leaderboard(&storage, &leaderboard));
+    assert(conquister_leaderboard(&storage, 10U, &leaderboard));
     assert(leaderboard.count > 0U);
     assert(strcmp(leaderboard.entries[0].username, "alice") == 0);
+    leaderboard_free(&leaderboard);
+    assert(conquister_leaderboard(&storage, 1U, &leaderboard));
+    assert(leaderboard.count == 1U);
+    leaderboard_free(&leaderboard);
+    assert(conquister_leaderboard(&storage, 0U, &leaderboard));
+    assert(leaderboard.count == 2U);
+    assert(strcmp(leaderboard.entries[1].username, "bob") == 0);
     leaderboard_free(&leaderboard);
     storage_close(&storage);
 

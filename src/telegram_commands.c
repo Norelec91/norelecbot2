@@ -9,6 +9,8 @@
 #include <string.h>
 #include <time.h>
 
+#define TELEGRAM_LEADERBOARD_SIZE 10U
+
 typedef bool (*TelegramCommandHandler)(
     const TelegramCommandContext *context,
     const char *argument,
@@ -162,7 +164,7 @@ static bool handle_leaderboard(
 ) {
     (void)argument;
     Leaderboard leaderboard;
-    if (!conquister_leaderboard(context->storage, &leaderboard)) {
+    if (!conquister_leaderboard(context->storage, TELEGRAM_LEADERBOARD_SIZE, &leaderboard)) {
         return false;
     }
     bool ok = true;

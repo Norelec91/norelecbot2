@@ -49,9 +49,25 @@ int main(void) {
     assert(response.status_code == 200);
     assert(strcmp(body.data, "{\"quote\":\"quote di prova\"}\n") == 0);
 
+    assert(rest_route_dispatch(&context, "GET", "/leaderboard", &response));
+    assert(response.status_code == 200);
+    assert(strcmp(body.data, "{\"entries\":[],\"current\":null}\n") == 0);
+
     ClaimResult claim;
     assert(conquister_claim(&storage, 7, "Norelec", 100, &claim));
+    assert(rest_route_dispatch(&context, "GET", "/leaderboard", &response));
+    assert(strcmp(
+               body.data,
+               "{\"entries\":[],\"current\":{\"username\":\"Norelec\",\"since\":100}}\n"
+           ) == 0);
     assert(conquister_claim(&storage, 8, "bob", 150, &claim));
+    assert(rest_route_dispatch(&context, "GET", "/leaderboard", &response));
+    assert(response.status_code == 200);
+    assert(strcmp(
+               body.data,
+               "{\"entries\":[{\"rank\":1,\"username\":\"Norelec\",\"score\":50,\"quotes_added\":0}],"
+               "\"current\":{\"username\":\"bob\",\"since\":150}}\n"
+           ) == 0);
     assert(rest_route_dispatch(&context, "GET", "/user/norelec", &response));
     assert(response.status_code == 200);
     assert(strcmp(

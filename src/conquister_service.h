@@ -30,6 +30,7 @@ typedef struct {
     LeaderboardEntry *entries;
     size_t count;
     char *current_username;
+    int64_t current_since;
 } Leaderboard;
 
 typedef struct {
@@ -49,7 +50,8 @@ bool conquister_claim(
     int64_t now,
     ClaimResult *result
 );
-bool conquister_leaderboard(Storage *storage, Leaderboard *leaderboard);
+/* limit 0 returns every entry. */
+bool conquister_leaderboard(Storage *storage, size_t limit, Leaderboard *leaderboard);
 void leaderboard_free(Leaderboard *leaderboard);
 /* Case-insensitive lookup; rank is 0 when the user has no score yet. */
 bool conquister_user(Storage *storage, const char *username, ConquisterUser *user);

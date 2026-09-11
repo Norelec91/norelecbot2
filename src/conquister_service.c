@@ -119,7 +119,7 @@ void leaderboard_free(Leaderboard *leaderboard) {
     *leaderboard = (Leaderboard){0};
 }
 
-bool conquister_leaderboard(Storage *storage, Leaderboard *leaderboard) {
+bool conquister_leaderboard(Storage *storage, size_t limit, Leaderboard *leaderboard) {
     *leaderboard = (Leaderboard){0};
     if (!json_storage_lock(storage)) {
         return false;
@@ -132,44 +132,43 @@ bool conquister_leaderboard(Storage *storage, Leaderboard *leaderboard) {
     }
     json_object *scores = json_member(state, "scores");
     size_t count = (size_t)json_object_object_length(scores);
-    if (count == 0U) {
-        ok = true;
-        goto cleanup;
-    }
     if (count > SIZE_MAX / sizeof(ScoreEntry)) {
         goto cleanup;
     }
-    sorted = malloc(count * sizeof(*sorted));
-    if (sorted == NULL) {
-        goto cleanup;
+    ok = true;
+    if (count > 0U) {
+        size_t shown = limit == 0U || count < limit ? count : limit;
+        sorted = malloc(count * sizeof(*sorted));
+        leaderboard->entries = calloc(shown, sizeof(*leaderboard->entries));
+        leaderboard->count = shown;
+        ok = sorted != NULL && leaderboard->entries != NULL;
     }
-    size_t index = 0U;
-    json_object_object_foreach(scores, key, value) {
-        sorted[index] = (ScoreEntry){.username = key, .score = json_object_get_int64(value)};
-        ++index;
-    }
-    qsort(sorted, count, sizeof(*sorted), compare_scores);
+    if (ok && count > 0U) {
+        size_t index = 0U;
+        json_object_object_foreach(scores, key, value) {
+            sorted[index] = (ScoreEntry){.username = key, .score = json_object_get_int64(value)};
+            ++index;
+        }
+        qsort(sorted, count, sizeof(*sorted), compare_scores);
 
-    size_t shown = count < 10U ? count : 10U;
-    leaderboard->entries = calloc(shown, sizeof(*leaderboard->entries));
-    leaderboard->count = shown;
-    ok = leaderboard->entries != NULL;
-    json_object *quotes_added = json_member(state, "quotes_added");
-    for (index = 0U; ok && index < shown; ++index) {
-        leaderboard->entries[index].username = string_duplicate(sorted[index].username);
-        leaderboard->entries[index].score = sorted[index].score;
-        leaderboard->entries[index].quotes_added = json_integer(
-            quotes_added,
-            sorted[index].username,
-            0
-        );
-        ok = leaderboard->entries[index].username != NULL;
+        json_object *quotes_added = json_member(state, "quotes_added");
+        for (index = 0U; ok && index < leaderboard->count; ++index) {
+            leaderboard->entries[index].username = string_duplicate(sorted[index].username);
+            leaderboard->entries[index].score = sorted[index].score;
+            leaderboard->entries[index].quotes_added = json_integer(
+                quotes_added,
+                sorted[index].username,
+                0
+            );
+            ok = leaderboard->entries[index].username != NULL;
+        }
     }
     json_object *current = json_member(state, "current");
     json_object *holder_value = json_member(current, "username");
     const char *holder = holder_value != NULL ? json_object_get_string(holder_value) : NULL;
     if (ok && holder != NULL && *holder != '\0') {
         leaderboard->current_username = string_duplicate(holder);
+        leaderboard->current_since = json_integer(current, "since", 0);
         ok = leaderboard->current_username != NULL;
     }
 
