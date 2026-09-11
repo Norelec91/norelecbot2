@@ -6,17 +6,63 @@
 #include <jansson.h>
 #include <stdint.h>
 
-/* Services delimit transactions with lock/unlock; load, save and RNG require that lock. */
-[[nodiscard]] bool json_storage_lock(Storage *storage);
-void json_storage_unlock(Storage *storage);
+typedef enum {
+    STORAGE_STATE = 1,
+    STORAGE_QUOTES = 2,
+} StorageDocument;
 
-[[nodiscard]] json_t *json_storage_load_conquister(Storage *storage);
-[[nodiscard]] json_t *json_storage_load_quotes(Storage *storage);
-[[nodiscard]] bool json_storage_save_conquister(const Storage *storage, json_t *state);
-[[nodiscard]] bool json_storage_save_quotes(const Storage *storage, json_t *quotes);
-[[nodiscard]] uint64_t json_storage_next_quote_random(Storage *storage);
+/* Holds the storage lock from a successful storage_begin until storage_end. */
+typedef struct {
+    Storage *storage;
+    json_t *state;
+    json_t *quotes;
+    json_t *updated_quotes;
+    bool state_changed;
+} StorageTransaction;
 
-[[nodiscard]] int64_t json_integer_member(json_t *object, const char *name, int64_t fallback);
-[[nodiscard]] bool json_set_integer(json_t *object, const char *name, int64_t value);
+typedef struct {
+    const char *username;
+    int64_t score;
+} StateScore;
+
+/* Loads every requested document; on failure the lock is already released. */
+[[nodiscard]] bool storage_begin(Storage *storage, int documents, StorageTransaction *transaction);
+/* Saves changed quotes, then the changed state; restores the quotes if the state cannot be saved. */
+[[nodiscard]] bool storage_commit(StorageTransaction *transaction);
+void storage_end(StorageTransaction *transaction);
+
+[[nodiscard]] const char *state_holder(const StorageTransaction *transaction);
+[[nodiscard]] int64_t state_holder_since(const StorageTransaction *transaction, int64_t fallback);
+[[nodiscard]] bool state_set_holder(
+    StorageTransaction *transaction,
+    int64_t user_id,
+    const char *username,
+    int64_t now
+);
+[[nodiscard]] int64_t state_score(const StorageTransaction *transaction, const char *username);
+[[nodiscard]] bool state_set_score(StorageTransaction *transaction, const char *username, int64_t score);
+[[nodiscard]] int64_t state_quotes_added(const StorageTransaction *transaction, const char *username);
+[[nodiscard]] bool state_set_quotes_added(
+    StorageTransaction *transaction,
+    const char *username,
+    int64_t count
+);
+[[nodiscard]] const char *state_find_score(const StorageTransaction *transaction, const char *username);
+[[nodiscard]] const char *state_find_quotes_added(
+    const StorageTransaction *transaction,
+    const char *username
+);
+[[nodiscard]] size_t state_score_count(const StorageTransaction *transaction);
+/* Walks the scores in file order: start with *cursor == nullptr. */
+[[nodiscard]] bool state_next_score(
+    const StorageTransaction *transaction,
+    void **cursor,
+    StateScore *entry
+);
+
+[[nodiscard]] size_t quotes_count(const StorageTransaction *transaction);
+[[nodiscard]] const char *quotes_at(const StorageTransaction *transaction, size_t index);
+[[nodiscard]] bool quotes_append(StorageTransaction *transaction, const char *quote);
+[[nodiscard]] bool quotes_remove(StorageTransaction *transaction, size_t index);
 
 #endif

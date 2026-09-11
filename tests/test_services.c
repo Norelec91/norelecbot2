@@ -104,7 +104,21 @@ int main(void) {
     assert(strcmp(leaderboard.entries[1].username, "bob") == 0);
     storage_close(&storage);
     arena_free(&arena);
+    test_paths_remove(conquister_path, quotes_path);
 
+    // A quote saved before a failed state save must be rolled back.
+    test_paths("rollback-test", conquister_path, quotes_path);
+    FILE *file = fopen(quotes_path, "wb");
+    assert(file != nullptr);
+    int written = fputs("[\"originale\"]", file);
+    int closed = fclose(file);
+    assert(written >= 0 && closed == 0);
+    assert(storage_open(&storage, "rollback-missing-directory/conquister.json", quotes_path));
+    assert(!quote_add(&storage, "alice", "nuova", 0, &addition));
+    assert(quote_page_load(&storage, &arena, 1, &page));
+    assert(page.total == 1U && strcmp(page.items[0], "originale") == 0);
+    storage_close(&storage);
+    arena_free(&arena);
     test_paths_remove(conquister_path, quotes_path);
     puts("service tests: ok");
     return 0;

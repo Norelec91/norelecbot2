@@ -1,7 +1,6 @@
 #include "quote_service.h"
 
 #include "json_storage_internal.h"
-#include "logging.h"
 #include "text.h"
 
 #include <stdckdint.h>
@@ -10,11 +9,10 @@
 
 static constexpr size_t QUOTES_PAGE_SIZE = 30;
 
-static bool quote_exists(json_t *quotes, const char *quote) {
-    size_t index;
-    json_t *entry;
-    json_array_foreach(quotes, index, entry) {
-        const char *existing = json_string_value(entry);
+static bool quote_exists(const StorageTransaction *transaction, const char *quote) {
+    size_t count = quotes_count(transaction);
+    for (size_t index = 0U; index < count; ++index) {
+        const char *existing = quotes_at(transaction, index);
         if (existing != nullptr && strcmp(existing, quote) == 0) {
             return true;
         }
@@ -22,17 +20,14 @@ static bool quote_exists(json_t *quotes, const char *quote) {
     return false;
 }
 
-static json_t *copy_quotes(json_t *quotes, size_t skipped, const char *addition) {
-    json_t *updated = json_copy(quotes);
-    if (updated == nullptr) {
-        return nullptr;
-    }
-    if ((skipped != SIZE_MAX && json_array_remove(updated, skipped) != 0) ||
-        (addition != nullptr && json_array_append_new(updated, json_string(addition)) != 0)) {
-        json_decref(updated);
-        return nullptr;
-    }
-    return updated;
+/* Must be called while the storage lock is held. */
+static uint64_t next_random(Storage *storage) {
+    uint64_t state = storage->quote_random_state;
+    state ^= state >> 12U;
+    state ^= state << 25U;
+    state ^= state >> 27U;
+    storage->quote_random_state = state;
+    return state * UINT64_C(2685821657736338717);
 }
 
 bool quote_add(
@@ -43,71 +38,42 @@ bool quote_add(
     QuoteAddResult *result
 ) {
     *result = (QuoteAddResult){};
-    if (!json_storage_lock(storage)) {
+    StorageTransaction transaction;
+    if (!storage_begin(storage, STORAGE_STATE | STORAGE_QUOTES, &transaction)) {
         return false;
     }
-    json_t *state = json_storage_load_conquister(storage);
-    json_t *quotes = json_storage_load_quotes(storage);
-    json_t *updated_quotes = nullptr;
-    bool ok = false;
-    if (state == nullptr || quotes == nullptr) {
-        goto cleanup;
-    }
-
-    json_t *scores = json_object_get(state, "scores");
-    int64_t score = json_integer_member(scores, username, 0);
+    bool ok = true;
+    int64_t score = state_score(&transaction, username);
     result->available_score = score;
     if (score < cost) {
         result->status = QUOTE_INSUFFICIENT_SCORE;
-        ok = true;
-        goto cleanup;
-    }
-    if (quote_exists(quotes, quote)) {
+    } else if (quote_exists(&transaction, quote)) {
         result->status = QUOTE_DUPLICATE;
-        ok = true;
-        goto cleanup;
-    }
-
-    updated_quotes = copy_quotes(quotes, SIZE_MAX, quote);
-    json_t *quotes_added = json_object_get(state, "quotes_added");
-    int64_t added = 0;
-    if (updated_quotes == nullptr ||
-        ckd_add(&added, json_integer_member(quotes_added, username, 0), 1) ||
-        !json_set_integer(scores, username, score - cost) ||
-        !json_set_integer(quotes_added, username, added)) {
-        goto cleanup;
-    }
-    if (!json_storage_save_quotes(storage, updated_quotes)) {
-        goto cleanup;
-    }
-    if (!json_storage_save_conquister(storage, state)) {
-        if (!json_storage_save_quotes(storage, quotes)) {
-            log_error("Could not roll back quote collection after Conquister save failure");
+    } else {
+        int64_t added = 0;
+        ok = quotes_append(&transaction, quote) &&
+             !ckd_add(&added, state_quotes_added(&transaction, username), 1) &&
+             state_set_score(&transaction, username, score - cost) &&
+             state_set_quotes_added(&transaction, username, added) &&
+             storage_commit(&transaction);
+        if (ok) {
+            result->status = QUOTE_ADDED;
+            result->available_score = score - cost;
         }
-        goto cleanup;
     }
-
-    result->status = QUOTE_ADDED;
-    result->available_score = score - cost;
-    ok = true;
-
-cleanup:
-    json_decref(updated_quotes);
-    json_decref(state);
-    json_decref(quotes);
-    json_storage_unlock(storage);
+    storage_end(&transaction);
     return ok;
 }
 
 bool quote_page_load(Storage *storage, Arena *arena, int requested_page, QuotePage *page) {
     *page = (QuotePage){};
-    if (!json_storage_lock(storage)) {
+    StorageTransaction transaction;
+    if (!storage_begin(storage, STORAGE_QUOTES, &transaction)) {
         return false;
     }
-    json_t *quotes = json_storage_load_quotes(storage);
-    bool ok = quotes != nullptr;
-    page->total = json_array_size(quotes);
-    if (ok && page->total > 0U) {
+    bool ok = true;
+    page->total = quotes_count(&transaction);
+    if (page->total > 0U) {
         page->pages = ((page->total - 1U) / QUOTES_PAGE_SIZE) + 1U;
         page->page = requested_page > 0 ? (size_t)requested_page : 1U;
         if (page->page > page->pages) {
@@ -120,68 +86,57 @@ bool quote_page_load(Storage *storage, Arena *arena, int requested_page, QuotePa
         page->items = arena_alloc_array(arena, page->count, sizeof(*page->items));
         ok = page->items != nullptr;
         for (size_t index = 0U; ok && index < page->count; ++index) {
-            page->items[index] = arena_strdup(
-                arena,
-                json_string_value(json_array_get(quotes, offset + index))
-            );
+            page->items[index] = arena_strdup(arena, quotes_at(&transaction, offset + index));
             ok = page->items[index] != nullptr;
         }
     }
-    json_decref(quotes);
-    json_storage_unlock(storage);
+    storage_end(&transaction);
     return ok;
 }
 
 bool quote_random(Storage *storage, Arena *arena, char **quote) {
     *quote = nullptr;
-    if (!json_storage_lock(storage)) {
+    StorageTransaction transaction;
+    if (!storage_begin(storage, STORAGE_QUOTES, &transaction)) {
         return false;
     }
-    json_t *quotes = json_storage_load_quotes(storage);
-    bool ok = quotes != nullptr;
-    size_t count = json_array_size(quotes);
-    if (ok && count > 0U) {
-        size_t index = (size_t)(json_storage_next_quote_random(storage) % count);
-        *quote = arena_strdup(arena, json_string_value(json_array_get(quotes, index)));
+    bool ok = true;
+    size_t count = quotes_count(&transaction);
+    if (count > 0U) {
+        size_t index = (size_t)(next_random(storage) % count);
+        *quote = arena_strdup(arena, quotes_at(&transaction, index));
         ok = *quote != nullptr;
     }
-    json_decref(quotes);
-    json_storage_unlock(storage);
+    storage_end(&transaction);
     return ok;
 }
 
 bool quote_delete(Storage *storage, Arena *arena, const char *selector, char **removed_quote) {
     *removed_quote = nullptr;
-    if (!json_storage_lock(storage)) {
+    StorageTransaction transaction;
+    if (!storage_begin(storage, STORAGE_QUOTES, &transaction)) {
         return false;
     }
-    json_t *quotes = json_storage_load_quotes(storage);
-    json_t *updated = nullptr;
-    bool ok = quotes != nullptr;
-    size_t count = json_array_size(quotes);
+    size_t count = quotes_count(&transaction);
     size_t selected = SIZE_MAX;
     int64_t position = 0;
     if (text_parse_int64(selector, &position) && position > 0 && (uint64_t)position <= count) {
         selected = (size_t)(position - 1);
     } else {
-        size_t index;
-        json_t *entry;
-        json_array_foreach(quotes, index, entry) {
-            const char *quote = json_string_value(entry);
+        for (size_t index = 0U; index < count; ++index) {
+            const char *quote = quotes_at(&transaction, index);
             if (quote != nullptr && strcmp(quote, selector) == 0) {
                 selected = index;
                 break;
             }
         }
     }
-    if (ok && selected != SIZE_MAX) {
-        *removed_quote = arena_strdup(arena, json_string_value(json_array_get(quotes, selected)));
-        updated = copy_quotes(quotes, selected, nullptr);
-        ok = *removed_quote != nullptr && updated != nullptr &&
-             json_storage_save_quotes(storage, updated);
+    bool ok = true;
+    if (selected != SIZE_MAX) {
+        *removed_quote = arena_strdup(arena, quotes_at(&transaction, selected));
+        ok = *removed_quote != nullptr && quotes_remove(&transaction, selected) &&
+             storage_commit(&transaction);
     }
-    json_decref(updated);
-    json_decref(quotes);
-    json_storage_unlock(storage);
+    storage_end(&transaction);
     return ok;
 }
