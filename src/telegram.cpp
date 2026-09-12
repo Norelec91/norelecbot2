@@ -18,17 +18,6 @@ namespace {
 
 constexpr int poll_timeout_seconds = 6;
 
-/* A host whose IPv6 route to Telegram is broken loses requests, because only one family is tried. */
-int address_family(const AppConfig &config) {
-    if (config.telegram_ip_version == 1) {
-        return AF_INET;
-    }
-    if (config.telegram_ip_version == 2) {
-        return AF_INET6;
-    }
-    return AF_UNSPEC;
-}
-
 std::optional<Json> telegram_api(
     const AppConfig &config,
     std::string_view method,
@@ -36,7 +25,6 @@ std::optional<Json> telegram_api(
     int timeout_seconds
 ) {
     httplib::Client client{"https://api.telegram.org"};
-    client.set_address_family(address_family(config));
     const std::chrono::seconds timeout{timeout_seconds};
     client.set_connection_timeout(timeout);
     client.set_read_timeout(timeout);

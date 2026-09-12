@@ -46,17 +46,6 @@ int main() {
     write_file(path, "NORELECBOT_CONQUISTER_CHAT_ID=gruppo\n");
     assert(!load_config(path));
 
-    write_file(path, "NORELECBOT_TELEGRAM_IP_VERSION=2\n");
-    config = load_config(path);
-    assert(config && config->telegram_ip_version == 2);
-    write_file(path, "NORELECBOT_TELEGRAM_IP_VERSION=\n");
-    config = load_config(path);
-    assert(config && config->telegram_ip_version == 0);
-    write_file(path, "NORELECBOT_TELEGRAM_IP_VERSION=3\n");
-    assert(!load_config(path));
-    write_file(path, "NORELECBOT_TELEGRAM_IP_VERSION=ipv4\n");
-    assert(!load_config(path));
-
     write_file(path, "NORELECBOT_QUOTE_COST=-1\n");
     assert(!load_config(path));
     write_file(path, "NORELECBOT_QUOTE_COST=tante\n");
