@@ -121,7 +121,7 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
             result.earned
         );
     }
-    reply += std::format("{} sei in {}!", username, conquister_place);
+    reply += std::format("🪐 {} sei in {}!", username, conquister_place);
     if (const std::optional<std::string> quote = optional_random_quote(context.storage)) {
         reply += std::format("\n\n{}", *quote);
     }
@@ -203,7 +203,7 @@ std::string handle_buy_balloon(const CommandContext &context, std::string_view) 
         );
     }
     return std::format(
-        "🎈 {} hai comprato un palloncino spendendo {} palle! Difende la tua posizione in {}.",
+        "🎈 {} hai comprato un palloncino spendendo {} palle! Ora puoi difendere la tua posizione in {}.",
         username,
         cost,
         conquister_place

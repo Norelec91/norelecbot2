@@ -46,7 +46,7 @@ TEST_CASE("the bot answers the commands it knows and ignores the rest") {
         CHECK(reply("We @TheConquister37").contains("Imposta uno username"));
         context.username = "alice";
         std::string answer = reply("We @TheConquister37");
-        CHECK(answer.contains("alice sei in "));
+        CHECK(answer.starts_with("🪐 alice sei in @TheConquister37!"));
         CHECK_FALSE(answer.contains('\n'));
 
         answer = reply("  /LEADERBOARD@ExampleBot  ");
@@ -89,7 +89,7 @@ TEST_CASE("the bot answers the commands it knows and ignores the rest") {
         context.user_id = 4;
         context.username = "dave";
         CHECK(reply("/buyballoon") ==
-              "🎈 dave hai comprato un palloncino spendendo 0 palle! Difende la tua posizione in @TheConquister37.");
+              "🎈 dave hai comprato un palloncino spendendo 0 palle! Ora puoi difendere la tua posizione in @TheConquister37.");
         CHECK(reply("/buyballoon") == "dave hai già un palloncino.");
         config.balloon_cost = 1000;
         context.user_id = 5;
