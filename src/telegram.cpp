@@ -119,7 +119,7 @@ void advance_offset(const Json &update, std::int64_t &offset) {
 
 }
 
-void telegram_run(Storage &storage, const AppConfig &config, const volatile std::sig_atomic_t &stop) {
+void telegram_run(Storage &storage, const AppConfig &config, const std::atomic<bool> &stop) {
     log_info("Telegram poller started (trigger={})", conquister_trigger);
     std::int64_t offset = -1;
     const std::optional<Json> backlog = get_updates(config, -1, 0);
@@ -127,7 +127,7 @@ void telegram_run(Storage &storage, const AppConfig &config, const volatile std:
         advance_offset(updates->back(), offset);
     }
 
-    while (stop == 0) {
+    while (!stop.load(std::memory_order_relaxed)) {
         const std::optional<Json> root = get_updates(config, offset, poll_timeout_seconds);
         const Json *updates = updates_array(root);
         if (updates == nullptr) {

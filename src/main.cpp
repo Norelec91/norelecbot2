@@ -4,6 +4,7 @@
 #include "storage.hpp"
 #include "telegram.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <csignal>
 #include <cstdlib>
@@ -13,10 +14,11 @@
 
 namespace {
 
-volatile std::sig_atomic_t stop_requested = 0;
+std::atomic<bool> stop_requested{false};
+static_assert(std::atomic<bool>::is_always_lock_free, "a signal handler may only touch a lock-free flag");
 
 extern "C" void request_stop(int) {
-    stop_requested = 1;
+    stop_requested.store(true, std::memory_order_relaxed);
 }
 
 int run() {
@@ -38,7 +40,7 @@ int run() {
         const norelecbot::HttpServer http{config->api_host, config->api_port, storage};
         if (!config->conquister_enabled) {
             norelecbot::log_info("Conquister disabled");
-            while (stop_requested == 0) {
+            while (!stop_requested.load(std::memory_order_relaxed)) {
                 std::this_thread::sleep_for(std::chrono::seconds{1});
             }
         } else if (config->bot_token.empty()) {

@@ -4,12 +4,12 @@
 #include "config.hpp"
 #include "storage.hpp"
 
-#include <csignal>
+#include <atomic>
 
 namespace norelecbot {
 
 /* Skips the updates received while the bot was offline, then long-polls until stop is set. */
-void telegram_run(Storage &storage, const AppConfig &config, const volatile std::sig_atomic_t &stop);
+void telegram_run(Storage &storage, const AppConfig &config, const std::atomic<bool> &stop);
 
 }
 
