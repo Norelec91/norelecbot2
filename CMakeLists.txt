@@ -13,6 +13,7 @@ endforeach()
 
 find_package(Threads REQUIRED)
 find_package(nlohmann_json 3.11 REQUIRED)
+find_package(spdlog REQUIRED)
 # vcpkg ships a CMake package for cpp-httplib, Debian only a pkg-config file.
 find_package(httplib CONFIG QUIET)
 if(NOT TARGET httplib::httplib)
@@ -59,7 +60,7 @@ set(CORE_SOURCES
 
 add_library(norelecbot_core STATIC ${CORE_SOURCES})
 target_include_directories(norelecbot_core PUBLIC src)
-target_link_libraries(norelecbot_core PUBLIC nlohmann_json::nlohmann_json Threads::Threads)
+target_link_libraries(norelecbot_core PUBLIC nlohmann_json::nlohmann_json spdlog::spdlog Threads::Threads)
 
 add_executable(norelecbot
     src/main.cpp
