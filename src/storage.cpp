@@ -74,7 +74,13 @@ ConquisterState parse_state(const Json &json) {
             .since = integer(current->at("since")),
         };
     }
-    return ConquisterState{std::move(holder), parse_counters(json, "scores"), parse_counters(json, "quotes_added")};
+    return ConquisterState{
+        std::move(holder),
+        parse_counters(json, "scores"),
+        parse_counters(json, "quotes_added"),
+        parse_counters(json, "balloons"),
+        parse_counters(json, "cooldowns"),
+    };
 }
 
 Json state_to_json(const ConquisterState &state) {
@@ -86,7 +92,13 @@ Json state_to_json(const ConquisterState &state) {
             {"since", state.current->since},
         };
     }
-    return Json{{"current", std::move(current)}, {"scores", state.scores}, {"quotes_added", state.quotes_added}};
+    return Json{
+        {"current", std::move(current)},
+        {"scores", state.scores},
+        {"quotes_added", state.quotes_added},
+        {"balloons", state.balloons},
+        {"cooldowns", state.cooldowns},
+    };
 }
 
 std::optional<ConquisterState> load_state(const std::string &path) {

@@ -42,6 +42,14 @@ ParsedCommand parse_command(std::string_view message) {
     return {std::move(name), text::trim(message.substr(length))};
 }
 
+std::string format_wait(std::int64_t seconds) {
+    if (seconds < 60) {
+        return std::format("{} second{}", seconds, seconds == 1 ? "o" : "i");
+    }
+    const std::int64_t minutes = (seconds + 59) / 60;
+    return std::format("{} minut{}", minutes, minutes == 1 ? "o" : "i");
+}
+
 std::string missing_username_reply() {
     return std::format("Imposta uno username Telegram per giocare a {}.", conquister_place);
 }
@@ -63,13 +71,37 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
     const std::int64_t now = std::chrono::duration_cast<std::chrono::seconds>(
                                  std::chrono::system_clock::now().time_since_epoch()
                              ).count();
-    const ClaimResult result = conquister_claim(context.storage, context.user_id, username, now);
+    const ClaimResult result =
+        conquister_claim(context.storage, context.user_id, username, now, context.config.cooldown_seconds);
+    if (result.status == ClaimStatus::cooldown) {
+        return std::format("⏳ {} hai ancora {} di penalità.", username, format_wait(result.penalty_seconds));
+    }
     if (result.status == ClaimStatus::already_held) {
         return std::format("{} sei già in {}!", username, conquister_place);
     }
+    if (result.status == ClaimStatus::defended) {
+        if (result.penalty_seconds > 0) {
+            return std::format(
+                "🎈 {} il palloncino di @{} ha resistito! Hai {} di penalità, poi avrai il {}% di bucarlo.",
+                username,
+                result.previous_username,
+                format_wait(result.penalty_seconds),
+                result.next_chance
+            );
+        }
+        return std::format(
+            "🎈 {} il palloncino di @{} ha resistito! Al prossimo tentativo hai il {}% di bucarlo.",
+            username,
+            result.previous_username,
+            result.next_chance
+        );
+    }
     std::string reply;
+    if (result.balloon_popped) {
+        reply = std::format("💥 {} hai bucato il palloncino di @{}!\n", username, result.previous_username);
+    }
     if (!result.previous_username.empty()) {
-        reply = std::format(
+        reply += std::format(
             "{0} hai cacciato @{1} da {2}.\n{1} hai guadagnato {3} palle!\n",
             username,
             result.previous_username,
@@ -133,10 +165,36 @@ std::string handle_add_quote(const CommandContext &context, std::string_view arg
         return "Citazione già presente o non salvabile: nessun addebito.";
     }
     return std::format(
-        "{} hai speso {} palle e aggiunto la citazione alla collezione!\n\n{}",
+        "{} hai aggiunto la citazione spendendo {} palle!\n\n{}",
         username,
         cost,
         quote
+    );
+}
+
+std::string handle_buy_balloon(const CommandContext &context, std::string_view) {
+    if (context.username.empty()) {
+        return missing_username_reply();
+    }
+    const std::string username{context.username};
+    const int cost = context.config.balloon_cost;
+    const BalloonResult result = balloon_buy(context.storage, username, cost);
+    if (result.status == BalloonStatus::already_owned) {
+        return std::format("{} hai già un palloncino.", username);
+    }
+    if (result.status == BalloonStatus::insufficient_score) {
+        return std::format(
+            "{} ti servono {} palle per un palloncino (ne hai {}).",
+            username,
+            cost,
+            result.available_score
+        );
+    }
+    return std::format(
+        "🎈 {} hai comprato un palloncino spendendo {} palle! Difende la tua posizione in {}.",
+        username,
+        cost,
+        conquister_place
     );
 }
 
@@ -187,6 +245,7 @@ std::string handle_delete_quote(const CommandContext &context, std::string_view 
 constexpr std::array commands{
     CommandDefinition{"/leaderboard", handle_leaderboard},
     CommandDefinition{"/addquote", handle_add_quote},
+    CommandDefinition{"/buyballoon", handle_buy_balloon},
     CommandDefinition{"/quotes", handle_quotes},
     CommandDefinition{"/delquote", handle_delete_quote},
 };

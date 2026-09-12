@@ -31,23 +31,59 @@ const Counters::value_type *find_ignore_case(const Counters &counters, std::stri
     return found != counters.end() ? &*found : nullptr;
 }
 
+/* Four attempts at most: the first has one chance in four, the fourth is certain. */
+constexpr std::size_t balloon_attempts = 4;
+
+Counters::iterator find_entry(Counters &counters, const std::string &username) {
+    return std::ranges::find_if(counters, [&username](const Counters::value_type &entry) {
+        return entry.first == username;
+    });
+}
+
 }
 
 ClaimResult conquister_claim(
     Storage &storage,
     std::int64_t user_id,
     const std::string &username,
-    std::int64_t now
+    std::int64_t now,
+    int cooldown_seconds
 ) {
     return storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         ClaimResult result;
+        if (const auto penalty = find_entry(state.cooldowns, username); penalty != state.cooldowns.end()) {
+            if (penalty->second > now) {
+                result.status = ClaimStatus::cooldown;
+                result.penalty_seconds = penalty->second - now;
+                return result;
+            }
+            state.cooldowns.erase(username);
+        }
         if (state.current && state.current->username == username) {
             result.status = ClaimStatus::already_held;
             return result;
         }
         if (state.current && !state.current->username.empty()) {
-            result.previous_username = state.current->username;
+            const std::string holder = state.current->username;
+            if (const auto balloon = find_entry(state.balloons, holder); balloon != state.balloons.end()) {
+                const std::int64_t attempt = balloon->second + 1;
+                if (static_cast<std::int64_t>(session.random_index(balloon_attempts)) >= attempt) {
+                    balloon->second = attempt;
+                    if (cooldown_seconds > 0) {
+                        state.cooldowns[username] = now + cooldown_seconds;
+                        result.penalty_seconds = cooldown_seconds;
+                    }
+                    result.status = ClaimStatus::defended;
+                    result.previous_username = holder;
+                    result.next_chance =
+                        static_cast<int>((attempt + 1) * 100 / static_cast<std::int64_t>(balloon_attempts));
+                    return result;
+                }
+                state.balloons.erase(holder);
+                result.balloon_popped = true;
+            }
+            result.previous_username = holder;
             result.earned = now > state.current->since ? now - state.current->since : 0;
             std::int64_t &score = state.scores[result.previous_username];
             if (score > 0 && result.earned > std::numeric_limits<std::int64_t>::max() - score) {
@@ -109,6 +145,22 @@ std::optional<ConquisterUser> conquister_user(Storage &storage, std::string_view
             user.quotes_added = added->second;
         }
         return user;
+    });
+}
+
+BalloonResult balloon_buy(Storage &storage, const std::string &username, int cost) {
+    return storage.transaction([&](StorageSession &session) {
+        ConquisterState &state = session.state();
+        const std::int64_t score = counter(state.scores, username);
+        if (find_entry(state.balloons, username) != state.balloons.end()) {
+            return BalloonResult{BalloonStatus::already_owned, score};
+        }
+        if (score < cost) {
+            return BalloonResult{BalloonStatus::insufficient_score, score};
+        }
+        state.scores[username] = score - cost;
+        state.balloons[username] = 0;
+        return BalloonResult{BalloonStatus::bought, score - cost};
     });
 }
 

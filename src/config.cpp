@@ -55,6 +55,12 @@ constexpr std::array settings{
     Setting{"NORELECBOT_QUOTE_COST", [](AppConfig &config, std::string_view value) {
         return set_number(config.quote_cost, value, AppConfig::default_quote_cost, 0);
     }},
+    Setting{"NORELECBOT_BALLOON_COST", [](AppConfig &config, std::string_view value) {
+        return set_number(config.balloon_cost, value, AppConfig::default_balloon_cost, 0);
+    }},
+    Setting{"NORELECBOT_COOLDOWN_SECONDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.cooldown_seconds, value, AppConfig::default_cooldown_seconds, 0);
+    }},
     Setting{"NORELECBOT_CONQUISTER_CHAT_ID", [](AppConfig &config, std::string_view value) {
         return set_number(config.conquister_chat_id, value, std::int64_t{0});
     }},

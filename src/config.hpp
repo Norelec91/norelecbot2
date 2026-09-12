@@ -11,6 +11,8 @@ namespace norelecbot {
 
 struct AppConfig {
     static constexpr int default_quote_cost = 1000;
+    static constexpr int default_balloon_cost = 1000;
+    static constexpr int default_cooldown_seconds = 300;
     static constexpr int default_api_port = 8000;
     static constexpr std::string_view default_api_host = "0.0.0.0";
     static constexpr std::string_view default_conquister_path = "conquister.json";
@@ -20,6 +22,8 @@ struct AppConfig {
     bool conquister_enabled = false;
     std::int64_t owner_id = 0;
     int quote_cost = default_quote_cost;
+    int balloon_cost = default_balloon_cost;
+    int cooldown_seconds = default_cooldown_seconds;
     std::int64_t conquister_chat_id = 0;
     std::string api_host{default_api_host};
     int api_port = default_api_port;

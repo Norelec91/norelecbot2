@@ -39,6 +39,10 @@ struct ConquisterState {
     std::optional<Holder> current;
     Counters scores;
     Counters quotes_added;
+    /* Balloon owners mapped to the attempts their balloon has already survived. */
+    Counters balloons;
+    /* Users mapped to the instant their claim penalty expires. */
+    Counters cooldowns;
 
     bool operator==(const ConquisterState &) const = default;
 };

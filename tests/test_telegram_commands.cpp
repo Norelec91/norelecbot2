@@ -7,6 +7,7 @@
 #include <doctest/doctest.h>
 
 #include <filesystem>
+#include <chrono>
 #include <fstream>
 
 using namespace norelecbot;
@@ -84,6 +85,24 @@ TEST_CASE("the bot answers the commands it knows and ignores the rest") {
         context.user_id = 99;
         CHECK(reply("/delquote 1") == "Citazione eliminata: citazione di prova");
 
+        config.balloon_cost = 0;
+        context.user_id = 4;
+        context.username = "dave";
+        CHECK(reply("/buyballoon") ==
+              "🎈 dave hai comprato un palloncino spendendo 0 palle! Difende la tua posizione in @TheConquister37.");
+        CHECK(reply("/buyballoon") == "dave hai già un palloncino.");
+        config.balloon_cost = 1000;
+        context.user_id = 5;
+        context.username = "erin";
+        CHECK(reply("/buyballoon") == "erin ti servono 1000 palle per un palloncino (ne hai 0).");
+
+        config.quote_cost = 0;
+        context.user_id = 3;
+        context.username = "carol";
+        CHECK(reply("/addquote nuova citazione") ==
+              "carol hai aggiunto la citazione spendendo 0 palle!\n\nnuova citazione");
+        config.quote_cost = 1000;
+
         {
             std::ofstream broken{config.conquister_path, std::ios::binary};
             broken << "{";
@@ -92,4 +111,34 @@ TEST_CASE("the bot answers the commands it knows and ignores the rest") {
     }
 
     CHECK(std::filesystem::exists(config.conquister_path));
+}
+
+TEST_CASE("the balloon replies are the ones the players read") {
+    const TestPaths paths{"balloon-reply-test"};
+    const std::int64_t now = std::chrono::duration_cast<std::chrono::seconds>(
+                                 std::chrono::system_clock::now().time_since_epoch()
+                             ).count();
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":1,"username":"alice","since":0},"scores":{},"quotes_added":{},)"
+             << R"("balloons":{"alice":3},"cooldowns":{"erin":)" << now + 290 << "}}";
+    }
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+
+    Storage storage{config.conquister_path, config.quotes_path};
+    CommandContext context{.storage = storage, .config = config, .user_id = 5, .username = "erin"};
+    const auto reply = [&](std::string_view text) {
+        return telegram_command_dispatch(context, text).value_or("<nessuna risposta>");
+    };
+
+    CHECK(reply("We @TheConquister37") == "⏳ erin hai ancora 5 minuti di penalità.");
+
+    context.user_id = 2;
+    context.username = "bob";
+    const std::string popped = reply("We @TheConquister37");
+    CHECK(popped.starts_with("💥 bob hai bucato il palloncino di @alice!\n"));
+    CHECK(popped.contains("bob hai cacciato @alice da @TheConquister37.\n"));
+    CHECK(popped.contains("bob sei in @TheConquister37!"));
 }

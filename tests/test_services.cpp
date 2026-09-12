@@ -26,10 +26,10 @@ TEST_CASE("claims, leaderboard, users and quotes") {
         CHECK(quote_page_load(storage, 1).total == 0);
         CHECK_FALSE(quote_random(storage));
 
-        ClaimResult claim = conquister_claim(storage, 1, "alice", 100);
+        ClaimResult claim = conquister_claim(storage, 1, "alice", 100, 0);
         CHECK(claim.status == ClaimStatus::taken);
         CHECK(claim.previous_username.empty());
-        claim = conquister_claim(storage, 2, "bob", 1100);
+        claim = conquister_claim(storage, 2, "bob", 1100, 0);
         CHECK(claim.previous_username == "alice");
         CHECK(claim.earned == 1000);
 
@@ -61,8 +61,8 @@ TEST_CASE("claims, leaderboard, users and quotes") {
         CHECK(addition.available_score == 0);
         CHECK(quote_random(storage) == "quote di prova");
 
-        static_cast<void>(conquister_claim(storage, 1, "alice", 1101));
-        static_cast<void>(conquister_claim(storage, 2, "bob", 2101));
+        static_cast<void>(conquister_claim(storage, 1, "alice", 1101, 0));
+        static_cast<void>(conquister_claim(storage, 2, "bob", 2101, 0));
         addition = quote_add(storage, "alice", "quote di prova", 1000);
         CHECK(addition.status == QuoteAddStatus::duplicate);
         const QuotePage page = quote_page_load(storage, 1);
@@ -91,6 +91,99 @@ TEST_CASE("claims, leaderboard, users and quotes") {
         REQUIRE(leaderboard.entries.size() == 2);
         CHECK(leaderboard.entries[1].username == "bob");
     }
+}
+
+TEST_CASE("a balloon defends the holder until it pops") {
+    const TestPaths paths{"balloon-test"};
+    Storage storage{paths.conquister, paths.quotes};
+
+    static_cast<void>(conquister_claim(storage, 1, "alice", 0, 0));
+    static_cast<void>(conquister_claim(storage, 2, "bob", 1000, 0));
+    CHECK(balloon_buy(storage, "alice", 1000).status == BalloonStatus::bought);
+    CHECK(balloon_buy(storage, "alice", 0).status == BalloonStatus::already_owned);
+    CHECK(balloon_buy(storage, "carol", 1000).status == BalloonStatus::insufficient_score);
+    static_cast<void>(conquister_claim(storage, 1, "alice", 2000, 0));
+
+    int attempts = 0;
+    ClaimResult attack;
+    do {
+        attack = conquister_claim(storage, 2, "bob", 3000 + attempts, 0);
+        ++attempts;
+        if (attack.status == ClaimStatus::defended) {
+            CHECK(attack.previous_username == "alice");
+            CHECK(attack.next_chance == 25 * (attempts + 1));
+            const auto holder = conquister_user(storage, "alice");
+            REQUIRE(holder);
+            CHECK(holder->in_conquister);
+        }
+    } while (attack.status == ClaimStatus::defended && attempts < 8);
+
+    CHECK(attempts <= 4);
+    CHECK(attack.status == ClaimStatus::taken);
+    CHECK(attack.balloon_popped);
+    CHECK(attack.previous_username == "alice");
+
+    const ClaimResult without = conquister_claim(storage, 1, "alice", 9000, 0);
+    CHECK(without.status == ClaimStatus::taken);
+    CHECK_FALSE(without.balloon_popped);
+}
+
+TEST_CASE("a penalty blocks the next attempts") {
+    const TestPaths paths{"cooldown-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":1,"username":"alice","since":0},"scores":{},)"
+             << R"("quotes_added":{},"balloons":{},"cooldowns":{"bob":1000}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+
+    const ClaimResult blocked = conquister_claim(storage, 2, "bob", 700, 300);
+    CHECK(blocked.status == ClaimStatus::cooldown);
+    CHECK(blocked.penalty_seconds == 300);
+
+    const ClaimResult others = conquister_claim(storage, 3, "carol", 700, 300);
+    CHECK(others.status == ClaimStatus::taken);
+
+    const ClaimResult expired = conquister_claim(storage, 2, "bob", 1000, 300);
+    CHECK(expired.status == ClaimStatus::taken);
+}
+
+TEST_CASE("a failed balloon attempt hands out the penalty") {
+    const TestPaths paths{"cooldown-balloon-test"};
+    Storage storage{paths.conquister, paths.quotes};
+
+    static_cast<void>(conquister_claim(storage, 1, "alice", 0, 0));
+    static_cast<void>(conquister_claim(storage, 2, "bob", 1000, 0));
+    CHECK(balloon_buy(storage, "alice", 1000).status == BalloonStatus::bought);
+    static_cast<void>(conquister_claim(storage, 1, "alice", 2000, 0));
+
+    const ClaimResult attack = conquister_claim(storage, 2, "bob", 3000, 300);
+    if (attack.status == ClaimStatus::defended) {
+        CHECK(attack.penalty_seconds == 300);
+        const ClaimResult again = conquister_claim(storage, 2, "bob", 3100, 300);
+        CHECK(again.status == ClaimStatus::cooldown);
+        CHECK(again.penalty_seconds == 200);
+    } else {
+        CHECK(attack.status == ClaimStatus::taken);
+        CHECK(attack.balloon_popped);
+    }
+}
+
+TEST_CASE("the fourth attempt pops the balloon for certain") {
+    const TestPaths paths{"balloon-certain-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":1,"username":"alice","since":0},"scores":{},)"
+             << R"("quotes_added":{},"balloons":{"alice":3}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+
+    const ClaimResult attack = conquister_claim(storage, 2, "bob", 10, 0);
+    CHECK(attack.status == ClaimStatus::taken);
+    CHECK(attack.balloon_popped);
+    const auto winner = conquister_user(storage, "bob");
+    REQUIRE(winner);
+    CHECK(winner->in_conquister);
 }
 
 TEST_CASE("a quote saved before a failed state save is rolled back") {
