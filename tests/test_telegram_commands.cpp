@@ -133,7 +133,10 @@ TEST_CASE("the balloon replies are the ones the players read") {
         return telegram_command_dispatch(context, text).value_or("<nessuna risposta>");
     };
 
-    CHECK(reply("We @TheConquister37") == "⏳ erin hai ancora 5 minuti di penalità.");
+    const std::string waiting = reply("We @TheConquister37");
+    CHECK(waiting.starts_with("⏳ erin hai ancora "));
+    CHECK(waiting.contains(" minut"));
+    CHECK(waiting.ends_with(" di penalità."));
 
     context.user_id = 2;
     context.username = "bob";

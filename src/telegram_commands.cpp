@@ -43,11 +43,21 @@ ParsedCommand parse_command(std::string_view message) {
 }
 
 std::string format_wait(std::int64_t seconds) {
-    if (seconds < 60) {
-        return std::format("{} second{}", seconds, seconds == 1 ? "o" : "i");
+    const std::int64_t minutes = seconds / 60;
+    const std::int64_t rest = seconds % 60;
+    if (minutes == 0) {
+        return std::format("{} second{}", rest, rest == 1 ? "o" : "i");
     }
-    const std::int64_t minutes = (seconds + 59) / 60;
-    return std::format("{} minut{}", minutes, minutes == 1 ? "o" : "i");
+    if (rest == 0) {
+        return std::format("{} minut{}", minutes, minutes == 1 ? "o" : "i");
+    }
+    return std::format(
+        "{} minut{} e {} second{}",
+        minutes,
+        minutes == 1 ? "o" : "i",
+        rest,
+        rest == 1 ? "o" : "i"
+    );
 }
 
 std::string missing_username_reply() {
@@ -82,7 +92,8 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
     if (result.status == ClaimStatus::defended) {
         if (result.penalty_seconds > 0) {
             return std::format(
-                "🎈 {} il palloncino di @{} ha resistito! Hai {} di penalità, poi avrai il {}% di bucarlo.",
+                "🎈 {} il palloncino di @{} ha resistito e prendi {} di penalità. "
+                "Ora il palloncino ha il {}% di probabilità di essere bucato.",
                 username,
                 result.previous_username,
                 format_wait(result.penalty_seconds),
@@ -90,7 +101,8 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
             );
         }
         return std::format(
-            "🎈 {} il palloncino di @{} ha resistito! Al prossimo tentativo hai il {}% di bucarlo.",
+            "🎈 {} il palloncino di @{} ha resistito. "
+            "Ora il palloncino ha il {}% di probabilità di essere bucato.",
             username,
             result.previous_username,
             result.next_chance
