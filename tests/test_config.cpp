@@ -1,63 +1,89 @@
-#ifdef NDEBUG
-#undef NDEBUG
-#endif
-
 #include "config.hpp"
 
-#include <cassert>
+#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
+#include <doctest/doctest.h>
+
 #include <filesystem>
 #include <fstream>
-#include <print>
 #include <string>
 #include <string_view>
+#include <system_error>
 
 namespace {
 
-void write_file(const std::string &path, std::string_view content) {
-    std::ofstream file{path, std::ios::binary};
-    file << content;
-    assert(file.good());
-}
+/* Writes the .env under test and removes it afterwards. */
+class ConfigFile {
+public:
+    ConfigFile() = default;
+
+    ~ConfigFile() {
+        std::error_code ignored;
+        std::filesystem::remove(path_, ignored);
+    }
+
+    ConfigFile(const ConfigFile &) = delete;
+    ConfigFile &operator=(const ConfigFile &) = delete;
+    ConfigFile(ConfigFile &&) = delete;
+    ConfigFile &operator=(ConfigFile &&) = delete;
+
+    [[nodiscard]] std::optional<norelecbot::AppConfig> load(std::string_view content) const {
+        std::ofstream file{path_, std::ios::binary};
+        file << content;
+        file.close();
+        REQUIRE(file.good());
+        return norelecbot::load_config(path_);
+    }
+
+private:
+    std::string path_{"config-test.env"};
+};
 
 }
 
-int main() {
-    using norelecbot::load_config;
+TEST_CASE("a missing .env file is an error") {
+    CHECK_FALSE(norelecbot::load_config("missing-required-config-test.env"));
+}
 
-    assert(!load_config("missing-required-config-test.env"));
+TEST_CASE("settings are read from the .env file") {
+    const ConfigFile file;
 
-    const std::string path = "config-quote-cost-test.env";
-    write_file(path, "NORELECBOT_QUOTE_COST=250\n");
-    auto config = load_config(path);
-    assert(config && config->quote_cost == 250);
+    const auto cost = file.load("NORELECBOT_QUOTE_COST=250\n");
+    REQUIRE(cost);
+    CHECK(cost->quote_cost == 250);
 
-    write_file(path, "NORELECBOT_QUOTE_COST=0\n");
-    config = load_config(path);
-    assert(config && config->quote_cost == 0);
+    const auto free_quotes = file.load("NORELECBOT_QUOTE_COST=0\n");
+    REQUIRE(free_quotes);
+    CHECK(free_quotes->quote_cost == 0);
 
-    write_file(path, "NORELECBOT_OWNER_ID=\n");
-    config = load_config(path);
-    assert(config && config->quote_cost == 1000);
-    assert(config->conquister_chat_id == 0);
+    const auto chat = file.load("NORELECBOT_CONQUISTER_CHAT_ID=-1001234567890\n");
+    REQUIRE(chat);
+    CHECK(chat->conquister_chat_id == -1001234567890);
+}
 
-    write_file(path, "NORELECBOT_CONQUISTER_CHAT_ID=-1001234567890\n");
-    config = load_config(path);
-    assert(config && config->conquister_chat_id == -1001234567890);
-    write_file(path, "NORELECBOT_CONQUISTER_CHAT_ID=gruppo\n");
-    assert(!load_config(path));
+TEST_CASE("an empty value falls back to the default") {
+    const ConfigFile file;
 
-    write_file(path, "NORELECBOT_QUOTE_COST=-1\n");
-    assert(!load_config(path));
-    write_file(path, "NORELECBOT_QUOTE_COST=tante\n");
-    assert(!load_config(path));
-    write_file(path, "NORELECBOT_QUOTE_COST=2147483648\n");
-    assert(!load_config(path));
+    const auto config = file.load("NORELECBOT_OWNER_ID=\n");
+    REQUIRE(config);
+    CHECK(config->quote_cost == 1000);
+    CHECK(config->conquister_chat_id == 0);
+    CHECK(config->api_port == 8000);
+}
 
-    write_file(path, "# commento\r\n\r\nNORELECBOT_API_PORT = \"9000\"\r\nNORELECBOT_QUOTE_COST=5");
-    config = load_config(path);
-    assert(config && config->api_port == 9000 && config->quote_cost == 5);
+TEST_CASE("an invalid value is refused") {
+    const ConfigFile file;
 
-    assert(std::filesystem::remove(path));
-    std::println("config tests: ok");
-    return 0;
+    CHECK_FALSE(file.load("NORELECBOT_CONQUISTER_CHAT_ID=gruppo\n"));
+    CHECK_FALSE(file.load("NORELECBOT_QUOTE_COST=-1\n"));
+    CHECK_FALSE(file.load("NORELECBOT_QUOTE_COST=tante\n"));
+    CHECK_FALSE(file.load("NORELECBOT_QUOTE_COST=2147483648\n"));
+}
+
+TEST_CASE("carriage returns, comments and quotes are handled") {
+    const ConfigFile file;
+
+    const auto config = file.load("# commento\r\n\r\nNORELECBOT_API_PORT = \"9000\"\r\nNORELECBOT_QUOTE_COST=5");
+    REQUIRE(config);
+    CHECK(config->api_port == 9000);
+    CHECK(config->quote_cost == 5);
 }

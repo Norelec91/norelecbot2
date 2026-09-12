@@ -3,44 +3,43 @@
 #include "game.hpp"
 #include "rest_routes.hpp"
 
+#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
+#include <doctest/doctest.h>
+
 #include <fstream>
-#include <print>
 #include <vector>
+
+using namespace norelecbot;
 
 namespace {
 
 void write_quotes(const std::string &path, const std::vector<std::string> &quotes) {
     std::ofstream file{path, std::ios::binary};
-    file << norelecbot::Json(quotes).dump(2);
-    assert(file.good());
+    file << Json(quotes).dump(2);
+    file.close();
+    REQUIRE(file.good());
 }
 
-void expect(
-    norelecbot::Storage &storage,
-    std::string_view path,
-    unsigned int status_code,
-    std::string_view body
-) {
-    const norelecbot::RestResponse response = norelecbot::rest_route_dispatch(storage, "GET", path);
-    assert(response.status_code == status_code);
-    assert(response.body == body);
+void expect(Storage &storage, std::string_view path, unsigned int status_code, std::string_view body) {
+    const RestResponse response = rest_route_dispatch(storage, "GET", path);
+    CHECK(response.status_code == status_code);
+    CHECK(response.body == body);
 }
 
 }
 
-int main() {
-    using namespace norelecbot;
-
+TEST_CASE("the REST routes answer with the documented JSON") {
     const TestPaths paths{"rest-route-test"};
     write_quotes(paths.quotes, {});
     Storage storage{paths.conquister, paths.quotes};
 
     expect(storage, "/health", 200, "{\"status\":\"ok\"}\n");
     expect(storage, "/missing", 404, "{\"error\":\"not found\"}\n");
-    assert(rest_route_dispatch(storage, "POST", "/quote").status_code == 404);
+    CHECK(rest_route_dispatch(storage, "POST", "/quote").status_code == 404);
 
     const RestResponse empty = rest_route_dispatch(storage, "GET", "/quote");
-    assert(empty.status_code == 404 && empty.body.contains("no quotes available"));
+    CHECK(empty.status_code == 404);
+    CHECK(empty.body.contains("no quotes available"));
     write_quotes(paths.quotes, {"quote di prova"});
     expect(storage, "/quote", 200, "{\"quote\":\"quote di prova\"}\n");
 
@@ -70,9 +69,6 @@ int main() {
     );
     expect(storage, "/user/nessuno", 404, "{\"error\":\"user not found\"}\n");
     expect(storage, "/user/", 404, "{\"error\":\"not found\"}\n");
-    assert(rest_route_dispatch(storage, "GET", "/user/bob/extra").status_code == 404);
-    assert(rest_route_dispatch(storage, "POST", "/user/bob").status_code == 404);
-
-    std::println("REST route tests: ok");
-    return 0;
+    CHECK(rest_route_dispatch(storage, "GET", "/user/bob/extra").status_code == 404);
+    CHECK(rest_route_dispatch(storage, "POST", "/user/bob").status_code == 404);
 }

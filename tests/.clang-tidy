@@ -1,3 +1,7 @@
 InheritParentConfig: true
+# doctest's REQUIRE is not recognised as a check, so every later access looks unchecked, and the
+# analyzer reports a leak inside doctest.h itself.
 Checks: >
-  -bugprone-exception-escape
+  -bugprone-exception-escape,
+  -bugprone-unchecked-optional-access,
+  -clang-analyzer-cplusplus.NewDeleteLeaks

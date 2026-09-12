@@ -1,11 +1,6 @@
 #ifndef NORELECBOT_TEST_PATHS_HPP
 #define NORELECBOT_TEST_PATHS_HPP
 
-#ifdef NDEBUG
-#undef NDEBUG
-#endif
-
-#include <cassert>
 #include <chrono>
 #include <filesystem>
 #include <format>
