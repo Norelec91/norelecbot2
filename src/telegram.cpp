@@ -2,7 +2,7 @@
 
 #include "logging.hpp"
 #include "storage.hpp"
-#include "telegram_commands.hpp"
+#include "commands.hpp"
 
 #include <httplib.h>
 
@@ -81,21 +81,23 @@ void process_message(Storage &storage, const AppConfig &config, const Json &mess
         return;
     }
     const Json *username = find_member(sender, "username");
+    const std::int64_t chat = chat_id->get<std::int64_t>();
+    const std::int64_t sender_id = user_id->get<std::int64_t>();
     const CommandContext context{
         .storage = storage,
         .config = config,
-        .chat_id = chat_id->get<std::int64_t>(),
-        .user_id = user_id->get<std::int64_t>(),
+        .user_id = sender_id,
         .username = username != nullptr && username->is_string()
             ? std::string_view{username->get_ref<const std::string &>()}
             : std::string_view{},
+        .claims_allowed = config.conquister_chat_id == 0 || chat == config.conquister_chat_id,
+        .owner = sender_id == config.owner_id,
     };
-    if (const std::optional<std::string> reply =
-            telegram_command_dispatch(context, text->get_ref<const std::string &>())) {
+    if (const std::optional<std::string> reply = command_dispatch(context, text->get_ref<const std::string &>())) {
         telegram_api(
             config,
             "sendMessage",
-            {{"chat_id", std::to_string(context.chat_id)}, {"text", *reply}, {"disable_web_page_preview", "true"}},
+            {{"chat_id", std::to_string(chat)}, {"text", *reply}, {"disable_web_page_preview", "true"}},
             poll_timeout_seconds
         );
     }

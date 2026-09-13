@@ -14,6 +14,8 @@ struct AppConfig {
     static constexpr int default_balloon_cost = 1000;
     static constexpr int default_cooldown_seconds = 300;
     static constexpr int default_api_port = 8000;
+    static constexpr int default_irc_port = 6697;
+    static constexpr std::string_view default_irc_nick = "NorelecBot";
     static constexpr std::string_view default_api_host = "0.0.0.0";
     static constexpr std::string_view default_conquister_path = "conquister.json";
     static constexpr std::string_view default_quotes_path = "quotes.json";
@@ -29,6 +31,13 @@ struct AppConfig {
     int api_port = default_api_port;
     std::string conquister_path{default_conquister_path};
     std::string quotes_path{default_quotes_path};
+    bool irc_enabled = false;
+    std::string irc_server;
+    int irc_port = default_irc_port;
+    std::string irc_nick{default_irc_nick};
+    std::string irc_nickserv_password;
+    std::string irc_channel;
+    std::string irc_owner_nick;
 };
 
 /* Reads the required .env file, then applies the environment variables on top of it. */

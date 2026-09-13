@@ -73,6 +73,28 @@ constexpr std::array settings{
     Setting{"NORELECBOT_CONQUISTER_FILE", [](AppConfig &config, std::string_view value) {
         return set_text(config.conquister_path, value, AppConfig::default_conquister_path);
     }},
+    Setting{"NORELECBOT_IRC_ENABLED", [](AppConfig &config, std::string_view value) {
+        config.irc_enabled = !value.empty() && value != "0" && !text::equals_ignore_case(value, "false");
+        return true;
+    }},
+    Setting{"NORELECBOT_IRC_SERVER", [](AppConfig &config, std::string_view value) {
+        return set_text(config.irc_server, value, {});
+    }},
+    Setting{"NORELECBOT_IRC_PORT", [](AppConfig &config, std::string_view value) {
+        return set_number(config.irc_port, value, AppConfig::default_irc_port, 1, 65535);
+    }},
+    Setting{"NORELECBOT_IRC_NICK", [](AppConfig &config, std::string_view value) {
+        return set_text(config.irc_nick, value, AppConfig::default_irc_nick);
+    }},
+    Setting{"NORELECBOT_IRC_NICKSERV_PASSWORD", [](AppConfig &config, std::string_view value) {
+        return set_text(config.irc_nickserv_password, value, {});
+    }},
+    Setting{"NORELECBOT_IRC_CHANNEL", [](AppConfig &config, std::string_view value) {
+        return set_text(config.irc_channel, value, {});
+    }},
+    Setting{"NORELECBOT_IRC_OWNER", [](AppConfig &config, std::string_view value) {
+        return set_text(config.irc_owner_nick, value, {});
+    }},
     Setting{"NORELECBOT_QUOTES_FILE", [](AppConfig &config, std::string_view value) {
         return set_text(config.quotes_path, value, AppConfig::default_quotes_path);
     }},

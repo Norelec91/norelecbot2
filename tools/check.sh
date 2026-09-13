@@ -42,6 +42,9 @@ clang-tidy -p "$OUT/clang-fuzz" --quiet src/*.cpp tests/*.cpp fuzz/*.cpp 2> >(gr
 echo "==> restart check"
 tools/check_restart.sh bin/norelecbot
 
+echo "==> irc check"
+tools/check_irc.sh bin/norelecbot
+
 echo "==> fuzz REST routes for ${FUZZ_SECONDS}s"
 corpus="$OUT/fuzz-corpus"
 mkdir -p "$corpus"

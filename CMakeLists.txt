@@ -12,6 +12,7 @@ foreach(configuration Debug Release RelWithDebInfo MinSizeRel)
 endforeach()
 
 find_package(Threads REQUIRED)
+find_package(OpenSSL REQUIRED)
 find_package(nlohmann_json 3.11 REQUIRED)
 find_package(spdlog REQUIRED)
 # vcpkg ships a CMake package for cpp-httplib, Debian only a pkg-config file.
@@ -53,7 +54,9 @@ set(CORE_SOURCES
     src/config.cpp
     src/storage.cpp
     src/game.cpp
-    src/telegram_commands.cpp
+    src/commands.cpp
+    src/irc_protocol.cpp
+    src/irc_session.cpp
     src/rest_routes.cpp
     src/text.cpp
 )
@@ -65,9 +68,10 @@ target_link_libraries(norelecbot_core PUBLIC nlohmann_json::nlohmann_json spdlog
 add_executable(norelecbot
     src/main.cpp
     src/telegram.cpp
+    src/irc.cpp
     src/http_server.cpp
 )
-target_link_libraries(norelecbot PRIVATE norelecbot_core httplib::httplib)
+target_link_libraries(norelecbot PRIVATE norelecbot_core httplib::httplib OpenSSL::SSL OpenSSL::Crypto)
 
 if(NORELECBOT_FUZZ)
     add_executable(fuzz-rest-routes fuzz/fuzz_rest_routes.cpp)
@@ -78,7 +82,7 @@ endif()
 include(CTest)
 if(BUILD_TESTING)
     find_package(doctest REQUIRED)
-    foreach(test config services telegram-commands rest-routes text)
+    foreach(test config services commands rest-routes text irc-protocol irc-session)
         string(REPLACE "-" "_" source "${test}")
         add_executable(test-${test} tests/test_${source}.cpp)
         target_link_libraries(test-${test} PRIVATE norelecbot_core doctest::doctest)

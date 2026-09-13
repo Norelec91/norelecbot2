@@ -5,3 +5,6 @@ Checks: >
   -bugprone-exception-escape,
   -bugprone-unchecked-optional-access,
   -clang-analyzer-cplusplus.NewDeleteLeaks
+# A test fixture keeps its state in the open on purpose.
+CheckOptions:
+  misc-non-private-member-variables-in-classes.IgnoreClassesWithAllMemberVariablesBeingPublic: true

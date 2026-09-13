@@ -1,4 +1,4 @@
-#include "telegram_commands.hpp"
+#include "commands.hpp"
 
 #include "game.hpp"
 #include "text.hpp"
@@ -211,7 +211,7 @@ std::string handle_buy_balloon(const CommandContext &context, std::string_view) 
 }
 
 std::string handle_quotes(const CommandContext &context, std::string_view argument) {
-    if (context.user_id != context.config.owner_id) {
+    if (!context.owner) {
         return "Solo il proprietario può vedere le citazioni.";
     }
     const std::optional<std::int64_t> requested = text::parse_int64(argument);
@@ -244,7 +244,7 @@ std::string handle_quotes(const CommandContext &context, std::string_view argume
 }
 
 std::string handle_delete_quote(const CommandContext &context, std::string_view argument) {
-    if (context.user_id != context.config.owner_id) {
+    if (!context.owner) {
         return "Solo il proprietario può eliminare le citazioni.";
     }
     if (argument.empty()) {
@@ -262,14 +262,26 @@ constexpr std::array commands{
     CommandDefinition{"/delquote", handle_delete_quote},
 };
 
+const CommandDefinition *find_command(std::string_view name) {
+    const auto found = std::ranges::find_if(commands, [name](const CommandDefinition &definition) {
+        return definition.name == name;
+    });
+    return found != commands.end() ? &*found : nullptr;
 }
 
-std::optional<std::string> telegram_command_dispatch(const CommandContext &context, std::string_view text) {
+}
+
+bool command_is_for_bot(std::string_view text) {
+    const std::string_view message = text::trim(text);
+    return message == conquister_trigger ||
+           (!message.empty() && find_command(parse_command(message).name) != nullptr);
+}
+
+std::optional<std::string> command_dispatch(const CommandContext &context, std::string_view text) {
     try {
         const std::string_view message = text::trim(text);
         if (message == conquister_trigger) {
-            const std::int64_t allowed_chat = context.config.conquister_chat_id;
-            if (allowed_chat != 0 && context.chat_id != allowed_chat) {
+            if (!context.claims_allowed) {
                 return std::nullopt;
             }
             return handle_claim(context, {});
@@ -278,13 +290,11 @@ std::optional<std::string> telegram_command_dispatch(const CommandContext &conte
             return std::nullopt;
         }
         const ParsedCommand command = parse_command(message);
-        const auto found = std::ranges::find_if(commands, [&command](const CommandDefinition &definition) {
-            return definition.name == command.name;
-        });
-        if (found == commands.end()) {
+        const CommandDefinition *definition = find_command(command.name);
+        if (definition == nullptr) {
             return std::nullopt;
         }
-        return found->handler(context, command.argument);
+        return definition->handler(context, command.argument);
     } catch (const std::exception &) {
         return std::string{internal_error_reply};
     }

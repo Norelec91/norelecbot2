@@ -1,5 +1,6 @@
 #include "config.hpp"
 #include "http_server.hpp"
+#include "irc.hpp"
 #include "logging.hpp"
 #include "storage.hpp"
 #include "telegram.hpp"
@@ -38,6 +39,18 @@ int run() {
     int result = EXIT_SUCCESS;
     {
         const norelecbot::HttpServer http{config->api_host, config->api_port, storage};
+        std::optional<std::jthread> irc;
+        if (config->irc_enabled) {
+            if (config->irc_server.empty() || config->irc_channel.empty()) {
+                norelecbot::log_error(
+                    "NORELECBOT_IRC_ENABLED is set but NORELECBOT_IRC_SERVER or NORELECBOT_IRC_CHANNEL is missing"
+                );
+                return EXIT_FAILURE;
+            }
+            irc.emplace([&storage, &config] {
+                norelecbot::irc_run(storage, *config, stop_requested);
+            });
+        }
         if (!config->conquister_enabled) {
             norelecbot::log_info("Conquister disabled");
             while (!stop_requested.load(std::memory_order_relaxed)) {
