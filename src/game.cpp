@@ -49,20 +49,20 @@ ClaimResult conquister_claim(
     std::int64_t now,
     int cooldown_seconds
 ) {
-    return storage.transaction([&](StorageSession &session) {
+    const ClaimResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
-        ClaimResult result;
+        ClaimResult outcome;
         if (const auto penalty = find_entry(state.cooldowns, username); penalty != state.cooldowns.end()) {
             if (penalty->second > now) {
-                result.status = ClaimStatus::cooldown;
-                result.penalty_seconds = penalty->second - now;
-                return result;
+                outcome.status = ClaimStatus::cooldown;
+                outcome.penalty_seconds = penalty->second - now;
+                return outcome;
             }
             state.cooldowns.erase(username);
         }
         if (state.current && state.current->username == username) {
-            result.status = ClaimStatus::already_held;
-            return result;
+            outcome.status = ClaimStatus::already_held;
+            return outcome;
         }
         if (state.current && !state.current->username.empty()) {
             const std::string holder = state.current->username;
@@ -72,29 +72,56 @@ ClaimResult conquister_claim(
                     balloon->second = attempt;
                     if (cooldown_seconds > 0) {
                         state.cooldowns[username] = now + cooldown_seconds;
-                        result.penalty_seconds = cooldown_seconds;
+                        outcome.penalty_seconds = cooldown_seconds;
                     }
-                    result.status = ClaimStatus::defended;
-                    result.previous_username = holder;
-                    result.next_chance =
+                    outcome.status = ClaimStatus::defended;
+                    outcome.previous_username = holder;
+                    outcome.next_chance =
                         static_cast<int>((attempt + 1) * 100 / static_cast<std::int64_t>(balloon_attempts));
-                    return result;
+                    return outcome;
                 }
                 state.balloons.erase(holder);
-                result.balloon_popped = true;
+                outcome.balloon_popped = true;
             }
-            result.previous_username = holder;
-            result.earned = now > state.current->since ? now - state.current->since : 0;
-            std::int64_t &score = state.scores[result.previous_username];
-            if (score > 0 && result.earned > std::numeric_limits<std::int64_t>::max() - score) {
+            outcome.previous_username = holder;
+            outcome.earned = now > state.current->since ? now - state.current->since : 0;
+            std::int64_t &score = state.scores[outcome.previous_username];
+            if (score > 0 && outcome.earned > std::numeric_limits<std::int64_t>::max() - score) {
                 log_error("Could not update Conquister score");
                 throw StorageError("Conquister score overflow");
             }
-            score += result.earned;
+            score += outcome.earned;
         }
         state.current = Holder{user_id, username, now};
-        return result;
+        return outcome;
     });
+
+    switch (result.status) {
+    case ClaimStatus::taken:
+        log_info(
+            "claim taken user={} previous={} earned={} balloon_popped={}",
+            username,
+            result.previous_username,
+            result.earned,
+            result.balloon_popped ? 1 : 0
+        );
+        break;
+    case ClaimStatus::defended:
+        log_info(
+            "claim defended user={} holder={} next_chance={} penalty={}",
+            username,
+            result.previous_username,
+            result.next_chance,
+            result.penalty_seconds
+        );
+        break;
+    case ClaimStatus::cooldown:
+        log_info("claim blocked user={} wait={}", username, result.penalty_seconds);
+        break;
+    case ClaimStatus::already_held:
+        break;
+    }
+    return result;
 }
 
 Leaderboard conquister_leaderboard(Storage &storage, std::size_t limit) {
@@ -149,7 +176,7 @@ std::optional<ConquisterUser> conquister_user(Storage &storage, std::string_view
 }
 
 BalloonResult balloon_buy(Storage &storage, const std::string &username, int cost) {
-    return storage.transaction([&](StorageSession &session) {
+    const BalloonResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         const std::int64_t score = counter(state.scores, username);
         if (find_entry(state.balloons, username) != state.balloons.end()) {
@@ -162,6 +189,11 @@ BalloonResult balloon_buy(Storage &storage, const std::string &username, int cos
         state.balloons[username] = 0;
         return BalloonResult{BalloonStatus::bought, score - cost};
     });
+
+    if (result.status == BalloonStatus::bought) {
+        log_info("balloon bought user={} cost={} left={}", username, cost, result.available_score);
+    }
+    return result;
 }
 
 QuoteAddResult quote_add(
@@ -170,7 +202,7 @@ QuoteAddResult quote_add(
     const std::string &quote,
     int cost
 ) {
-    return storage.transaction([&](StorageSession &session) {
+    const QuoteAddResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         Quotes &quotes = session.quotes();
         const std::int64_t score = counter(state.scores, username);
@@ -189,6 +221,11 @@ QuoteAddResult quote_add(
         state.quotes_added[username] = added + 1;
         return QuoteAddResult{QuoteAddStatus::added, score - cost};
     });
+
+    if (result.status == QuoteAddStatus::added) {
+        log_info("quote added user={} cost={} left={}", username, cost, result.available_score);
+    }
+    return result;
 }
 
 QuotePage quote_page_load(Storage &storage, int requested_page) {
