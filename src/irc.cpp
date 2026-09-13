@@ -39,8 +39,13 @@ namespace norelecbot {
 namespace {
 
 constexpr int connect_timeout_milliseconds = 10000;
-constexpr int read_timeout_seconds = 1;
-constexpr std::chrono::milliseconds send_interval{1000};
+constexpr int handshake_timeout_seconds = 10;
+/* Short, so that what Telegram left for the channel is picked up quickly. */
+constexpr int read_timeout_microseconds = 200000;
+/* Bahamut kills a client that keeps talking without pause: a short burst is free, then one message
+   every interval. A whole answer of a few lines leaves at once; only a long queue is slowed down. */
+constexpr std::size_t burst_messages = 6;
+constexpr std::chrono::milliseconds message_interval{1500};
 constexpr int first_backoff_seconds = 5;
 constexpr int max_backoff_seconds = 60;
 constexpr std::size_t read_buffer_size = 4096;
@@ -142,6 +147,11 @@ bool set_blocking(Handle handle, bool blocking) {
 #endif
 }
 
+void set_read_timeout(Handle handle, int seconds, int microseconds) {
+    const timeval timeout{.tv_sec = seconds, .tv_usec = microseconds};
+    setsockopt(handle, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char *>(&timeout), sizeof(timeout));
+}
+
 /* Tries the addresses in the order getaddrinfo returns them, which /etc/gai.conf puts IPv4 first. */
 Socket connect_to(const std::string &host, int port) {
     const addrinfo hints{
@@ -175,14 +185,7 @@ Socket connect_to(const std::string &host, int port) {
             error != 0 || !set_blocking(socket.get(), true)) {
             continue;
         }
-        const timeval timeout{.tv_sec = read_timeout_seconds, .tv_usec = 0};
-        setsockopt(
-            socket.get(),
-            SOL_SOCKET,
-            SO_RCVTIMEO,
-            reinterpret_cast<const char *>(&timeout),
-            sizeof(timeout)
-        );
+        set_read_timeout(socket.get(), handshake_timeout_seconds, 0);
         return socket;
     }
     log_warning("IRC cannot connect to {}:{}", host, port);
@@ -315,9 +318,16 @@ private:
     /* Only what the bot says in the channel is paced; the protocol answers go out at once. */
     bool flush() {
         const auto now = std::chrono::steady_clock::now();
+        while (refilled_ + message_interval <= now && credit_ < burst_messages) {
+            refilled_ += message_interval;
+            ++credit_;
+        }
+        if (credit_ == burst_messages) {
+            refilled_ = now;
+        }
         while (!outbox_.empty()) {
             const bool paced = outbox_.front().starts_with("PRIVMSG");
-            if (paced && now - last_sent_ < send_interval) {
+            if (paced && credit_ == 0) {
                 return true;
             }
             const std::string line = std::move(outbox_.front());
@@ -326,7 +336,7 @@ private:
                 return false;
             }
             if (paced) {
-                last_sent_ = now;
+                --credit_;
             }
         }
         return true;
@@ -336,7 +346,8 @@ private:
     irc::Session &session_;
     std::string pending_;
     std::deque<std::string> outbox_;
-    std::chrono::steady_clock::time_point last_sent_{};
+    std::size_t credit_ = burst_messages;
+    std::chrono::steady_clock::time_point refilled_ = std::chrono::steady_clock::now();
 };
 
 }
@@ -378,6 +389,8 @@ void irc_run(Storage &storage, const AppConfig &config, const std::atomic<bool> 
         const Socket socket = connect_to(config.irc_server, config.irc_port);
         const SslPointer ssl = socket.valid() ? start_tls(context.get(), socket, config.irc_server) : SslPointer{};
         if (ssl) {
+            /* The handshake is over: from here a read may return empty handed, often. */
+            set_read_timeout(socket.get(), 0, read_timeout_microseconds);
             log_info("IRC connected to {}:{}", config.irc_server, config.irc_port);
             backoff = first_backoff_seconds;
             Connection connection{ssl.get(), session};

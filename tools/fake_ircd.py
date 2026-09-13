@@ -4,6 +4,7 @@ import argparse
 import socket
 import ssl
 import sys
+import time
 import threading
 
 WELCOME = [
@@ -15,6 +16,7 @@ WELCOME = [
 
 class Server:
     def __init__(self, certificate, key, port):
+        self.started = time.monotonic()
         self.context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         self.context.load_cert_chain(certificate, key)
         self.listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -47,7 +49,7 @@ class Server:
                     if not line:
                         continue
                     self.received.append(line)
-                    print("<<", line, flush=True)
+                    print("<< %7.3f %s" % (time.monotonic() - self.started, line), flush=True)
                     parts = line.split(" ")
                     command = parts[0].upper()
                     if command == "NICK":
