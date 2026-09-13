@@ -37,6 +37,7 @@ struct AppConfig {
     std::string irc_nick{default_irc_nick};
     std::string irc_nickserv_password;
     std::string irc_channel;
+    std::string irc_no_forward_prefix;
     std::string irc_owner_nick;
 };
 

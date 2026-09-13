@@ -19,6 +19,8 @@ struct SessionConfig {
     std::string realname;
     std::string nickserv_password;
     std::string channel;
+    /* Marks what the bridge must not carry back to Telegram, where it was said first. */
+    std::string no_forward_prefix;
     std::string owner_nick;
     std::int64_t registration_seconds = 300;
     std::int64_t whois_seconds = 10;
@@ -36,7 +38,7 @@ public:
     [[nodiscard]] std::vector<std::string> handle(const Message &message, std::int64_t now);
     /* Gives up on the WHOIS replies that never came and forgets the stale answers. */
     void tick(std::int64_t now);
-    /* Repeats in the channel something the bot said on the other front end. */
+    /* Repeats in the channel something the bot already said on Telegram. */
     [[nodiscard]] std::vector<std::string> announce(std::string_view text) const;
     [[nodiscard]] bool joined() const { return joined_; }
     [[nodiscard]] const std::string &nick() const { return nick_; }

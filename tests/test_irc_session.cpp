@@ -28,6 +28,7 @@ struct Fixture {
                   .realname = "NorelecBot",
                   .nickserv_password = "segreto",
                   .channel = "#regno",
+                  .no_forward_prefix = "\xE2\x80\x8B",
                   .owner_nick = "Norelec",
               },
               [this](std::string_view nick, bool owner, std::string_view text) -> std::optional<std::string> {
@@ -105,6 +106,7 @@ TEST_CASE("only a nick identified with NickServ plays") {
         SUBCASE("the answer is cached, so the next command costs no WHOIS") {
             const auto again = fixture.feed(":Marco189!~m@host PRIVMSG #regno :!leaderboard", 1100);
             REQUIRE(again.size() == 1);
+            /* An answer born on IRC is not marked: the bridge must carry it to Telegram. */
             CHECK(again[0] == "PRIVMSG #regno :Classifica vuota.\r\n");
             REQUIRE(fixture.calls.size() == 2);
             CHECK(fixture.calls[1].text == "/leaderboard");
@@ -203,6 +205,7 @@ TEST_CASE("a reply too long for one line is split") {
             .realname = "bot",
             .nickserv_password = "",
             .channel = "#regno",
+            .no_forward_prefix = "",
             .owner_nick = "",
         },
         [](std::string_view, bool, std::string_view) -> std::optional<std::string> {
@@ -227,13 +230,14 @@ TEST_CASE("a reply too long for one line is split") {
     CHECK(sent[2] == "PRIVMSG #regno :seconda riga\r\n");
 }
 
-TEST_CASE("what the bot said on Telegram is repeated in the channel") {
+TEST_CASE("what the bot said on Telegram is repeated in the channel, marked for the bridge") {
     Fixture fixture;
     static_cast<void>(fixture.session.connected());
     const auto lines = fixture.session.announce("Norelec hai cacciato @mifaisonno da @TheConquister37.\nmifaisonno hai guadagnato 1471 palle!");
     REQUIRE(lines.size() == 2);
-    CHECK(lines[0] == "PRIVMSG #regno :Norelec hai cacciato @mifaisonno da @TheConquister37.\r\n");
-    CHECK(lines[1] == "PRIVMSG #regno :mifaisonno hai guadagnato 1471 palle!\r\n");
+    /* Each line carries the mark that keeps the bridge from sending it back to Telegram. */
+    CHECK(lines[0] == "PRIVMSG #regno :\xE2\x80\x8BNorelec hai cacciato @mifaisonno da @TheConquister37.\r\n");
+    CHECK(lines[1] == "PRIVMSG #regno :\xE2\x80\x8Bmifaisonno hai guadagnato 1471 palle!\r\n");
     CHECK(fixture.calls.empty());
 }
 

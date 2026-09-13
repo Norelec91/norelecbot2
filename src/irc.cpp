@@ -5,7 +5,6 @@
 #include "irc_protocol.hpp"
 #include "irc_session.hpp"
 #include "logging.hpp"
-#include "telegram.hpp"
 
 #include <openssl/err.h>
 #include <openssl/ssl.h>
@@ -260,6 +259,7 @@ irc::SessionConfig session_config(const AppConfig &config) {
         .realname = config.irc_nick,
         .nickserv_password = config.irc_nickserv_password,
         .channel = config.irc_channel,
+        .no_forward_prefix = config.irc_no_forward_prefix,
         .owner_nick = config.irc_owner_nick,
     };
 }
@@ -367,12 +367,8 @@ void irc_run(Storage &storage, const AppConfig &config, const std::atomic<bool> 
                 .claims_allowed = true,
                 .owner = owner,
             };
-            const std::optional<std::string> reply = command_dispatch(command, text);
-            /* The bridge cannot carry a bot's message to Telegram, so the bot says it there itself. */
-            if (reply && config.conquister_chat_id != 0 && !config.bot_token.empty()) {
-                telegram_say(config, config.conquister_chat_id, *reply);
-            }
-            return reply;
+            /* The bridge carries this answer to Telegram, after the message that asked for it. */
+            return command_dispatch(command, text);
         }
     };
 

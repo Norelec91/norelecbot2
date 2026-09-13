@@ -173,8 +173,11 @@ std::vector<std::string> Session::handle(const Message &message, std::int64_t no
 }
 
 std::vector<std::string> Session::announce(std::string_view text) const {
+    const std::vector<std::string> parts = split_text(text, max_text_bytes - config_.no_forward_prefix.size());
     std::vector<std::string> lines;
-    say(text, lines);
+    std::ranges::transform(parts, std::back_inserter(lines), [this](const std::string &part) {
+        return line("PRIVMSG", {config_.channel}, config_.no_forward_prefix + part);
+    });
     return lines;
 }
 

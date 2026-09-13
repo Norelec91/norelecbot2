@@ -92,6 +92,9 @@ constexpr std::array settings{
     Setting{"NORELECBOT_IRC_CHANNEL", [](AppConfig &config, std::string_view value) {
         return set_text(config.irc_channel, value, {});
     }},
+    Setting{"NORELECBOT_IRC_NO_FORWARD_PREFIX", [](AppConfig &config, std::string_view value) {
+        return set_text(config.irc_no_forward_prefix, value, {});
+    }},
     Setting{"NORELECBOT_IRC_OWNER", [](AppConfig &config, std::string_view value) {
         return set_text(config.irc_owner_nick, value, {});
     }},
