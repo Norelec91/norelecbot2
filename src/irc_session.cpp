@@ -172,6 +172,12 @@ std::vector<std::string> Session::handle(const Message &message, std::int64_t no
     return lines;
 }
 
+std::vector<std::string> Session::announce(std::string_view text) const {
+    std::vector<std::string> lines;
+    say(text, lines);
+    return lines;
+}
+
 void Session::tick(std::int64_t now) {
     for (auto waiting = waiting_.begin(); waiting != waiting_.end();) {
         if (waiting->deadline > now) {

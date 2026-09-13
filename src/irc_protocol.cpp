@@ -118,16 +118,25 @@ std::vector<std::string> split_text(std::string_view text, std::size_t max_bytes
     max_bytes = std::max<std::size_t>(max_bytes, 1);
     std::vector<std::string> lines;
     while (!text.empty()) {
-        std::string_view line = text.substr(0, text.find('\n'));
-        text.remove_prefix(std::min(line.size() + 1, text.size()));
-        while (line.ends_with('\r')) {
-            line.remove_suffix(1);
+        std::string_view piece = text.substr(0, text.find('\n'));
+        text.remove_prefix(std::min(piece.size() + 1, text.size()));
+        while (piece.ends_with('\r')) {
+            piece.remove_suffix(1);
         }
-        while (!line.empty()) {
-            std::size_t cut = boundary_before(line, max_bytes);
+        if (piece.empty()) {
+            continue;
+        }
+        /* A reply is one message, as on Telegram: its lines are packed together while they fit. */
+        if (!lines.empty() && lines.back().size() + 1 + piece.size() <= max_bytes) {
+            lines.back() += ' ';
+            lines.back() += piece;
+            continue;
+        }
+        while (!piece.empty()) {
+            std::size_t cut = boundary_before(piece, max_bytes);
             std::size_t skip = 0;
-            if (cut < line.size()) {
-                if (const std::size_t space = line.rfind(' ', cut); space != std::string_view::npos &&
+            if (cut < piece.size()) {
+                if (const std::size_t space = piece.rfind(' ', cut); space != std::string_view::npos &&
                     space * 2 >= cut) {
                     cut = space;
                     skip = 1;
@@ -136,11 +145,10 @@ std::vector<std::string> split_text(std::string_view text, std::size_t max_bytes
             if (cut == 0) {
                 break;
             }
-            lines.emplace_back(line.substr(0, cut));
-            line.remove_prefix(std::min(cut + skip, line.size()));
+            lines.emplace_back(piece.substr(0, cut));
+            piece.remove_prefix(std::min(cut + skip, piece.size()));
         }
     }
     return lines;
 }
-
 }

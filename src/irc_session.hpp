@@ -36,6 +36,8 @@ public:
     [[nodiscard]] std::vector<std::string> handle(const Message &message, std::int64_t now);
     /* Gives up on the WHOIS replies that never came and forgets the stale answers. */
     void tick(std::int64_t now);
+    /* Repeats in the channel something the bot said on the other front end. */
+    [[nodiscard]] std::vector<std::string> announce(std::string_view text) const;
     [[nodiscard]] bool joined() const { return joined_; }
     [[nodiscard]] const std::string &nick() const { return nick_; }
 

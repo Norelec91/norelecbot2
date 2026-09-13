@@ -5,6 +5,7 @@
 #include "irc_protocol.hpp"
 #include "irc_session.hpp"
 #include "logging.hpp"
+#include "telegram.hpp"
 
 #include <openssl/err.h>
 #include <openssl/ssl.h>
@@ -28,6 +29,7 @@
 #include <cstring>
 #include <deque>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <thread>
@@ -45,6 +47,27 @@ constexpr int max_backoff_seconds = 60;
 constexpr std::size_t read_buffer_size = 4096;
 /* Twice the 512 byte line limit: anything longer is not a line the server could have sent. */
 constexpr std::size_t max_pending_bytes = 1024;
+/* A disconnected channel must not pile up replies for ever. */
+constexpr std::size_t max_waiting_replies = 32;
+
+/* What the bot answered on Telegram, waiting for the one IRC connection to repeat it. */
+std::mutex waiting_mutex;
+
+std::deque<std::string> &waiting_replies() {
+    static std::deque<std::string> replies;
+    return replies;
+}
+
+std::vector<std::string> take_waiting_replies() {
+    const std::lock_guard guard{waiting_mutex};
+    std::deque<std::string> &replies = waiting_replies();
+    std::vector<std::string> taken{
+        std::make_move_iterator(replies.begin()),
+        std::make_move_iterator(replies.end())
+    };
+    replies.clear();
+    return taken;
+}
 
 #ifdef _WIN32
 using Handle = SOCKET;
@@ -263,6 +286,11 @@ public:
             }
         }
         session_.tick(now);
+        if (session_.joined()) {
+            for (const std::string &said : take_waiting_replies()) {
+                queue(session_.announce(said));
+            }
+        }
         return flush();
     }
 
@@ -313,6 +341,15 @@ private:
 
 }
 
+void irc_say(std::string text) {
+    const std::lock_guard guard{waiting_mutex};
+    std::deque<std::string> &replies = waiting_replies();
+    if (replies.size() >= max_waiting_replies) {
+        replies.pop_front();
+    }
+    replies.push_back(std::move(text));
+}
+
 void irc_run(Storage &storage, const AppConfig &config, const std::atomic<bool> &stop) {
     const ContextPointer context = make_context();
     if (!context) {
@@ -330,7 +367,12 @@ void irc_run(Storage &storage, const AppConfig &config, const std::atomic<bool> 
                 .claims_allowed = true,
                 .owner = owner,
             };
-            return command_dispatch(command, text);
+            const std::optional<std::string> reply = command_dispatch(command, text);
+            /* The bridge cannot carry a bot's message to Telegram, so the bot says it there itself. */
+            if (reply && config.conquister_chat_id != 0 && !config.bot_token.empty()) {
+                telegram_say(config, config.conquister_chat_id, *reply);
+            }
+            return reply;
         }
     };
 
@@ -344,6 +386,8 @@ void irc_run(Storage &storage, const AppConfig &config, const std::atomic<bool> 
             backoff = first_backoff_seconds;
             Connection connection{ssl.get(), session};
             connection.queue(session.connected());
+            /* Ten minutes of old replies are of no use to anyone: start clean. */
+            static_cast<void>(take_waiting_replies());
             while (!stop.load(std::memory_order_relaxed) && connection.pump(seconds_now())) {
             }
             if (stop.load(std::memory_order_relaxed)) {

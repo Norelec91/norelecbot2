@@ -3,6 +3,7 @@
 #include "logging.hpp"
 #include "storage.hpp"
 #include "commands.hpp"
+#include "irc.hpp"
 
 #include <httplib.h>
 
@@ -93,13 +94,14 @@ void process_message(Storage &storage, const AppConfig &config, const Json &mess
         .claims_allowed = config.conquister_chat_id == 0 || chat == config.conquister_chat_id,
         .owner = sender_id == config.owner_id,
     };
-    if (const std::optional<std::string> reply = command_dispatch(context, text->get_ref<const std::string &>())) {
-        telegram_api(
-            config,
-            "sendMessage",
-            {{"chat_id", std::to_string(chat)}, {"text", *reply}, {"disable_web_page_preview", "true"}},
-            poll_timeout_seconds
-        );
+    const std::optional<std::string> reply = command_dispatch(context, text->get_ref<const std::string &>());
+    if (!reply) {
+        return;
+    }
+    telegram_say(config, chat, *reply);
+    /* Telegram does not hand a bot's messages to another bot, so the bridge cannot carry this one. */
+    if (config.irc_enabled && chat == config.conquister_chat_id) {
+        irc_say(*reply);
     }
 }
 
@@ -119,6 +121,15 @@ void advance_offset(const Json &update, std::int64_t &offset) {
     }
 }
 
+}
+
+void telegram_say(const AppConfig &config, std::int64_t chat_id, const std::string &text) {
+    static_cast<void>(telegram_api(
+        config,
+        "sendMessage",
+        {{"chat_id", std::to_string(chat_id)}, {"text", text}, {"disable_web_page_preview", "true"}},
+        poll_timeout_seconds
+    ));
 }
 
 void telegram_run(Storage &storage, const AppConfig &config, const std::atomic<bool> &stop) {
