@@ -126,12 +126,6 @@ std::vector<std::string> split_text(std::string_view text, std::size_t max_bytes
         if (piece.empty()) {
             continue;
         }
-        /* A reply is one message, as on Telegram: its lines are packed together while they fit. */
-        if (!lines.empty() && lines.back().size() + 1 + piece.size() <= max_bytes) {
-            lines.back() += ' ';
-            lines.back() += piece;
-            continue;
-        }
         while (!piece.empty()) {
             std::size_t cut = boundary_before(piece, max_bytes);
             std::size_t skip = 0;
