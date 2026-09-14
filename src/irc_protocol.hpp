@@ -35,7 +35,8 @@ struct Message {
 [[nodiscard]] std::string to_lower(std::string_view name);
 [[nodiscard]] bool same_name(std::string_view left, std::string_view right);
 [[nodiscard]] bool is_channel(std::string_view target);
-/* One line per message: newlines split, nothing is longer than max_bytes, no UTF-8 sequence is cut. */
+/* One message per reply: the lines are joined with a dash, and only what does not fit is split,
+   never inside a UTF-8 sequence. */
 [[nodiscard]] std::vector<std::string> split_text(std::string_view text, std::size_t max_bytes = max_text_bytes);
 
 }

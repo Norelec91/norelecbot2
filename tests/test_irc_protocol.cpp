@@ -91,24 +91,33 @@ TEST_CASE("names follow the ascii casemapping the server announces") {
     CHECK_FALSE(irc::is_channel(""));
 }
 
-TEST_CASE("a reply becomes one message per line") {
+TEST_CASE("a reply becomes one message, its lines joined by a dash") {
     CHECK(irc::split_text("").empty());
     CHECK(irc::split_text("\n\n").empty());
 
-    SUBCASE("a takeover keeps its lines apart") {
+    SUBCASE("a takeover travels in one message") {
         const auto sent = irc::split_text(
             "Norelec hai cacciato @mifaisonno da @TheConquister37.\n"
             "mifaisonno hai guadagnato 1471 palle!\n"
             "\xF0\x9F\xAA\x90 Norelec sei in @TheConquister37!\n\n"
             "To be fair, you have to have a very high IQ to understand Norelec."
         );
-        REQUIRE(sent.size() == 4);
-        CHECK(sent[0] == "Norelec hai cacciato @mifaisonno da @TheConquister37.");
-        CHECK(sent[1] == "mifaisonno hai guadagnato 1471 palle!");
-        CHECK(sent[2] == "\xF0\x9F\xAA\x90 Norelec sei in @TheConquister37!");
-        CHECK(sent[3] == "To be fair, you have to have a very high IQ to understand Norelec.");
+        REQUIRE(sent.size() == 1);
+        CHECK(sent[0] ==
+              "Norelec hai cacciato @mifaisonno da @TheConquister37. - "
+              "mifaisonno hai guadagnato 1471 palle! - "
+              "\xF0\x9F\xAA\x90 Norelec sei in @TheConquister37! - "
+              "To be fair, you have to have a very high IQ to understand Norelec.");
+        CHECK(sent[0].size() <= irc::max_text_bytes);
     }
-    CHECK(irc::split_text("una riga\r\naltra riga").size() == 2);
+    CHECK(irc::split_text("una riga\r\naltra riga")[0] == "una riga - altra riga");
+
+    SUBCASE("what does not fit starts another message") {
+        const auto lines = irc::split_text("uno\ndue\ntre", 9);
+        REQUIRE(lines.size() == 2);
+        CHECK(lines[0] == "uno - due");
+        CHECK(lines[1] == "tre");
+    }
 
     SUBCASE("a long line breaks on a space") {
         const std::string words = std::string(30, 'a') + " " + std::string(30, 'b');
@@ -140,15 +149,14 @@ TEST_CASE("a reply becomes one message per line") {
         CHECK(joined == balloons);
     }
 
-    SUBCASE("a leaderboard sends one entry per line") {
+    SUBCASE("a leaderboard fills as few messages as it can") {
         std::string board = "\xF0\x9F\x8F\x86 Classifica @TheConquister37:\n\n";
         for (int entry = 1; entry <= 10; ++entry) {
             board += std::format("{}. giocatore{} \xE2\x80\x94 12345 palle \xE2\x80\x94 1 citazione\n", entry, entry);
         }
         const auto lines = irc::split_text(board);
-        REQUIRE(lines.size() == 11);
-        CHECK(lines[0] == "\xF0\x9F\x8F\x86 Classifica @TheConquister37:");
-        CHECK(lines[1].starts_with("1. giocatore1"));
+        CHECK(lines.size() <= 3);
+        CHECK(lines[0].starts_with("\xF0\x9F\x8F\x86 Classifica @TheConquister37: - 1. giocatore1"));
         for (const std::string &line : lines) {
             CHECK(line.size() <= irc::max_text_bytes);
         }

@@ -7,6 +7,7 @@ namespace norelecbot::irc {
 namespace {
 
 constexpr std::string_view channel_prefixes = "&#";
+constexpr std::string_view line_separator = " - ";
 
 std::string_view take_until_space(std::string_view &rest) {
     const std::size_t end = rest.find(' ');
@@ -124,6 +125,11 @@ std::vector<std::string> split_text(std::string_view text, std::size_t max_bytes
             piece.remove_suffix(1);
         }
         if (piece.empty()) {
+            continue;
+        }
+        if (!lines.empty() && lines.back().size() + line_separator.size() + piece.size() <= max_bytes) {
+            lines.back() += line_separator;
+            lines.back() += piece;
             continue;
         }
         while (!piece.empty()) {

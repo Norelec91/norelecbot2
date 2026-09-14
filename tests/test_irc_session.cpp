@@ -222,22 +222,23 @@ TEST_CASE("a reply too long for one line is split") {
     REQUIRE(done);
     static_cast<void>(session.handle(*identified, 1000));
     sent = session.handle(*done, 1000);
-    REQUIRE(sent.size() == 3);
+    REQUIRE(sent.size() == 2);
     for (const std::string &line : sent) {
         CHECK(line.starts_with("PRIVMSG #regno :"));
         CHECK(line.size() <= irc::max_text_bytes + 20);
     }
-    CHECK(sent[2] == "PRIVMSG #regno :seconda riga\r\n");
+    CHECK(sent[1].ends_with(" - seconda riga\r\n"));
 }
 
 TEST_CASE("what the bot said on Telegram is repeated in the channel, marked for the bridge") {
     Fixture fixture;
     static_cast<void>(fixture.session.connected());
     const auto lines = fixture.session.announce("Norelec hai cacciato @mifaisonno da @TheConquister37.\nmifaisonno hai guadagnato 1471 palle!");
-    REQUIRE(lines.size() == 2);
-    /* Each line carries the mark that keeps the bridge from sending it back to Telegram. */
-    CHECK(lines[0] == "PRIVMSG #regno :\xE2\x80\x8BNorelec hai cacciato @mifaisonno da @TheConquister37.\r\n");
-    CHECK(lines[1] == "PRIVMSG #regno :\xE2\x80\x8Bmifaisonno hai guadagnato 1471 palle!\r\n");
+    REQUIRE(lines.size() == 1);
+    /* The message carries the mark that keeps the bridge from sending it back to Telegram. */
+    CHECK(lines[0] ==
+          "PRIVMSG #regno :\xE2\x80\x8BNorelec hai cacciato @mifaisonno da @TheConquister37. - "
+          "mifaisonno hai guadagnato 1471 palle!\r\n");
     CHECK(fixture.calls.empty());
 }
 

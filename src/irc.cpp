@@ -42,10 +42,6 @@ constexpr int connect_timeout_milliseconds = 10000;
 constexpr int handshake_timeout_seconds = 10;
 /* Short, so that what Telegram left for the channel is picked up quickly. */
 constexpr int read_timeout_microseconds = 200000;
-/* Bahamut kills a client that keeps talking without pause: a short burst is free, then one message
-   every interval. A whole answer of a few lines leaves at once; only a long queue is slowed down. */
-constexpr std::size_t burst_messages = 6;
-constexpr std::chrono::milliseconds message_interval{1500};
 constexpr int first_backoff_seconds = 5;
 constexpr int max_backoff_seconds = 60;
 constexpr std::size_t read_buffer_size = 4096;
@@ -315,28 +311,12 @@ private:
         }
     }
 
-    /* Only what the bot says in the channel is paced; the protocol answers go out at once. */
     bool flush() {
-        const auto now = std::chrono::steady_clock::now();
-        while (refilled_ + message_interval <= now && credit_ < burst_messages) {
-            refilled_ += message_interval;
-            ++credit_;
-        }
-        if (credit_ == burst_messages) {
-            refilled_ = now;
-        }
         while (!outbox_.empty()) {
-            const bool paced = outbox_.front().starts_with("PRIVMSG");
-            if (paced && credit_ == 0) {
-                return true;
-            }
             const std::string line = std::move(outbox_.front());
             outbox_.pop_front();
             if (!send_line(ssl_, line)) {
                 return false;
-            }
-            if (paced) {
-                --credit_;
             }
         }
         return true;
@@ -346,8 +326,6 @@ private:
     irc::Session &session_;
     std::string pending_;
     std::deque<std::string> outbox_;
-    std::size_t credit_ = burst_messages;
-    std::chrono::steady_clock::time_point refilled_ = std::chrono::steady_clock::now();
 };
 
 }

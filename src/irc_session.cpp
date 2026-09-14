@@ -1,6 +1,7 @@
 #include "irc_session.hpp"
 
 #include "commands.hpp"
+#include "logging.hpp"
 
 #include <algorithm>
 #include <format>
@@ -90,6 +91,10 @@ std::vector<std::string> Session::handle(const Message &message, std::int64_t no
 
     if (command == "PING") {
         lines.push_back(line("PONG", {}, message.param(0)));
+        return lines;
+    }
+    if (command == "ERROR") {
+        log_warning("IRC server closing the link: {}", message.param(0));
         return lines;
     }
     if (command == "001") {
