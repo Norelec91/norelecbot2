@@ -149,7 +149,7 @@ std::string handle_leaderboard(const CommandContext &context, std::string_view) 
     }
     std::string reply = std::format("🏆 Classifica {}:\n", conquister_place);
     for (std::size_t position = 1; const LeaderboardEntry &entry : leaderboard.entries) {
-        reply += std::format("\n{}. {} — {} palle", position++, entry.username, entry.score);
+        reply += std::format("\n{}) {} — {} palle", position++, entry.username, entry.score);
         if (entry.quotes_added > 0) {
             reply += std::format(
                 " — 📜 {} {}",
