@@ -66,6 +66,7 @@ ClaimResult conquister_claim(
         }
         if (state.current && !state.current->username.empty()) {
             const std::string holder = state.current->username;
+            outcome.previous_user_id = state.current->user_id;
             if (const auto balloon = find_entry(state.balloons, holder); balloon != state.balloons.end()) {
                 const std::int64_t attempt = balloon->second + 1;
                 if (static_cast<std::int64_t>(session.random_index(balloon_attempts)) >= attempt) {

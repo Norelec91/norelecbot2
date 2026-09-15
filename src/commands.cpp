@@ -83,6 +83,8 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
                              ).count();
     const ClaimResult result =
         conquister_claim(context.storage, context.user_id, username, now, context.config.cooldown_seconds);
+    /* A name that came from IRC must not be written as a mention: on Telegram it would tag a stranger. */
+    const std::string_view mention = result.previous_user_id != 0 ? "@" : "";
     if (result.status == ClaimStatus::cooldown) {
         return std::format("⏳ {} hai ancora {} di penalità.", username, format_wait(result.penalty_seconds));
     }
@@ -92,33 +94,41 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
     if (result.status == ClaimStatus::defended) {
         if (result.penalty_seconds > 0) {
             return std::format(
-                "🎈 {} il palloncino di @{} ha resistito e prendi {} di penalità. "
+                "🎈 {} il palloncino di {}{} ha resistito e prendi {} di penalità. "
                 "Ora il palloncino ha il {}% di probabilità di essere bucato.",
                 username,
+                mention,
                 result.previous_username,
                 format_wait(result.penalty_seconds),
                 result.next_chance
             );
         }
         return std::format(
-            "🎈 {} il palloncino di @{} ha resistito. "
+            "🎈 {} il palloncino di {}{} ha resistito. "
             "Ora il palloncino ha il {}% di probabilità di essere bucato.",
             username,
+            mention,
             result.previous_username,
             result.next_chance
         );
     }
     std::string reply;
     if (result.balloon_popped) {
-        reply = std::format("💥 {} hai bucato il palloncino di @{}!\n", username, result.previous_username);
+        reply = std::format(
+            "💥 {} hai bucato il palloncino di {}{}!\n",
+            username,
+            mention,
+            result.previous_username
+        );
     }
     if (!result.previous_username.empty()) {
         reply += std::format(
-            "{0} hai cacciato @{1} da {2}.\n{1} hai guadagnato {3} palle!\n",
+            "{0} hai cacciato {4}{1} da {2}.\n{1} hai guadagnato {3} palle!\n",
             username,
             result.previous_username,
             conquister_place,
-            result.earned
+            result.earned,
+            mention
         );
     }
     reply += std::format("🪐 {} sei in {}!", username, conquister_place);

@@ -158,3 +158,51 @@ TEST_CASE("a message can be recognised as a command without running it") {
     CHECK_FALSE(command_is_for_bot(""));
     CHECK_FALSE(command_is_for_bot("/classifica"));
 }
+
+TEST_CASE("a name that came from IRC is never written as a mention") {
+    const TestPaths paths{"mention-test"};
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{config.conquister_path, config.quotes_path};
+
+    const auto play = [&](std::int64_t user_id, std::string_view username) {
+        const CommandContext context{
+            .storage = storage,
+            .config = config,
+            .user_id = user_id,
+            .username = username,
+        };
+        return command_dispatch(context, "We @TheConquister37").value_or("<nessuna risposta>");
+    };
+
+    /* alice plays from IRC, where there are no Telegram ids. */
+    static_cast<void>(play(0, "alice"));
+    std::string reply = play(2, "bob");
+    CHECK(reply.contains("bob hai cacciato alice da @TheConquister37.\n"));
+    CHECK_FALSE(reply.contains("@alice"));
+    /* The place keeps its name. */
+    CHECK(reply.contains("🪐 bob sei in @TheConquister37!"));
+
+    /* bob played from Telegram, so his name is a mention that reaches him. */
+    reply = play(0, "carol");
+    CHECK(reply.contains("carol hai cacciato @bob da @TheConquister37.\n"));
+}
+
+TEST_CASE("the balloon replies follow the same rule") {
+    const TestPaths paths{"mention-balloon-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":0,"username":"alice","since":0},"scores":{},"quotes_added":{},)"
+             << R"("balloons":{"alice":3},"cooldowns":{}})";
+    }
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{config.conquister_path, config.quotes_path};
+
+    const CommandContext context{.storage = storage, .config = config, .user_id = 2, .username = "bob"};
+    const std::string reply = command_dispatch(context, "We @TheConquister37").value_or("<nessuna risposta>");
+    CHECK(reply.starts_with("💥 bob hai bucato il palloncino di alice!\n"));
+    CHECK_FALSE(reply.contains("@alice"));
+}

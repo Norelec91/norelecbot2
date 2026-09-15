@@ -18,6 +18,8 @@ struct ClaimResult {
     ClaimStatus status = ClaimStatus::taken;
     /* The holder who was kicked, or the one whose balloon held. */
     std::string previous_username;
+    /* Their Telegram id, zero when they played from IRC: only a Telegram name may be written as a mention. */
+    std::int64_t previous_user_id = 0;
     std::int64_t earned = 0;
     /* taken: getting in popped a balloon. defended: the percentage the next attempt will have. */
     bool balloon_popped = false;
