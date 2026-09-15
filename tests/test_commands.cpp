@@ -78,7 +78,7 @@ TEST_CASE("the bot answers the commands it knows and ignores the rest") {
         CHECK(answer.contains("bob sei in "));
         CHECK(answer.contains("!\n\ncitazione di prova"));
         answer = reply("/leaderboard");
-        CHECK(answer.contains("🏆 Classifica @TheConquister37:\n\n1) "));
+        CHECK(answer.contains("🏆 Classifica @TheConquister37\n\n1) "));
         CHECK(answer.contains(" — 📜 1 citazione\n"));
         CHECK(answer.contains("\n\n🪐 In @TheConquister37 ora: bob"));
 

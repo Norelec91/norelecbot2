@@ -106,8 +106,8 @@ TEST_CASE("only a nick identified with NickServ plays") {
         SUBCASE("the answer is cached, so the next command costs no WHOIS") {
             const auto again = fixture.feed(":Marco189!~m@host PRIVMSG #regno :!leaderboard", 1100);
             REQUIRE(again.size() == 1);
-            /* An answer born on IRC is not marked: the bridge must carry it to Telegram. */
-            CHECK(again[0] == "PRIVMSG #regno :Classifica vuota.\r\n");
+            /* Marked: the bot writes this answer in the Telegram group itself. */
+            CHECK(again[0] == "PRIVMSG #regno :\xE2\x80\x8B" "Classifica vuota.\r\n");
             REQUIRE(fixture.calls.size() == 2);
             CHECK(fixture.calls[1].text == "/leaderboard");
         }
@@ -131,7 +131,8 @@ TEST_CASE("only a nick identified with NickServ plays") {
         const auto refused = fixture.feed(":server 318 NorelecBot Marco189 :End of /WHOIS list.", 1001);
         REQUIRE(refused.size() == 1);
         CHECK(refused[0] ==
-              "PRIVMSG #regno :Marco189 devi essere registrato e identificato con NickServ per giocare.\r\n");
+              "PRIVMSG #regno :\xE2\x80\x8BMarco189 devi essere registrato e identificato con NickServ "
+              "per giocare.\r\n");
         CHECK(fixture.calls.empty());
 
         CHECK(fixture.feed(":Marco189!~m@host PRIVMSG #regno :We @TheConquister37", 1002).empty());
@@ -169,7 +170,7 @@ TEST_CASE("only a nick identified with NickServ plays") {
         CHECK(fixture.feed(":server 307 NorelecBot marco189 :has identified for this nick", 1002).empty());
         const auto released = fixture.feed(":server 318 NorelecBot MARCO189 :End of /WHOIS list.", 1002);
         CHECK(fixture.calls.size() == 2);
-        CHECK(contains(released, "PRIVMSG #regno :Classifica vuota.\r\n"));
+        CHECK(contains(released, "PRIVMSG #regno :\xE2\x80\x8B" "Classifica vuota.\r\n"));
     }
 }
 

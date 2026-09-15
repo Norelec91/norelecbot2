@@ -147,7 +147,7 @@ std::string handle_leaderboard(const CommandContext &context, std::string_view) 
             conquister_place
         );
     }
-    std::string reply = std::format("🏆 Classifica {}:\n", conquister_place);
+    std::string reply = std::format("🏆 Classifica {}\n", conquister_place);
     for (std::size_t position = 1; const LeaderboardEntry &entry : leaderboard.entries) {
         reply += std::format("\n{}) {} — {} palle", position++, entry.username, entry.score);
         if (entry.quotes_added > 0) {

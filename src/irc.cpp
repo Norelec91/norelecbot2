@@ -5,6 +5,7 @@
 #include "irc_protocol.hpp"
 #include "irc_session.hpp"
 #include "logging.hpp"
+#include "telegram.hpp"
 
 #include <openssl/err.h>
 #include <openssl/ssl.h>
@@ -49,6 +50,33 @@ constexpr std::size_t read_buffer_size = 4096;
 constexpr std::size_t max_pending_bytes = 1024;
 /* A disconnected channel must not pile up replies for ever. */
 constexpr std::size_t max_waiting_replies = 32;
+
+/* The bridge takes a moment to carry the question to Telegram; the answer waits, so it does not
+   arrive first. */
+constexpr std::chrono::milliseconds telegram_delay{1500};
+
+struct Postponed {
+    std::chrono::steady_clock::time_point due;
+    std::string text;
+};
+
+/* Only the IRC thread touches this one. */
+std::deque<Postponed> &postponed_answers() {
+    static std::deque<Postponed> answers;
+    return answers;
+}
+
+void postpone_to_telegram(std::string text) {
+    postponed_answers().push_back({std::chrono::steady_clock::now() + telegram_delay, std::move(text)});
+}
+
+void send_due_answers(const AppConfig &config) {
+    std::deque<Postponed> &answers = postponed_answers();
+    while (!answers.empty() && answers.front().due <= std::chrono::steady_clock::now()) {
+        telegram_say(config, config.conquister_chat_id, answers.front().text);
+        answers.pop_front();
+    }
+}
 
 /* What the bot answered on Telegram, waiting for the one IRC connection to repeat it. */
 std::mutex waiting_mutex;
@@ -356,8 +384,13 @@ void irc_run(Storage &storage, const AppConfig &config, const std::atomic<bool> 
                 .claims_allowed = true,
                 .owner = owner,
             };
-            /* The bridge carries this answer to Telegram, after the message that asked for it. */
-            return command_dispatch(command, text);
+            const std::optional<std::string> reply = command_dispatch(command, text);
+            /* Answered in the group by the bot itself, so it reads there as Telegram writes: whole
+               lines and working mentions, instead of the bridge's single relayed line. */
+            if (reply && config.conquister_chat_id != 0 && !config.bot_token.empty()) {
+                postpone_to_telegram(*reply);
+            }
+            return reply;
         }
     };
 
@@ -375,7 +408,9 @@ void irc_run(Storage &storage, const AppConfig &config, const std::atomic<bool> 
             connection.queue(session.connected());
             /* Ten minutes of old replies are of no use to anyone: start clean. */
             static_cast<void>(take_waiting_replies());
+            postponed_answers().clear();
             while (!stop.load(std::memory_order_relaxed) && connection.pump(seconds_now())) {
+                send_due_answers(config);
             }
             if (stop.load(std::memory_order_relaxed)) {
                 static_cast<void>(send_line(ssl.get(), "QUIT :ciao\r\n"));

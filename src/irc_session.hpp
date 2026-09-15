@@ -19,7 +19,7 @@ struct SessionConfig {
     std::string realname;
     std::string nickserv_password;
     std::string channel;
-    /* Marks what the bridge must not carry back to Telegram, where it was said first. */
+    /* Marks every line the bot says here: the bridge must not carry it, the bot writes on Telegram itself. */
     std::string no_forward_prefix;
     std::string owner_nick;
     std::int64_t registration_seconds = 300;
