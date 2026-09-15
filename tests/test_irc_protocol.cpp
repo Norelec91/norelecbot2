@@ -91,7 +91,7 @@ TEST_CASE("names follow the ascii casemapping the server announces") {
     CHECK_FALSE(irc::is_channel(""));
 }
 
-TEST_CASE("a reply becomes one message, its lines joined by a dash") {
+TEST_CASE("a reply becomes one message, its lines joined by a middle dot") {
     CHECK(irc::split_text("").empty());
     CHECK(irc::split_text("\n\n").empty());
 
@@ -104,18 +104,18 @@ TEST_CASE("a reply becomes one message, its lines joined by a dash") {
         );
         REQUIRE(sent.size() == 1);
         CHECK(sent[0] ==
-              "Norelec hai cacciato @mifaisonno da @TheConquister37. - "
-              "mifaisonno hai guadagnato 1471 palle! - "
-              "\xF0\x9F\xAA\x90 Norelec sei in @TheConquister37! - "
+              "Norelec hai cacciato @mifaisonno da @TheConquister37. \xC2\xB7 "
+              "mifaisonno hai guadagnato 1471 palle! \xC2\xB7 "
+              "\xF0\x9F\xAA\x90 Norelec sei in @TheConquister37! \xC2\xB7 "
               "To be fair, you have to have a very high IQ to understand Norelec.");
         CHECK(sent[0].size() <= irc::max_text_bytes);
     }
-    CHECK(irc::split_text("una riga\r\naltra riga")[0] == "una riga - altra riga");
+    CHECK(irc::split_text("una riga\r\naltra riga")[0] == "una riga \xC2\xB7 altra riga");
 
     SUBCASE("what does not fit starts another message") {
-        const auto lines = irc::split_text("uno\ndue\ntre", 9);
+        const auto lines = irc::split_text("uno\ndue\ntre", 10);
         REQUIRE(lines.size() == 2);
-        CHECK(lines[0] == "uno - due");
+        CHECK(lines[0] == "uno \xC2\xB7 due");
         CHECK(lines[1] == "tre");
     }
 
@@ -156,7 +156,7 @@ TEST_CASE("a reply becomes one message, its lines joined by a dash") {
         }
         const auto lines = irc::split_text(board);
         CHECK(lines.size() <= 3);
-        CHECK(lines[0].starts_with("\xF0\x9F\x8F\x86 Classifica @TheConquister37: - 1. giocatore1"));
+        CHECK(lines[0].starts_with("\xF0\x9F\x8F\x86 Classifica @TheConquister37: \xC2\xB7 1. giocatore1"));
         for (const std::string &line : lines) {
             CHECK(line.size() <= irc::max_text_bytes);
         }

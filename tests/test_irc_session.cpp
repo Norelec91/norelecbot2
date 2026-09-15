@@ -227,7 +227,7 @@ TEST_CASE("a reply too long for one line is split") {
         CHECK(line.starts_with("PRIVMSG #regno :"));
         CHECK(line.size() <= irc::max_text_bytes + 20);
     }
-    CHECK(sent[1].ends_with(" - seconda riga\r\n"));
+    CHECK(sent[1].ends_with(" \xC2\xB7 seconda riga\r\n"));
 }
 
 TEST_CASE("what the bot said on Telegram is repeated in the channel, marked for the bridge") {
@@ -237,7 +237,7 @@ TEST_CASE("what the bot said on Telegram is repeated in the channel, marked for 
     REQUIRE(lines.size() == 1);
     /* The message carries the mark that keeps the bridge from sending it back to Telegram. */
     CHECK(lines[0] ==
-          "PRIVMSG #regno :\xE2\x80\x8BNorelec hai cacciato @mifaisonno da @TheConquister37. - "
+          "PRIVMSG #regno :\xE2\x80\x8BNorelec hai cacciato @mifaisonno da @TheConquister37. \xC2\xB7 "
           "mifaisonno hai guadagnato 1471 palle!\r\n");
     CHECK(fixture.calls.empty());
 }

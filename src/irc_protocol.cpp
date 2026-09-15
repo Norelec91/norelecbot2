@@ -7,7 +7,7 @@ namespace norelecbot::irc {
 namespace {
 
 constexpr std::string_view channel_prefixes = "&#";
-constexpr std::string_view line_separator = " - ";
+constexpr std::string_view line_separator = " \u00B7 ";
 
 std::string_view take_until_space(std::string_view &rest) {
     const std::size_t end = rest.find(' ');
