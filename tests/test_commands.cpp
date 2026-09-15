@@ -63,7 +63,7 @@ TEST_CASE("the bot answers the commands it knows and ignores the rest") {
         CHECK(reply("/quotes 8") == "Nessuna citazione in collezione.");
 
         CHECK(quote_add(storage, "owner", "citazione di prova", 0).status == QuoteAddStatus::added);
-        CHECK(reply("/quotes").contains("\n1. citazione di prova"));
+        CHECK(reply("/quotes").contains("\n1) citazione di prova"));
 
         context.user_id = 1;
         context.username = "alice";

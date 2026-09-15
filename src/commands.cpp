@@ -245,7 +245,7 @@ std::string handle_quotes(const CommandContext &context, std::string_view argume
         const std::string_view shown = truncated
             ? std::string_view{quote}.substr(0, text::utf8_prefix_bytes(quote, 77))
             : std::string_view{quote};
-        reply += std::format("\n{}. {}{}", number++, shown, truncated ? "…" : "");
+        reply += std::format("\n{}) {}{}", number++, shown, truncated ? "…" : "");
     }
     if (quotes.pages > 1) {
         reply += "\n\nUsa /quotes <pagina> per le altre pagine.";
