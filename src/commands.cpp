@@ -42,6 +42,12 @@ ParsedCommand parse_command(std::string_view message) {
     return {std::move(name), text::trim(message.substr(length))};
 }
 
+std::int64_t seconds_now() {
+    return std::chrono::duration_cast<std::chrono::seconds>(
+               std::chrono::system_clock::now().time_since_epoch()
+    ).count();
+}
+
 std::string format_wait(std::int64_t seconds) {
     const std::int64_t minutes = seconds / 60;
     const std::int64_t rest = seconds % 60;
@@ -73,16 +79,28 @@ std::optional<std::string> optional_random_quote(Storage &storage) {
     }
 }
 
+/* A few players have a balloon nobody else can pop: the owner asked for it, for them alone. */
+bool is_shielded(const CommandContext &context, const std::string &username) {
+    return std::ranges::any_of(context.config.shield_users, [&username](const std::string &shielded) {
+        return text::equals_ignore_case(shielded, username);
+    });
+}
+
 std::string handle_claim(const CommandContext &context, std::string_view) {
     if (context.username.empty()) {
         return missing_username_reply();
     }
     const std::string username{context.username};
-    const std::int64_t now = std::chrono::duration_cast<std::chrono::seconds>(
-                                 std::chrono::system_clock::now().time_since_epoch()
-                             ).count();
+    const std::int64_t now = seconds_now();
     const ClaimResult result =
-        conquister_claim(context.storage, context.user_id, username, now, context.config.cooldown_seconds);
+        conquister_claim(
+            context.storage,
+            context.user_id,
+            username,
+            now,
+            context.config.cooldown_seconds,
+            is_shielded(context, username)
+        );
     /* A name that came from IRC must not be written as a mention: on Telegram it would tag a stranger. */
     const std::string_view mention = result.previous_user_id != 0 ? "@" : "";
     if (result.status == ClaimStatus::cooldown) {
@@ -92,6 +110,26 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
         return std::format("{} sei già in {}!", username, conquister_place);
     }
     if (result.status == ClaimStatus::defended) {
+        if (result.shield_seconds > 0) {
+            if (result.penalty_seconds > 0) {
+                return std::format(
+                    "🎈 {} il palloncino di {}{} ha resistito e prendi {} di penalità. "
+                    "Resiste ancora per {}.",
+                    username,
+                    mention,
+                    result.previous_username,
+                    format_wait(result.penalty_seconds),
+                    format_wait(result.shield_seconds)
+                );
+            }
+            return std::format(
+                "🎈 {} il palloncino di {}{} ha resistito. Resiste ancora per {}.",
+                username,
+                mention,
+                result.previous_username,
+                format_wait(result.shield_seconds)
+            );
+        }
         if (result.penalty_seconds > 0) {
             return std::format(
                 "🎈 {} il palloncino di {}{} ha resistito e prendi {} di penalità. "
@@ -200,8 +238,16 @@ std::string handle_buy_balloon(const CommandContext &context, std::string_view) 
     }
     const std::string username{context.username};
     const int cost = context.config.balloon_cost;
-    const BalloonResult result = balloon_buy(context.storage, username, cost);
+    const std::int64_t shield_seconds = is_shielded(context, username) ? context.config.shield_seconds : 0;
+    const BalloonResult result = balloon_buy(context.storage, username, cost, seconds_now(), shield_seconds);
     if (result.status == BalloonStatus::already_owned) {
+        if (result.shield_seconds > 0) {
+            return std::format(
+                "{} hai già un palloncino, resiste ancora per {}.",
+                username,
+                format_wait(result.shield_seconds)
+            );
+        }
         return std::format("{} hai già un palloncino.", username);
     }
     if (result.status == BalloonStatus::insufficient_score) {
@@ -210,6 +256,16 @@ std::string handle_buy_balloon(const CommandContext &context, std::string_view) 
             username,
             cost,
             result.available_score
+        );
+    }
+    if (result.shield_seconds > 0) {
+        return std::format(
+            "🎈 {} hai comprato un palloncino spendendo {} palle! "
+            "Nessuno può bucarlo: difende la tua posizione in {} per {}.",
+            username,
+            cost,
+            conquister_place,
+            format_wait(result.shield_seconds)
         );
     }
     return std::format(

@@ -47,7 +47,8 @@ ClaimResult conquister_claim(
     std::int64_t user_id,
     const std::string &username,
     std::int64_t now,
-    int cooldown_seconds
+    int cooldown_seconds,
+    bool ignores_shield
 ) {
     const ClaimResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
@@ -67,6 +68,22 @@ ClaimResult conquister_claim(
         if (state.current && !state.current->username.empty()) {
             const std::string holder = state.current->username;
             outcome.previous_user_id = state.current->user_id;
+            if (const auto shield = find_entry(state.shields, holder); shield != state.shields.end()) {
+                if (shield->second > now && ignores_shield) {
+                    state.shields.erase(holder);
+                    outcome.balloon_popped = true;
+                } else if (shield->second > now) {
+                    if (cooldown_seconds > 0) {
+                        state.cooldowns[username] = now + cooldown_seconds;
+                        outcome.penalty_seconds = cooldown_seconds;
+                    }
+                    outcome.status = ClaimStatus::defended;
+                    outcome.previous_username = holder;
+                    outcome.shield_seconds = shield->second - now;
+                    return outcome;
+                }
+                state.shields.erase(holder);
+            }
             if (const auto balloon = find_entry(state.balloons, holder); balloon != state.balloons.end()) {
                 const std::int64_t attempt = balloon->second + 1;
                 if (static_cast<std::int64_t>(session.random_index(balloon_attempts)) >= attempt) {
@@ -109,11 +126,12 @@ ClaimResult conquister_claim(
         break;
     case ClaimStatus::defended:
         log_info(
-            "claim defended user={} holder={} next_chance={} penalty={}",
+            "claim defended user={} holder={} next_chance={} penalty={} shield={}",
             username,
             result.previous_username,
             result.next_chance,
-            result.penalty_seconds
+            result.penalty_seconds,
+            result.shield_seconds
         );
         break;
     case ClaimStatus::cooldown:
@@ -176,10 +194,22 @@ std::optional<ConquisterUser> conquister_user(Storage &storage, std::string_view
     });
 }
 
-BalloonResult balloon_buy(Storage &storage, const std::string &username, int cost) {
+BalloonResult balloon_buy(
+    Storage &storage,
+    const std::string &username,
+    int cost,
+    std::int64_t now,
+    std::int64_t shield_seconds
+) {
     const BalloonResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         const std::int64_t score = counter(state.scores, username);
+        if (const auto shield = find_entry(state.shields, username); shield != state.shields.end()) {
+            if (shield->second > now) {
+                return BalloonResult{BalloonStatus::already_owned, score, shield->second - now};
+            }
+            state.shields.erase(username);
+        }
         if (find_entry(state.balloons, username) != state.balloons.end()) {
             return BalloonResult{BalloonStatus::already_owned, score};
         }
@@ -187,12 +217,22 @@ BalloonResult balloon_buy(Storage &storage, const std::string &username, int cos
             return BalloonResult{BalloonStatus::insufficient_score, score};
         }
         state.scores[username] = score - cost;
-        state.balloons[username] = 0;
-        return BalloonResult{BalloonStatus::bought, score - cost};
+        if (shield_seconds > 0) {
+            state.shields[username] = now + shield_seconds;
+        } else {
+            state.balloons[username] = 0;
+        }
+        return BalloonResult{BalloonStatus::bought, score - cost, shield_seconds};
     });
 
     if (result.status == BalloonStatus::bought) {
-        log_info("balloon bought user={} cost={} left={}", username, cost, result.available_score);
+        log_info(
+            "balloon bought user={} cost={} left={} shield={}",
+            username,
+            cost,
+            result.available_score,
+            result.shield_seconds
+        );
     }
     return result;
 }

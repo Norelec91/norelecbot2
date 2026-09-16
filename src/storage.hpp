@@ -43,6 +43,8 @@ struct ConquisterState {
     Counters balloons;
     /* Users mapped to the instant their claim penalty expires. */
     Counters cooldowns;
+    /* Owners of a balloon that no attempt can pop, mapped to the instant it deflates. */
+    Counters shields;
 
     bool operator==(const ConquisterState &) const = default;
 };

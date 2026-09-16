@@ -29,6 +29,19 @@ bool set_number(
     return true;
 }
 
+/* A list of names, separated by commas or spaces. */
+std::vector<std::string> split_names(std::string_view value) {
+    std::vector<std::string> names;
+    while (!value.empty()) {
+        const std::size_t end = std::min(value.find_first_of(", \t"), value.size());
+        if (const std::string_view name = text::trim(value.substr(0, end)); !name.empty()) {
+            names.emplace_back(name);
+        }
+        value.remove_prefix(std::min(end + 1, value.size()));
+    }
+    return names;
+}
+
 bool set_text(std::string &target, std::string_view value, std::string_view fallback) {
     target = value.empty() ? fallback : value;
     return true;
@@ -60,6 +73,13 @@ constexpr std::array settings{
     }},
     Setting{"NORELECBOT_COOLDOWN_SECONDS", [](AppConfig &config, std::string_view value) {
         return set_number(config.cooldown_seconds, value, AppConfig::default_cooldown_seconds, 0);
+    }},
+    Setting{"NORELECBOT_SHIELD_USERS", [](AppConfig &config, std::string_view value) {
+        config.shield_users = split_names(value);
+        return true;
+    }},
+    Setting{"NORELECBOT_SHIELD_SECONDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.shield_seconds, value, AppConfig::default_shield_seconds, 0);
     }},
     Setting{"NORELECBOT_CONQUISTER_CHAT_ID", [](AppConfig &config, std::string_view value) {
         return set_number(config.conquister_chat_id, value, std::int64_t{0});

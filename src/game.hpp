@@ -26,6 +26,8 @@ struct ClaimResult {
     int next_chance = 0;
     /* cooldown: seconds still to wait. defended: the penalty just handed out. */
     std::int64_t penalty_seconds = 0;
+    /* defended: how long a balloon no attempt can pop still holds, zero for an ordinary one. */
+    std::int64_t shield_seconds = 0;
 };
 
 enum class BalloonStatus { bought, already_owned, insufficient_score };
@@ -33,6 +35,8 @@ enum class BalloonStatus { bought, already_owned, insufficient_score };
 struct BalloonResult {
     BalloonStatus status = BalloonStatus::bought;
     std::int64_t available_score = 0;
+    /* How long the balloon just bought cannot be popped, zero for an ordinary one. */
+    std::int64_t shield_seconds = 0;
 };
 
 struct LeaderboardEntry {
@@ -71,19 +75,29 @@ struct QuotePage {
 };
 
 /* A failed balloon attempt costs the attacker cooldown_seconds without a claim; 0 disables the penalty. */
+/* A player who ignores shields pops one on his first attempt, as the owner asked for those two. */
 [[nodiscard]] ClaimResult conquister_claim(
     Storage &storage,
     std::int64_t user_id,
     const std::string &username,
     std::int64_t now,
-    int cooldown_seconds
+    int cooldown_seconds,
+    bool ignores_shield
 );
 /* limit 0 returns every entry. */
 [[nodiscard]] Leaderboard conquister_leaderboard(Storage &storage, std::size_t limit);
 /* Case-insensitive lookup; rank is 0 when the user has no score yet. */
 [[nodiscard]] std::optional<ConquisterUser> conquister_user(Storage &storage, std::string_view username);
 /* One balloon per user: it survives 4 attempts at most, then has to be bought again. */
-[[nodiscard]] BalloonResult balloon_buy(Storage &storage, const std::string &username, int cost);
+/* With shield_seconds the balloon cannot be popped until it deflates, instead of lasting until an
+   attempt pops it. */
+[[nodiscard]] BalloonResult balloon_buy(
+    Storage &storage,
+    const std::string &username,
+    int cost,
+    std::int64_t now,
+    std::int64_t shield_seconds
+);
 
 [[nodiscard]] QuoteAddResult quote_add(
     Storage &storage,

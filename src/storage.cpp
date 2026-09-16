@@ -80,6 +80,7 @@ ConquisterState parse_state(const Json &json) {
         parse_counters(json, "quotes_added"),
         parse_counters(json, "balloons"),
         parse_counters(json, "cooldowns"),
+        parse_counters(json, "shields"),
     };
 }
 
@@ -98,6 +99,7 @@ Json state_to_json(const ConquisterState &state) {
         {"quotes_added", state.quotes_added},
         {"balloons", state.balloons},
         {"cooldowns", state.cooldowns},
+        {"shields", state.shields},
     };
 }
 
