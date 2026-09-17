@@ -35,6 +35,20 @@ struct Holder {
 /* Usernames in file order. */
 using Counters = nlohmann::ordered_map<std::string, std::int64_t>;
 
+/* A player away from home, robbing another one. */
+struct Raid {
+    std::string raider;
+    std::string target;
+    /* When the raider reaches the target, and when he is back home. */
+    std::int64_t arrive = 0;
+    std::int64_t back = 0;
+    bool arrived = false;
+    /* What he is carrying home, set when he arrives. */
+    std::int64_t loot = 0;
+
+    bool operator==(const Raid &) const = default;
+};
+
 struct ConquisterState {
     std::optional<Holder> current;
     Counters scores;
@@ -47,6 +61,12 @@ struct ConquisterState {
     Counters shields;
     /* Users mapped to the multiplier their next hold earns, until someone takes the place from them. */
     Counters boosts;
+    /* Where each player lives: an id of ours, drawn once, which spells out a point on the map. */
+    Counters ids;
+    /* Players known to be on Telegram, mapped to their id there, so a message can reach them. */
+    Counters telegram_ids;
+    /* The raids under way, in the order they left. */
+    std::vector<Raid> raids;
 
     bool operator==(const ConquisterState &) const = default;
 };

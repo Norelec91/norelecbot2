@@ -60,6 +60,7 @@ set(CORE_SOURCES
     src/rest_routes.cpp
     src/text.cpp
     src/zodiac.cpp
+    src/position.cpp
 )
 
 add_library(norelecbot_core STATIC ${CORE_SOURCES})
@@ -70,6 +71,7 @@ add_executable(norelecbot
     src/main.cpp
     src/telegram.cpp
     src/irc.cpp
+    src/raids.cpp
     src/http_server.cpp
 )
 target_link_libraries(norelecbot PRIVATE norelecbot_core httplib::httplib OpenSSL::SSL OpenSSL::Crypto)
@@ -83,7 +85,7 @@ endif()
 include(CTest)
 if(BUILD_TESTING)
     find_package(doctest REQUIRED)
-    foreach(test config services commands rest-routes text zodiac irc-protocol irc-session)
+    foreach(test config services commands rest-routes text zodiac position irc-protocol irc-session)
         string(REPLACE "-" "_" source "${test}")
         add_executable(test-${test} tests/test_${source}.cpp)
         target_link_libraries(test-${test} PRIVATE norelecbot_core doctest::doctest)

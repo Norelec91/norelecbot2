@@ -31,6 +31,16 @@ struct ParsedCommand {
     std::string_view argument;
 };
 
+/* The name in "We @someone", or nothing when the message is not a raid. */
+std::string_view raid_target(std::string_view message) {
+    if (!message.starts_with(raid_trigger) || message == conquister_trigger) {
+        return {};
+    }
+    const std::string_view target = message.substr(raid_trigger.size());
+    const bool one_name = !target.empty() && target.find_first_of(" \t\r\n@") == std::string_view::npos;
+    return one_name ? target : std::string_view{};
+}
+
 ParsedCommand parse_command(std::string_view message) {
     const std::size_t length = std::min(message.find_first_of(" \t\r\n"), message.size());
     std::string name{message.substr(0, length)};
@@ -124,6 +134,40 @@ std::string failed_attempt_toll(const ClaimResult &result) {
         return std::format(" e prendi {} di penalità", format_wait(result.penalty_seconds));
     }
     return {};
+}
+
+RaidRules raid_rules(const CommandContext &context) {
+    return {
+        .travel_divisor = context.config.travel_divisor,
+        .loot_share = context.config.raid_share,
+        .attack_cost = context.config.attack_cost,
+        .signs = context.config.zodiac_signs,
+    };
+}
+
+std::string handle_raid(const CommandContext &context, std::string_view target) {
+    if (context.username.empty()) {
+        return missing_username_reply();
+    }
+    const std::string username{context.username};
+    const RaidResult result =
+        raid_start(context.storage, context.user_id, username, target, seconds_now(), raid_rules(context));
+    switch (result.status) {
+    case RaidStatus::already_travelling:
+        return std::format("🐎 {} sei già in viaggio, torni tra {}.", username, format_wait(result.seconds));
+    case RaidStatus::unknown_target:
+        return std::format("🐎 {} non conosco nessun giocatore di nome {}.", username, target);
+    case RaidStatus::oneself:
+        return std::format("🐎 {} a casa tua ci sei già.", username);
+    case RaidStatus::started:
+        break;
+    }
+    return std::format(
+        "🐎 {} parti per la casa di {}: arrivi tra {}. La tua base resta scoperta.",
+        username,
+        result.target,
+        format_wait(result.seconds)
+    );
 }
 
 std::string handle_claim(const CommandContext &context, std::string_view) {
@@ -412,8 +456,55 @@ const CommandDefinition *find_command(std::string_view name) {
 
 bool command_is_for_bot(std::string_view text) {
     const std::string_view message = text::trim(text);
-    return message == conquister_trigger ||
+    return message == conquister_trigger || !raid_target(message).empty() ||
            (!message.empty() && find_command(parse_command(message).name) != nullptr);
+}
+
+std::string raid_event_reply(const RaidEvent &event, const zodiac::Overrides &signs) {
+    const std::string_view mention = event.target_on_telegram ? "@" : "";
+    if (event.kind == RaidEvent::Kind::returned) {
+        if (event.loot > 0) {
+            return std::format("🏠 {} sei tornato alla tua base con {} palle.", event.raider, event.loot);
+        }
+        return std::format("🏠 {} sei tornato alla tua base a mani vuote.", event.raider);
+    }
+    if (event.kind == RaidEvent::Kind::defended) {
+        return std::format(
+            "🎈 {} il palloncino di {}{} ha resistito{}. Torni a mani vuote tra {}.",
+            event.raider,
+            mention,
+            event.target,
+            event.cost > 0 ? std::format(" e ti costa {} palle", event.cost) : "",
+            format_wait(event.seconds)
+        );
+    }
+    std::string reply = std::format(
+        "💰 {} hai rubato {} palle a {}{}",
+        event.raider,
+        event.loot,
+        mention,
+        event.target
+    );
+    if (event.undefended) {
+        reply += ", che era fuori casa";
+    } else if (event.balloon_popped) {
+        reply += ", bucandogli il palloncino";
+    }
+    if (event.raider_percent != event.target_percent) {
+        const zodiac::Sign raider = zodiac::sign_of(event.raider, signs);
+        const zodiac::Sign target = zodiac::sign_of(event.target, signs);
+        reply += std::format(
+            " ({} {} contro {} {}: {}/{})",
+            raider.symbol,
+            raider.name,
+            target.symbol,
+            target.name,
+            event.raider_percent,
+            event.target_percent
+        );
+    }
+    reply += std::format("! Torni a casa tra {}.", format_wait(event.seconds));
+    return reply;
 }
 
 std::optional<std::string> command_dispatch(const CommandContext &context, std::string_view text) {
@@ -424,6 +515,12 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
                 return std::nullopt;
             }
             return handle_claim(context, {});
+        }
+        if (const std::string_view target = raid_target(message); !target.empty()) {
+            if (!context.claims_allowed) {
+                return std::nullopt;
+            }
+            return handle_raid(context, target);
         }
         if (message.empty()) {
             return std::nullopt;

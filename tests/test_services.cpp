@@ -2,6 +2,7 @@
 
 #include "game.hpp"
 #include "storage.hpp"
+#include "position.hpp"
 #include "zodiac.hpp"
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
@@ -353,4 +354,163 @@ TEST_CASE("nobody is charged more than they have") {
         conquister_claim(storage, 2, "bob", 20, ClaimRules{.cooldown_seconds = 0, .attack_cost = 100, .ignores_shield = false, .signs = {}});
     CHECK(second.attack_cost == 0);
     CHECK(conquister_user(storage, "bob")->score == 0);
+}
+
+namespace {
+
+/* Far enough apart that every ride is the shortest one, so the tests do not depend on where ids land. */
+RaidRules quick_rides() {
+    return RaidRules{.travel_divisor = 1000000, .loot_share = 4, .attack_cost = 100, .signs = {}};
+}
+
+}
+
+TEST_CASE("a raid takes a quarter of what the target has, and carries it home") {
+    const TestPaths paths{"raid-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":1000,"bob":40},"quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+
+    const RaidResult start = raid_start(storage, 7, "bob", "ALICE", 0, quick_rides());
+    CHECK(start.status == RaidStatus::started);
+    CHECK(start.target == "alice");
+    CHECK(start.seconds == position::shortest_travel);
+
+    CHECK(raid_start(storage, 7, "bob", "alice", 1, quick_rides()).status == RaidStatus::already_travelling);
+    CHECK(raid_start(storage, 0, "carol", "carol", 1, quick_rides()).status == RaidStatus::oneself);
+    CHECK(raid_start(storage, 0, "carol", "nessuno", 1, quick_rides()).status == RaidStatus::unknown_target);
+    CHECK(raid_due(storage, 4, quick_rides()).empty());
+
+    const std::vector<RaidEvent> arrival = raid_due(storage, 5, quick_rides());
+    REQUIRE(arrival.size() == 1);
+    CHECK(arrival[0].kind == RaidEvent::Kind::stolen);
+    CHECK(arrival[0].raider == "bob");
+    CHECK(arrival[0].target == "alice");
+    const std::int64_t loot =
+        250 * zodiac::percent_for("bob", 5) / zodiac::percent_for("alice", 5);
+    CHECK(arrival[0].loot == loot);
+    /* alice has never written to the bot from Telegram, so her name carries no mention. */
+    CHECK_FALSE(arrival[0].target_on_telegram);
+    /* Taken from the target at once, handed over only at the end of the ride. */
+    CHECK(conquister_user(storage, "alice")->score == 1000 - loot);
+    CHECK(conquister_user(storage, "bob")->score == 40);
+
+    CHECK(raid_due(storage, 9, quick_rides()).empty());
+    const std::vector<RaidEvent> home = raid_due(storage, 10, quick_rides());
+    REQUIRE(home.size() == 1);
+    CHECK(home[0].kind == RaidEvent::Kind::returned);
+    CHECK(home[0].loot == loot);
+    CHECK(conquister_user(storage, "bob")->score == 40 + loot);
+    /* Home again, so he can leave again. */
+    CHECK(raid_start(storage, 7, "bob", "alice", 11, quick_rides()).status == RaidStatus::started);
+}
+
+TEST_CASE("a balloon turns a raid back") {
+    const TestPaths paths{"raid-balloon-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":1000,"bob":500},"quotes_added":{},)"
+             << R"("balloons":{"alice":3}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+
+    /* The fourth attempt pops it for certain, so this raid gets through. */
+    static_cast<void>(raid_start(storage, 0, "bob", "alice", 0, quick_rides()));
+    const std::vector<RaidEvent> arrival = raid_due(storage, 5, quick_rides());
+    REQUIRE(arrival.size() == 1);
+    CHECK(arrival[0].kind == RaidEvent::Kind::stolen);
+    CHECK(arrival[0].balloon_popped);
+    CHECK(arrival[0].loot > 0);
+
+    SUBCASE("a fresh balloon can send him home empty handed") {
+        static_cast<void>(raid_due(storage, 10, quick_rides()));
+        CHECK(balloon_buy(storage, "alice", 0, 10, 0).status == BalloonStatus::bought);
+        static_cast<void>(raid_start(storage, 0, "bob", "alice", 11, quick_rides()));
+        const std::vector<RaidEvent> second = raid_due(storage, 16, quick_rides());
+        REQUIRE(second.size() == 1);
+        if (second[0].kind == RaidEvent::Kind::defended) {
+            CHECK(second[0].cost == 100);
+            CHECK(second[0].loot == 0);
+            const std::vector<RaidEvent> back = raid_due(storage, 21, quick_rides());
+            REQUIRE(back.size() == 1);
+            CHECK(back[0].kind == RaidEvent::Kind::returned);
+            CHECK(back[0].loot == 0);
+        } else {
+            CHECK(second[0].balloon_popped);
+        }
+    }
+}
+
+TEST_CASE("an empty house has no defences") {
+    const TestPaths paths{"raid-away-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":1,"username":"alice","since":0},"scores":{"alice":1000,"bob":0,)"
+             << R"("carol":800},"quotes_added":{},"balloons":{"alice":0}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+
+    /* alice leaves to rob carol, so her own balloon guards nothing. */
+    static_cast<void>(raid_start(storage, 0, "alice", "carol", 0, quick_rides()));
+    static_cast<void>(raid_start(storage, 0, "bob", "alice", 0, quick_rides()));
+
+    const std::vector<RaidEvent> arrivals = raid_due(storage, 5, quick_rides());
+    REQUIRE(arrivals.size() == 2);
+    for (const RaidEvent &event : arrivals) {
+        CHECK(event.kind == RaidEvent::Kind::stolen);
+        if (event.raider == "bob") {
+            CHECK(event.undefended);
+            CHECK_FALSE(event.balloon_popped);
+        }
+    }
+    /* The balloon is still hers, it simply was not at home either. */
+    CHECK(balloon_buy(storage, "alice", 0, 5, 0).status == BalloonStatus::already_owned);
+}
+
+TEST_CASE("the place of someone away is taken without a roll") {
+    const TestPaths paths{"raid-claim-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":1,"username":"alice","since":0},"scores":{"alice":500,"carol":10},)"
+             << R"("quotes_added":{},"balloons":{"alice":0}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+
+    static_cast<void>(raid_start(storage, 0, "alice", "carol", 0, quick_rides()));
+    const ClaimResult taken = conquister_claim(storage, 2, "bob", 1);
+    CHECK(taken.status == ClaimStatus::taken);
+    CHECK(taken.previous_username == "alice");
+    CHECK_FALSE(taken.balloon_popped);
+    CHECK(conquister_user(storage, "bob")->in_conquister);
+}
+
+TEST_CASE("an id is drawn once and stays") {
+    const TestPaths paths{"raid-id-test"};
+    std::int64_t drawn = 0;
+    {
+        Storage storage{paths.conquister, paths.quotes};
+        static_cast<void>(conquister_claim(storage, 1, "alice", 0));
+        static_cast<void>(conquister_claim(storage, 2, "bob", 10));
+        const RaidResult first = raid_start(storage, 0, "alice", "bob", 20, quick_rides());
+        CHECK(first.status == RaidStatus::started);
+        drawn = first.seconds;
+    }
+
+    const Json state = read_json(paths.conquister);
+    CHECK(state.at("telegram_ids").at("alice").get<std::int64_t>() == 1);
+    CHECK(state.at("telegram_ids").at("bob").get<std::int64_t>() == 2);
+    REQUIRE(state.at("ids").is_object());
+    CHECK(state.at("ids").size() == 2);
+    const std::int64_t alice = state.at("ids").at("alice").get<std::int64_t>();
+    CHECK(alice >= 0);
+    CHECK(alice < position::ids);
+    CHECK(state.at("ids").at("bob").get<std::int64_t>() != alice);
+
+    Storage reopened{paths.conquister, paths.quotes};
+    static_cast<void>(raid_due(reopened, 1000, quick_rides()));
+    const RaidResult again = raid_start(reopened, 0, "alice", "bob", 1000, quick_rides());
+    CHECK(again.seconds == drawn);
+    CHECK(read_json(paths.conquister).at("ids").at("alice").get<std::int64_t>() == alice);
 }

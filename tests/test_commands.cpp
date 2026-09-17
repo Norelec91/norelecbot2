@@ -221,3 +221,83 @@ TEST_CASE("the balloon replies follow the same rule") {
     CHECK(reply.starts_with("💥 bob hai bucato il palloncino di alice!\n"));
     CHECK_FALSE(reply.contains("@alice"));
 }
+
+TEST_CASE("We @someone sends the player out to rob them") {
+    const TestPaths paths{"raid-command-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":1000},"quotes_added":{}})";
+    }
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    config.travel_divisor = 1000000;
+    Storage storage{config.conquister_path, config.quotes_path};
+
+    CommandContext context{.storage = storage, .config = config, .user_id = 2, .username = "bob"};
+    const auto reply = [&](std::string_view text) {
+        return command_dispatch(context, text).value_or("<nessuna risposta>");
+    };
+
+    CHECK(reply("We @alice") == "🐎 bob parti per la casa di alice: arrivi tra 5 secondi. La tua base resta scoperta.");
+    CHECK(reply("We @alice") == "🐎 bob sei già in viaggio, torni tra 10 secondi.");
+    /* Another player, who is at home and can therefore get an answer of his own. */
+    context.username = "carol";
+    context.user_id = 3;
+    CHECK(reply("We @carol") == "🐎 carol a casa tua ci sei già.");
+    CHECK(reply("We @CAROL") == "🐎 carol a casa tua ci sei già.");
+    CHECK(reply("We @nessuno") == "🐎 carol non conosco nessun giocatore di nome nessuno.");
+    context.username = "bob";
+    context.user_id = 2;
+
+    /* The place is still its own move, and a message that names nobody is not one. */
+    CHECK(reply("We @TheConquister37").contains("@TheConquister37"));
+    CHECK_FALSE(command_dispatch(context, "We @").has_value());
+    CHECK_FALSE(command_dispatch(context, "We @ alice").has_value());
+    CHECK_FALSE(command_dispatch(context, "We @alice ora").has_value());
+    CHECK_FALSE(command_dispatch(context, "we @alice").has_value());
+
+    CHECK(command_is_for_bot("We @alice"));
+    CHECK_FALSE(command_is_for_bot("We @"));
+
+    context.claims_allowed = false;
+    CHECK_FALSE(command_dispatch(context, "We @alice").has_value());
+}
+
+TEST_CASE("the raids tell what happened") {
+    const zodiac::Overrides none;
+    RaidEvent event{.kind = RaidEvent::Kind::stolen, .raider = "bob", .target = "alice"};
+    event.loot = 250;
+    event.seconds = 52;
+    CHECK(raid_event_reply(event, none) == "💰 bob hai rubato 250 palle a alice! Torni a casa tra 52 secondi.");
+
+    event.target_on_telegram = true;
+    event.undefended = true;
+    CHECK(raid_event_reply(event, none) ==
+          "💰 bob hai rubato 250 palle a @alice, che era fuori casa! Torni a casa tra 52 secondi.");
+
+    event.undefended = false;
+    event.balloon_popped = true;
+    event.raider_percent = 125;
+    event.target_percent = 75;
+    CHECK(raid_event_reply(event, none).contains("bucandogli il palloncino ("));
+    CHECK(raid_event_reply(event, none).contains(": 125/75)"));
+
+    const RaidEvent defended{
+        .kind = RaidEvent::Kind::defended,
+        .raider = "bob",
+        .target = "alice",
+        .loot = 0,
+        .cost = 100,
+        .seconds = 52,
+    };
+    CHECK(raid_event_reply(defended, none) ==
+          "🎈 bob il palloncino di alice ha resistito e ti costa 100 palle. Torni a mani vuote tra 52 secondi.");
+
+    RaidEvent home{.kind = RaidEvent::Kind::returned, .raider = "bob", .target = "alice"};
+    home.loot = 250;
+    CHECK(raid_event_reply(home, none) == "🏠 bob sei tornato alla tua base con 250 palle.");
+    home.loot = 0;
+    CHECK(raid_event_reply(home, none) == "🏠 bob sei tornato alla tua base a mani vuote.");
+}
+

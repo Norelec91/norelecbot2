@@ -2,6 +2,7 @@
 #define NORELECBOT_COMMANDS_HPP
 
 #include "config.hpp"
+#include "game.hpp"
 #include "storage.hpp"
 
 #include <cstdint>
@@ -13,6 +14,8 @@ namespace norelecbot {
 
 inline constexpr std::string_view conquister_place = "@TheConquister37";
 inline constexpr std::string_view conquister_trigger = "We @TheConquister37";
+/* "We @someone" sends the player to rob them instead. */
+inline constexpr std::string_view raid_trigger = "We @";
 
 struct CommandContext {
     Storage &storage;
@@ -23,6 +26,9 @@ struct CommandContext {
     bool claims_allowed = true;
     bool owner = false;
 };
+
+/* What the bot says when a raid reaches its target or comes home. */
+[[nodiscard]] std::string raid_event_reply(const RaidEvent &event, const zodiac::Overrides &signs);
 
 /* Whether the text is a claim or a known command, without running it. */
 [[nodiscard]] bool command_is_for_bot(std::string_view text);

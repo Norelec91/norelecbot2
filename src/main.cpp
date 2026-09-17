@@ -2,6 +2,7 @@
 #include "http_server.hpp"
 #include "irc.hpp"
 #include "logging.hpp"
+#include "raids.hpp"
 #include "storage.hpp"
 #include "telegram.hpp"
 
@@ -39,6 +40,9 @@ int run() {
     int result = EXIT_SUCCESS;
     {
         const norelecbot::HttpServer http{config->api_host, config->api_port, storage};
+        const std::jthread raids{[&storage, &config] {
+            norelecbot::raids_run(storage, *config, stop_requested);
+        }};
         std::optional<std::jthread> irc;
         if (config->irc_enabled) {
             if (config->irc_server.empty() || config->irc_channel.empty()) {

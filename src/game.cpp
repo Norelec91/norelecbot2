@@ -1,6 +1,7 @@
 #include "game.hpp"
 
 #include "logging.hpp"
+#include "position.hpp"
 #include "text.hpp"
 #include "zodiac.hpp"
 
@@ -55,6 +56,55 @@ std::int64_t charge_attacker(ConquisterState &state, const std::string &username
     return charged;
 }
 
+/* Whoever is on the road has left his base, and everything in it, unguarded. */
+bool is_away(const ConquisterState &state, const std::string &username) {
+    return std::ranges::any_of(state.raids, [&username](const Raid &raid) {
+        return raid.raider == username;
+    });
+}
+
+const Raid *raid_of(const ConquisterState &state, const std::string &username) {
+    const auto found = std::ranges::find_if(state.raids, [&username](const Raid &raid) {
+        return raid.raider == username;
+    });
+    return found != state.raids.end() ? &*found : nullptr;
+}
+
+/* The id is drawn the first time the bot sees a player and never changes: it is where he lives. */
+std::int64_t player_id(StorageSession &session, ConquisterState &state, const std::string &username) {
+    if (const auto found = find_entry(state.ids, username); found != state.ids.end()) {
+        return found->second;
+    }
+    std::int64_t drawn = 0;
+    do {
+        drawn = static_cast<std::int64_t>(session.random_index(static_cast<std::size_t>(position::ids)));
+    } while (std::ranges::any_of(state.ids, [drawn](const Counters::value_type &entry) {
+        return entry.second == drawn;
+    }));
+    state.ids[username] = drawn;
+    return drawn;
+}
+
+/* Kept so that a message about this player can reach them where they play. */
+void remember_telegram(ConquisterState &state, const std::string &username, std::int64_t user_id) {
+    if (user_id != 0 && counter(state.telegram_ids, username) != user_id) {
+        state.telegram_ids[username] = user_id;
+    }
+}
+
+/* The name as it is written on file, whatever spelling the message used. */
+std::optional<std::string> known_player(const ConquisterState &state, std::string_view name) {
+    for (const Counters *counters : {&state.scores, &state.quotes_added, &state.ids}) {
+        if (const Counters::value_type *found = find_ignore_case(*counters, name); found != nullptr) {
+            return found->first;
+        }
+    }
+    if (state.current && text::equals_ignore_case(state.current->username, name)) {
+        return state.current->username;
+    }
+    return std::nullopt;
+}
+
 }
 
 ClaimResult conquister_claim(
@@ -66,6 +116,7 @@ ClaimResult conquister_claim(
 ) {
     const ClaimResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
+        remember_telegram(state, username, user_id);
         ClaimResult outcome;
         if (const auto penalty = find_entry(state.cooldowns, username); penalty != state.cooldowns.end()) {
             if (penalty->second > now) {
@@ -82,7 +133,8 @@ ClaimResult conquister_claim(
         if (state.current && !state.current->username.empty()) {
             const std::string holder = state.current->username;
             outcome.previous_user_id = state.current->user_id;
-            if (const auto shield = find_entry(state.shields, holder); shield != state.shields.end()) {
+            const bool guarded = !is_away(state, holder);
+            if (const auto shield = find_entry(state.shields, holder); guarded && shield != state.shields.end()) {
                 if (shield->second > now && rules.ignores_shield) {
                     state.shields.erase(holder);
                     outcome.balloon_popped = true;
@@ -99,7 +151,7 @@ ClaimResult conquister_claim(
                 }
                 state.shields.erase(holder);
             }
-            if (const auto balloon = find_entry(state.balloons, holder); balloon != state.balloons.end()) {
+            if (const auto balloon = find_entry(state.balloons, holder); guarded && balloon != state.balloons.end()) {
                 const std::int64_t attempt = balloon->second + 1;
                 if (static_cast<std::int64_t>(session.random_index(balloon_attempts)) >= attempt) {
                     balloon->second = attempt;
@@ -268,6 +320,136 @@ BalloonResult balloon_buy(
         );
     }
     return result;
+}
+
+RaidResult raid_start(
+    Storage &storage,
+    std::int64_t user_id,
+    const std::string &username,
+    std::string_view target,
+    std::int64_t now,
+    const RaidRules &rules
+) {
+    const RaidResult result = storage.transaction([&](StorageSession &session) {
+        ConquisterState &state = session.state();
+        remember_telegram(state, username, user_id);
+        RaidResult outcome;
+        if (const Raid *travelling = raid_of(state, username); travelling != nullptr) {
+            outcome.status = RaidStatus::already_travelling;
+            outcome.seconds = std::max<std::int64_t>(travelling->back - now, 0);
+            return outcome;
+        }
+        if (text::equals_ignore_case(username, target)) {
+            outcome.status = RaidStatus::oneself;
+            return outcome;
+        }
+        const std::optional<std::string> known = known_player(state, target);
+        if (!known) {
+            outcome.status = RaidStatus::unknown_target;
+            return outcome;
+        }
+        outcome.target = *known;
+        const position::Point home = position::coordinates_of(player_id(session, state, username));
+        const position::Point theirs = position::coordinates_of(player_id(session, state, *known));
+        outcome.seconds = position::travel_seconds(position::distance(home, theirs), rules.travel_divisor);
+        state.raids.push_back(Raid{
+            .raider = username,
+            .target = *known,
+            .arrive = now + outcome.seconds,
+            .back = now + (2 * outcome.seconds),
+            .arrived = false,
+            .loot = 0,
+        });
+        return outcome;
+    });
+
+    if (result.status == RaidStatus::started) {
+        log_info("raid started user={} target={} travel={}", username, result.target, result.seconds);
+    }
+    return result;
+}
+
+std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRules &rules) {
+    const std::vector<RaidEvent> events = storage.transaction([&](StorageSession &session) {
+        ConquisterState &state = session.state();
+        std::vector<RaidEvent> settled;
+        for (Raid &raid : state.raids) {
+            if (!raid.arrived && now >= raid.arrive) {
+                raid.arrived = true;
+                RaidEvent event{.kind = RaidEvent::Kind::stolen, .raider = raid.raider, .target = raid.target};
+                event.seconds = std::max<std::int64_t>(raid.back - now, 0);
+                event.target_on_telegram = counter(state.telegram_ids, raid.target) != 0;
+                const bool guarded = !is_away(state, raid.target);
+                event.undefended = !guarded;
+                const auto shield = find_entry(state.shields, raid.target);
+                const auto balloon = find_entry(state.balloons, raid.target);
+                if (guarded && shield != state.shields.end() && shield->second > now) {
+                    event.kind = RaidEvent::Kind::defended;
+                    event.cost = charge_attacker(state, raid.raider, rules.attack_cost);
+                } else if (guarded && balloon != state.balloons.end()) {
+                    const std::int64_t attempt = balloon->second + 1;
+                    if (static_cast<std::int64_t>(session.random_index(balloon_attempts)) >= attempt) {
+                        balloon->second = attempt;
+                        event.kind = RaidEvent::Kind::defended;
+                        event.cost = charge_attacker(state, raid.raider, rules.attack_cost);
+                    } else {
+                        state.balloons.erase(raid.target);
+                        event.balloon_popped = true;
+                    }
+                }
+                if (event.kind == RaidEvent::Kind::stolen) {
+                    const std::int64_t theirs = counter(state.scores, raid.target);
+                    const std::int64_t share = rules.loot_share > 0 ? theirs / rules.loot_share : 0;
+                    event.raider_percent = zodiac::percent_for(raid.raider, now, rules.signs);
+                    event.target_percent = zodiac::percent_for(raid.target, now, rules.signs);
+                    event.loot = std::min(theirs, share * event.raider_percent / event.target_percent);
+                    if (event.loot > 0) {
+                        state.scores[raid.target] = theirs - event.loot;
+                    }
+                    raid.loot = event.loot;
+                }
+                settled.push_back(std::move(event));
+            }
+            if (raid.arrived && now >= raid.back) {
+                const std::int64_t carried = counter(state.scores, raid.raider);
+                if (raid.loot > 0) {
+                    state.scores[raid.raider] = carried + raid.loot;
+                }
+                settled.push_back(RaidEvent{
+                    .kind = RaidEvent::Kind::returned,
+                    .raider = raid.raider,
+                    .target = raid.target,
+                    .loot = raid.loot,
+                });
+            }
+        }
+        std::erase_if(state.raids, [now](const Raid &raid) { return raid.arrived && now >= raid.back; });
+        return settled;
+    });
+
+    for (const RaidEvent &event : events) {
+        switch (event.kind) {
+        case RaidEvent::Kind::stolen:
+            log_info(
+                "raid stolen user={} target={} loot={} undefended={} balloon_popped={} percent={}/{}",
+                event.raider,
+                event.target,
+                event.loot,
+                event.undefended ? 1 : 0,
+                event.balloon_popped ? 1 : 0,
+                event.raider_percent,
+                event.target_percent
+            );
+            break;
+        case RaidEvent::Kind::defended:
+            log_info("raid defended user={} target={} cost={}", event.raider, event.target, event.cost);
+            break;
+        case RaidEvent::Kind::returned:
+            log_info("raid returned user={} target={} loot={}", event.raider, event.target, event.loot);
+            break;
+        }
+    }
+    return events;
 }
 
 BoostResult boost_buy(

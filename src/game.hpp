@@ -54,6 +54,44 @@ struct BoostResult {
     std::int64_t multiplier = 0;
 };
 
+enum class RaidStatus { started, already_travelling, unknown_target, oneself };
+
+struct RaidRules {
+    /* Seconds of travel per unit of distance, and the share of the loot: a quarter by default. */
+    int travel_divisor = 1000;
+    int loot_share = 4;
+    /* What a raid the balloon turns back costs the raider. */
+    int attack_cost = 0;
+    zodiac::Overrides signs;
+};
+
+struct RaidResult {
+    RaidStatus status = RaidStatus::started;
+    /* The spelling the target has on file. */
+    std::string target;
+    /* Seconds to get there, or still to wait when already on the road. */
+    std::int64_t seconds = 0;
+};
+
+struct RaidEvent {
+    enum class Kind { stolen, defended, returned };
+
+    Kind kind = Kind::stolen;
+    std::string raider;
+    std::string target;
+    std::int64_t loot = 0;
+    std::int64_t cost = 0;
+    /* The ride home. */
+    std::int64_t seconds = 0;
+    int raider_percent = 100;
+    int target_percent = 100;
+    bool balloon_popped = false;
+    /* The target was away, so there was nothing to get past. */
+    bool undefended = false;
+    /* Whether the target is known to be on Telegram, where a mention reaches them. */
+    bool target_on_telegram = false;
+};
+
 struct LeaderboardEntry {
     std::string username;
     std::int64_t score = 0;
@@ -121,6 +159,19 @@ struct ClaimRules {
     std::int64_t now,
     std::int64_t shield_seconds
 );
+
+/* Sends a player to rob another one, if he is at home and the target is somebody the bot knows. */
+[[nodiscard]] RaidResult raid_start(
+    Storage &storage,
+    std::int64_t user_id,
+    const std::string &username,
+    std::string_view target,
+    std::int64_t now,
+    const RaidRules &rules
+);
+
+/* Settles the raids that have reached the target or come home by now. */
+[[nodiscard]] std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRules &rules);
 
 /* The multiplier is kept until the place is taken from the buyer, and rules out a balloon meanwhile. */
 [[nodiscard]] BoostResult boost_buy(

@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <iterator>
 #include <system_error>
 
 namespace norelecbot {
@@ -61,6 +62,28 @@ Counters parse_counters(const Json &state, const char *name) {
     return counters;
 }
 
+std::vector<Raid> parse_raids(const Json &state) {
+    std::vector<Raid> raids;
+    const auto section = state.find("raids");
+    if (section == state.end() || !section->is_array()) {
+        return raids;
+    }
+    for (const Json &entry : *section) {
+        if (!entry.is_object()) {
+            continue;
+        }
+        raids.push_back(Raid{
+            .raider = entry.at("raider").get<std::string>(),
+            .target = entry.at("target").get<std::string>(),
+            .arrive = integer(entry.at("arrive")),
+            .back = integer(entry.at("back")),
+            .arrived = entry.at("arrived").get<bool>(),
+            .loot = integer(entry.at("loot")),
+        });
+    }
+    return raids;
+}
+
 /* Missing sections count as empty, like in the original C version. */
 ConquisterState parse_state(const Json &json) {
     if (!json.is_object()) {
@@ -82,10 +105,24 @@ ConquisterState parse_state(const Json &json) {
         parse_counters(json, "cooldowns"),
         parse_counters(json, "shields"),
         parse_counters(json, "boosts"),
+        parse_counters(json, "ids"),
+        parse_counters(json, "telegram_ids"),
+        parse_raids(json),
     };
 }
 
 Json state_to_json(const ConquisterState &state) {
+    Json raids = Json::array();
+    std::ranges::transform(state.raids, std::back_inserter(raids), [](const Raid &raid) {
+        return Json{
+            {"raider", raid.raider},
+            {"target", raid.target},
+            {"arrive", raid.arrive},
+            {"back", raid.back},
+            {"arrived", raid.arrived},
+            {"loot", raid.loot},
+        };
+    });
     Json current = nullptr;
     if (state.current) {
         current = Json{
@@ -102,6 +139,9 @@ Json state_to_json(const ConquisterState &state) {
         {"cooldowns", state.cooldowns},
         {"shields", state.shields},
         {"boosts", state.boosts},
+        {"ids", state.ids},
+        {"telegram_ids", state.telegram_ids},
+        {"raids", std::move(raids)},
     };
 }
 
