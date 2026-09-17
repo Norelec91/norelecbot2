@@ -254,8 +254,8 @@ TEST_CASE("We @someone sends the player out to rob them") {
     /* Another player, who is at home and can therefore get an answer of his own. */
     context.username = "carol";
     context.user_id = 3;
-    CHECK(reply("We @carol") == "💀 carol hai svaligiato casa tua, ma non c'era niente da rubare.");
-    CHECK(reply("We @CAROL") == "💀 carol hai svaligiato casa tua, ma non c'era niente da rubare.");
+    CHECK(reply("We @carol") == "🏠 carol sei già a casa tua.");
+    CHECK(reply("We @CAROL") == "🏠 carol sei già a casa tua.");
     CHECK(reply("We @nessuno") == "🚀 carol non conosco nessun giocatore di nome nessuno.");
     context.username = "bob";
     context.user_id = 2;
@@ -267,12 +267,9 @@ TEST_CASE("We @someone sends the player out to rob them") {
     CHECK_FALSE(command_dispatch(context, "We @alice ora").has_value());
     CHECK_FALSE(command_dispatch(context, "we @alice").has_value());
 
-    /* A player with something to lose loses it. */
-    context.username = "alice";
-    context.user_id = 4;
-    CHECK(reply("We @alice") == "💀 alice hai svaligiato casa tua: 1000 palle bruciate, non ti resta niente.");
-    context.username = "bob";
-    context.user_id = 2;
+    /* On the road, naming yourself turns you round. */
+    CHECK(reply("We @bob") == "🚀 bob lasci perdere e torni a casa: arrivi tra 10 secondi.");
+    CHECK(reply("We @alice") == "🚀 bob sei già in viaggio, torni tra 10 secondi.");
 
     CHECK(reply("We @TheConquister37") ==
           "🚀 bob sei per strada: non puoi entrare in @TheConquister37 prima di tornare a casa, tra 10 secondi.");

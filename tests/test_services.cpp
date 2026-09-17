@@ -379,7 +379,7 @@ TEST_CASE("a raid takes a quarter of what the target has, and carries it home") 
     CHECK(start.seconds == position::shortest_travel);
 
     CHECK(raid_start(storage, 7, "bob", "alice", 1, quick_rides()).status == RaidStatus::already_travelling);
-    CHECK(raid_start(storage, 0, "carol", "carol", 1, quick_rides()).status == RaidStatus::oneself);
+    CHECK(raid_start(storage, 0, "carol", "carol", 1, quick_rides()).status == RaidStatus::home_already);
     CHECK(raid_start(storage, 0, "carol", "nessuno", 1, quick_rides()).status == RaidStatus::unknown_target);
     CHECK(raid_due(storage, 4, quick_rides()).empty());
 
@@ -528,38 +528,55 @@ TEST_CASE("whoever holds the place does not leave it") {
 
     const RaidResult refused = raid_start(storage, 1, "ALICE", "bob", 1, quick_rides());
     CHECK(refused.status == RaidStatus::holding_place);
-    /* Not even to burn her own house down. */
-    CHECK(raid_start(storage, 1, "alice", "alice", 1, quick_rides()).status == RaidStatus::holding_place);
-    CHECK(conquister_user(storage, "alice")->score == 900);
+    /* Naming herself is how she comes back down. */
+    CHECK(raid_start(storage, 1, "alice", "alice", 1, quick_rides()).status == RaidStatus::left_place);
+    CHECK(conquister_user(storage, "alice")->score >= 900);
 
     /* Out of the place, free to go. */
     static_cast<void>(conquister_claim(storage, 2, "bob", 2));
     CHECK(raid_start(storage, 1, "alice", "bob", 3, quick_rides()).status == RaidStatus::started);
 }
 
-TEST_CASE("robbing your own house burns everything in it") {
-    const TestPaths paths{"raid-oneself-test"};
+TEST_CASE("naming yourself is the way home") {
+    const TestPaths paths{"raid-home-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":null,"scores":{"alice":1000,"bob":700},"quotes_added":{}})";
     }
     Storage storage{paths.conquister, paths.quotes};
 
-    const RaidResult burnt = raid_start(storage, 0, "alice", "ALICE", 0, quick_rides());
-    CHECK(burnt.status == RaidStatus::oneself);
-    CHECK(burnt.lost == 1000);
-    CHECK(conquister_user(storage, "alice")->score == 0);
+    SUBCASE("at home it changes nothing") {
+        const RaidResult already = raid_start(storage, 0, "alice", "ALICE", 0, quick_rides());
+        CHECK(already.status == RaidStatus::home_already);
+        CHECK(conquister_user(storage, "alice")->score == 1000);
+    }
 
-    /* Nothing left, so nothing more to lose. */
-    const RaidResult again = raid_start(storage, 0, "alice", "alice", 1, quick_rides());
-    CHECK(again.status == RaidStatus::oneself);
-    CHECK(again.lost == 0);
+    SUBCASE("from the place it is instant, and the hold is cashed in") {
+        static_cast<void>(conquister_claim(storage, 1, "alice", 100));
+        const RaidResult left = raid_start(storage, 1, "alice", "alice", 400, quick_rides());
+        CHECK(left.status == RaidStatus::left_place);
+        CHECK(left.earned == 300 * zodiac::percent_for("alice", 400) / 100);
+        CHECK(conquister_user(storage, "alice")->score == 1000 + left.earned);
+        /* The place is empty now, and she can leave on a raid. */
+        CHECK_FALSE(conquister_leaderboard(storage, 10).current);
+        CHECK(raid_start(storage, 1, "alice", "bob", 401, quick_rides()).status == RaidStatus::started);
+    }
 
-    SUBCASE("on the road it costs nothing: he is told he is already out") {
-        static_cast<void>(raid_start(storage, 0, "bob", "alice", 2, quick_rides()));
-        const RaidResult away = raid_start(storage, 0, "bob", "bob", 3, quick_rides());
-        CHECK(away.status == RaidStatus::already_travelling);
-        CHECK(away.lost == 0);
+    SUBCASE("on the road it calls the raid off and takes the rest of the ride") {
+        static_cast<void>(raid_start(storage, 0, "bob", "alice", 0, quick_rides()));
+        const RaidResult back = raid_start(storage, 0, "bob", "bob", 2, quick_rides());
+        CHECK(back.status == RaidStatus::coming_home);
+        CHECK(back.seconds == 8);
+
+        /* Nothing is stolen at the hour he would have arrived. */
+        CHECK(raid_due(storage, 5, quick_rides()).empty());
+        CHECK(conquister_user(storage, "alice")->score == 1000);
+
+        const std::vector<RaidEvent> home = raid_due(storage, 10, quick_rides());
+        REQUIRE(home.size() == 1);
+        CHECK(home[0].kind == RaidEvent::Kind::returned);
+        CHECK(home[0].loot == 0);
         CHECK(conquister_user(storage, "bob")->score == 700);
     }
 }
+

@@ -56,7 +56,7 @@ struct BoostResult {
     std::int64_t multiplier = 0;
 };
 
-enum class RaidStatus { started, already_travelling, holding_place, unknown_target, oneself };
+enum class RaidStatus { started, already_travelling, holding_place, unknown_target, left_place, coming_home, home_already };
 
 struct RaidRules {
     /* Seconds of travel per unit of distance, and the share of the loot: a quarter by default. */
@@ -73,8 +73,10 @@ struct RaidResult {
     std::string target;
     /* Seconds to get there, or still to wait when already on the road. */
     std::int64_t seconds = 0;
-    /* oneself: the palle that robbing himself cost him. */
-    std::int64_t lost = 0;
+    /* left_place: what the hold he just gave up was worth, and what made it worth that. */
+    std::int64_t earned = 0;
+    std::int64_t boost_multiplier = 0;
+    int zodiac_percent = 100;
 };
 
 struct RaidEvent {
@@ -164,7 +166,9 @@ struct ClaimRules {
     std::int64_t shield_seconds
 );
 
-/* Sends a player to rob another one, if he is at home and the target is somebody the bot knows. */
+/* Sends a player to rob another one, if he is at home and the target is somebody the bot knows.
+   Naming himself sends him home instead: at once from @TheConquister37, at the end of the ride if he
+   is on the road. */
 [[nodiscard]] RaidResult raid_start(
     Storage &storage,
     std::int64_t user_id,

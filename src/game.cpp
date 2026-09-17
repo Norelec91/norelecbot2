@@ -56,6 +56,44 @@ std::int64_t charge_attacker(ConquisterState &state, const std::string &username
     return charged;
 }
 
+/* What a hold was worth: the seconds it lasted, times the boost he had bought, times the house of the
+   day. Both the boost and the hold are spent by this. */
+struct Settlement {
+    std::int64_t earned = 0;
+    std::int64_t boost_multiplier = 0;
+    int zodiac_percent = 100;
+};
+
+Settlement settle_hold(
+    ConquisterState &state,
+    const std::string &holder,
+    std::int64_t since,
+    std::int64_t now,
+    zodiac::Overrides signs
+) {
+    Settlement settled;
+    settled.earned = now > since ? now - since : 0;
+    if (const auto boost = find_entry(state.boosts, holder); boost != state.boosts.end()) {
+        settled.boost_multiplier = boost->second;
+        if (settled.earned > std::numeric_limits<std::int64_t>::max() / settled.boost_multiplier) {
+            log_error("Could not multiply the Conquister score");
+            throw StorageError("Conquister score overflow");
+        }
+        settled.earned *= settled.boost_multiplier;
+        state.boosts.erase(holder);
+    }
+    settled.zodiac_percent = zodiac::percent_for(holder, now, signs);
+    settled.earned = settled.earned / 100 * settled.zodiac_percent +
+                     settled.earned % 100 * settled.zodiac_percent / 100;
+    std::int64_t &score = state.scores[holder];
+    if (score > 0 && settled.earned > std::numeric_limits<std::int64_t>::max() - score) {
+        log_error("Could not update Conquister score");
+        throw StorageError("Conquister score overflow");
+    }
+    score += settled.earned;
+    return settled;
+}
+
 /* Whoever is on the road has left his base, and everything in it, unguarded. */
 bool is_away(const ConquisterState &state, const std::string &username) {
     return std::ranges::any_of(state.raids, [&username](const Raid &raid) {
@@ -63,7 +101,7 @@ bool is_away(const ConquisterState &state, const std::string &username) {
     });
 }
 
-const Raid *raid_of(const ConquisterState &state, const std::string &username) {
+Raid *raid_of(ConquisterState &state, const std::string &username) {
     const auto found = std::ranges::find_if(state.raids, [&username](const Raid &raid) {
         return raid.raider == username;
     });
@@ -175,25 +213,10 @@ ClaimResult conquister_claim(
                 outcome.balloon_popped = true;
             }
             outcome.previous_username = holder;
-            outcome.earned = now > state.current->since ? now - state.current->since : 0;
-            if (const auto boost = find_entry(state.boosts, holder); boost != state.boosts.end()) {
-                outcome.boost_multiplier = boost->second;
-                if (outcome.earned > std::numeric_limits<std::int64_t>::max() / outcome.boost_multiplier) {
-                    log_error("Could not multiply the Conquister score");
-                    throw StorageError("Conquister score overflow");
-                }
-                outcome.earned *= outcome.boost_multiplier;
-                state.boosts.erase(holder);
-            }
-            outcome.zodiac_percent = zodiac::percent_for(holder, now, rules.signs);
-            outcome.earned = outcome.earned / 100 * outcome.zodiac_percent +
-                             outcome.earned % 100 * outcome.zodiac_percent / 100;
-            std::int64_t &score = state.scores[outcome.previous_username];
-            if (score > 0 && outcome.earned > std::numeric_limits<std::int64_t>::max() - score) {
-                log_error("Could not update Conquister score");
-                throw StorageError("Conquister score overflow");
-            }
-            score += outcome.earned;
+            const Settlement settled = settle_hold(state, holder, state.current->since, now, rules.signs);
+            outcome.earned = settled.earned;
+            outcome.boost_multiplier = settled.boost_multiplier;
+            outcome.zodiac_percent = settled.zodiac_percent;
         }
         state.current = Holder{user_id, username, now};
         return outcome;
@@ -342,24 +365,41 @@ RaidResult raid_start(
         ConquisterState &state = session.state();
         remember_telegram(state, username, user_id);
         RaidResult outcome;
-        /* Whoever is already on the road only gets told so, his own house included. */
-        if (const Raid *travelling = raid_of(state, username); travelling != nullptr) {
+        const bool homewards = text::equals_ignore_case(username, target);
+        const bool holds_place = state.current && text::equals_ignore_case(state.current->username, username);
+        Raid *travelling = raid_of(state, username);
+        /* Naming yourself is the way home. */
+        if (homewards) {
+            if (travelling != nullptr) {
+                /* He turns his back on the raid and rides the rest of the way home. */
+                travelling->arrived = true;
+                outcome.status = RaidStatus::coming_home;
+                outcome.seconds = std::max<std::int64_t>(travelling->back - now, 0);
+                return outcome;
+            }
+            if (holds_place) {
+                const std::string holder = state.current->username;
+                const Settlement settled =
+                    settle_hold(state, holder, state.current->since, now, rules.signs);
+                state.current.reset();
+                outcome.status = RaidStatus::left_place;
+                outcome.earned = settled.earned;
+                outcome.boost_multiplier = settled.boost_multiplier;
+                outcome.zodiac_percent = settled.zodiac_percent;
+                return outcome;
+            }
+            outcome.status = RaidStatus::home_already;
+            return outcome;
+        }
+        /* Whoever is already on the road only gets told so. */
+        if (travelling != nullptr) {
             outcome.status = RaidStatus::already_travelling;
             outcome.seconds = std::max<std::int64_t>(travelling->back - now, 0);
             return outcome;
         }
         /* Whoever holds the place stays in it: leaving would be leaving it behind. */
-        if (state.current && text::equals_ignore_case(state.current->username, username)) {
+        if (holds_place) {
             outcome.status = RaidStatus::holding_place;
-            return outcome;
-        }
-        /* Robbing your own house burns what is in it. */
-        if (text::equals_ignore_case(username, target)) {
-            outcome.status = RaidStatus::oneself;
-            outcome.lost = counter(state.scores, username);
-            if (outcome.lost > 0) {
-                state.scores[username] = 0;
-            }
             return outcome;
         }
         const std::optional<std::string> known = known_player(state, target);
@@ -385,8 +425,11 @@ RaidResult raid_start(
     if (result.status == RaidStatus::started) {
         log_info("raid started user={} target={} travel={}", username, result.target, result.seconds);
     }
-    if (result.status == RaidStatus::oneself) {
-        log_info("raid on oneself user={} lost={}", username, result.lost);
+    if (result.status == RaidStatus::left_place) {
+        log_info("left the place user={} earned={}", username, result.earned);
+    }
+    if (result.status == RaidStatus::coming_home) {
+        log_info("raid called off user={} home_in={}", username, result.seconds);
     }
     return result;
 }

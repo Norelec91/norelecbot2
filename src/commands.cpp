@@ -54,21 +54,27 @@ ParsedCommand parse_command(std::string_view message) {
 }
 
 /* What made this hold worth more or less than the seconds it lasted. */
-std::string earnings_note(const CommandContext &context, const ClaimResult &result, std::int64_t now) {
+std::string hold_note(
+    const CommandContext &context,
+    const std::string &holder,
+    std::int64_t boost_multiplier,
+    int zodiac_percent,
+    std::int64_t now
+) {
     std::string note;
-    if (result.boost_multiplier > 0) {
-        note += std::format(" col boost x{}", result.boost_multiplier);
+    if (boost_multiplier > 0) {
+        note += std::format(" col boost x{}", boost_multiplier);
     }
-    if (result.zodiac_percent != 100) {
-        const zodiac::Sign sign = zodiac::sign_of(result.previous_username, context.config.zodiac_signs);
+    if (zodiac_percent != 100) {
+        const zodiac::Sign sign = zodiac::sign_of(holder, context.config.zodiac_signs);
         note += std::format(
             "{} {} {} nel giorno di {} (x{}.{:02})",
             note.empty() ? "" : " e",
             sign.symbol,
             sign.name,
             zodiac::element_name(zodiac::element_of_day(now)),
-            result.zodiac_percent / 100,
-            result.zodiac_percent % 100
+            zodiac_percent / 100,
+            zodiac_percent % 100
         );
     }
     return note;
@@ -159,15 +165,18 @@ std::string handle_raid(const CommandContext &context, std::string_view target) 
         return std::format("🚀 {} sei in {} e da lì non si parte.", username, conquister_place);
     case RaidStatus::unknown_target:
         return std::format("🚀 {} non conosco nessun giocatore di nome {}.", username, target);
-    case RaidStatus::oneself:
-        if (result.lost > 0) {
-            return std::format(
-                "💀 {} hai svaligiato casa tua: {} palle bruciate, non ti resta niente.",
-                username,
-                result.lost
-            );
-        }
-        return std::format("💀 {} hai svaligiato casa tua, ma non c'era niente da rubare.", username);
+    case RaidStatus::left_place:
+        return std::format(
+            "🏠 {} lasci {} e torni a casa: hai guadagnato {} palle{}.",
+            username,
+            conquister_place,
+            result.earned,
+            hold_note(context, username, result.boost_multiplier, result.zodiac_percent, seconds_now())
+        );
+    case RaidStatus::coming_home:
+        return std::format("🚀 {} lasci perdere e torni a casa: arrivi tra {}.", username, format_wait(result.seconds));
+    case RaidStatus::home_already:
+        return std::format("🏠 {} sei già a casa tua.", username);
     case RaidStatus::started:
         break;
     }
@@ -253,7 +262,7 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
             conquister_place,
             result.earned,
             mention,
-            earnings_note(context, result, now)
+            hold_note(context, result.previous_username, result.boost_multiplier, result.zodiac_percent, now)
         );
     }
     reply += std::format("🪐 {} sei in {}!", username, conquister_place);
