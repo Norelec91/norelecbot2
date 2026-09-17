@@ -108,6 +108,24 @@ bool is_shielded(const CommandContext &context, const std::string &username) {
     });
 }
 
+/* What a failed attempt cost the one who made it. */
+std::string failed_attempt_toll(const ClaimResult &result) {
+    if (result.attack_cost > 0 && result.penalty_seconds > 0) {
+        return std::format(
+            " e ti costa {} palle e {} di penalità",
+            result.attack_cost,
+            format_wait(result.penalty_seconds)
+        );
+    }
+    if (result.attack_cost > 0) {
+        return std::format(" e ti costa {} palle", result.attack_cost);
+    }
+    if (result.penalty_seconds > 0) {
+        return std::format(" e prendi {} di penalità", format_wait(result.penalty_seconds));
+    }
+    return {};
+}
+
 std::string handle_claim(const CommandContext &context, std::string_view) {
     if (context.username.empty()) {
         return missing_username_reply();
@@ -122,6 +140,7 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
             now,
             ClaimRules{
                 .cooldown_seconds = context.config.cooldown_seconds,
+                .attack_cost = context.config.attack_cost,
                 .ignores_shield = is_shielded(context, username),
                 .signs = context.config.zodiac_signs,
             }
@@ -135,43 +154,24 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
         return std::format("{} sei già in {}!", username, conquister_place);
     }
     if (result.status == ClaimStatus::defended) {
+        const std::string toll = failed_attempt_toll(result);
         if (result.shield_seconds > 0) {
-            if (result.penalty_seconds > 0) {
-                return std::format(
-                    "🎈 {} il palloncino di {}{} ha resistito e prendi {} di penalità. "
-                    "Resiste ancora per {}.",
-                    username,
-                    mention,
-                    result.previous_username,
-                    format_wait(result.penalty_seconds),
-                    format_wait(result.shield_seconds)
-                );
-            }
             return std::format(
-                "🎈 {} il palloncino di {}{} ha resistito. Resiste ancora per {}.",
+                "🎈 {} il palloncino di {}{} ha resistito{}. Resiste ancora per {}.",
                 username,
                 mention,
                 result.previous_username,
+                toll,
                 format_wait(result.shield_seconds)
             );
         }
-        if (result.penalty_seconds > 0) {
-            return std::format(
-                "🎈 {} il palloncino di {}{} ha resistito e prendi {} di penalità. "
-                "Ora il palloncino ha il {}% di probabilità di essere bucato.",
-                username,
-                mention,
-                result.previous_username,
-                format_wait(result.penalty_seconds),
-                result.next_chance
-            );
-        }
         return std::format(
-            "🎈 {} il palloncino di {}{} ha resistito. "
+            "🎈 {} il palloncino di {}{} ha resistito{}. "
             "Ora il palloncino ha il {}% di probabilità di essere bucato.",
             username,
             mention,
             result.previous_username,
+            toll,
             result.next_chance
         );
     }
@@ -247,7 +247,8 @@ std::string handle_add_quote(const CommandContext &context, std::string_view arg
         return std::format("Uso: /addquote <testo>. Costa {} palle.", cost);
     }
     const std::string username{context.username};
-    const std::string quote{argument};
+    /* Nobody gets tagged by a quote read out months later. */
+    const std::string quote = text::strip_mentions(argument);
     const QuoteAddResult result = quote_add(context.storage, username, quote, cost);
     if (result.status == QuoteAddStatus::insufficient_score) {
         return std::format(

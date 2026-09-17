@@ -12,6 +12,12 @@ bool is_space(char character) {
     return std::isspace(static_cast<unsigned char>(character)) != 0;
 }
 
+/* What Telegram allows in a username, which is also what makes an @ a mention. */
+bool is_name_character(char character) {
+    const auto byte = static_cast<unsigned char>(character);
+    return std::isalnum(byte) != 0 || character == '_';
+}
+
 char to_lower(char character) {
     return static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
 }
@@ -47,6 +53,27 @@ std::optional<std::int64_t> parse_int64(std::string_view text) {
         return std::nullopt;
     }
     return value;
+}
+
+std::string strip_mentions(std::string_view text) {
+    std::string stripped;
+    stripped.reserve(text.size());
+    for (std::size_t index = 0; index < text.size(); ++index) {
+        const bool starts_word = index == 0 || !is_name_character(text[index - 1]);
+        if (text[index] == '@' && starts_word) {
+            /* A whole run of them, or "@@name" would still leave "@name" behind. */
+            std::size_t name = index;
+            while (name < text.size() && text[name] == '@') {
+                ++name;
+            }
+            if (name < text.size() && is_name_character(text[name])) {
+                index = name - 1;
+                continue;
+            }
+        }
+        stripped += text[index];
+    }
+    return stripped;
 }
 
 std::size_t utf8_prefix_bytes(std::string_view text, std::size_t max_codepoints) {

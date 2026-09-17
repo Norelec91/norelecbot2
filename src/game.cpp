@@ -43,6 +43,20 @@ Counters::iterator find_entry(Counters &counters, const std::string &username) {
 
 }
 
+namespace {
+
+/* A balloon that holds costs the attacker, who cannot go below nothing. */
+std::int64_t charge_attacker(ConquisterState &state, const std::string &username, int attack_cost) {
+    const std::int64_t available = counter(state.scores, username);
+    const std::int64_t charged = std::min<std::int64_t>(attack_cost, available);
+    if (charged > 0) {
+        state.scores[username] = available - charged;
+    }
+    return charged;
+}
+
+}
+
 ClaimResult conquister_claim(
     Storage &storage,
     std::int64_t user_id,
@@ -77,6 +91,7 @@ ClaimResult conquister_claim(
                         state.cooldowns[username] = now + rules.cooldown_seconds;
                         outcome.penalty_seconds = rules.cooldown_seconds;
                     }
+                    outcome.attack_cost = charge_attacker(state, username, rules.attack_cost);
                     outcome.status = ClaimStatus::defended;
                     outcome.previous_username = holder;
                     outcome.shield_seconds = shield->second - now;
@@ -92,6 +107,7 @@ ClaimResult conquister_claim(
                         state.cooldowns[username] = now + rules.cooldown_seconds;
                         outcome.penalty_seconds = rules.cooldown_seconds;
                     }
+                    outcome.attack_cost = charge_attacker(state, username, rules.attack_cost);
                     outcome.status = ClaimStatus::defended;
                     outcome.previous_username = holder;
                     outcome.next_chance =
@@ -139,12 +155,13 @@ ClaimResult conquister_claim(
         break;
     case ClaimStatus::defended:
         log_info(
-            "claim defended user={} holder={} next_chance={} penalty={} shield={}",
+            "claim defended user={} holder={} next_chance={} penalty={} shield={} cost={}",
             username,
             result.previous_username,
             result.next_chance,
             result.penalty_seconds,
-            result.shield_seconds
+            result.shield_seconds,
+            result.attack_cost
         );
         break;
     case ClaimStatus::cooldown:

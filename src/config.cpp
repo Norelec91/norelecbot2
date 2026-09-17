@@ -74,6 +74,9 @@ constexpr std::array settings{
     Setting{"NORELECBOT_COOLDOWN_SECONDS", [](AppConfig &config, std::string_view value) {
         return set_number(config.cooldown_seconds, value, AppConfig::default_cooldown_seconds, 0);
     }},
+    Setting{"NORELECBOT_ATTACK_COST", [](AppConfig &config, std::string_view value) {
+        return set_number(config.attack_cost, value, AppConfig::default_attack_cost, 0);
+    }},
     Setting{"NORELECBOT_ZODIAC_SIGNS", [](AppConfig &config, std::string_view value) {
         std::vector<zodiac::Override> chosen;
         for (const std::string &pair : split_names(value)) {

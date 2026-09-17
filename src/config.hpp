@@ -16,6 +16,7 @@ struct AppConfig {
     static constexpr int default_quote_cost = 1000;
     static constexpr int default_balloon_cost = 1000;
     static constexpr int default_cooldown_seconds = 300;
+    static constexpr int default_attack_cost = 100;
     static constexpr int default_shield_seconds = 3600;
     static constexpr int default_boost_cost = 1500;
     static constexpr int default_boost_multiplier = 3;
@@ -32,6 +33,7 @@ struct AppConfig {
     int quote_cost = default_quote_cost;
     int balloon_cost = default_balloon_cost;
     int cooldown_seconds = default_cooldown_seconds;
+    int attack_cost = default_attack_cost;
     int boost_cost = default_boost_cost;
     int boost_multiplier = default_boost_multiplier;
     /* Players whose real sign the owner knows, instead of the one their name gives. */

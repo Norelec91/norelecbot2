@@ -33,3 +33,19 @@ TEST_CASE("utf8_prefix_bytes counts codepoints, not bytes") {
     CHECK(text::utf8_prefix_bytes("citt\xC3\xA0", 4) == 4);
     CHECK(text::utf8_prefix_bytes("\xC3", 1) == 1);
 }
+
+TEST_CASE("a quote does not tag anyone") {
+    CHECK(text::strip_mentions("/dai @Decibelg pel top") == "/dai Decibelg pel top");
+    CHECK(text::strip_mentions("We @TheConquister37") == "We TheConquister37");
+    CHECK(text::strip_mentions("@ultimaora Messer Balocco") == "ultimaora Messer Balocco");
+    CHECK(text::strip_mentions("due @tizio e @caio_91 insieme") == "due tizio e caio_91 insieme");
+
+    /* An @ that names nobody stays where it is. */
+    CHECK(text::strip_mentions("norelec@gmail.example") == "norelec@gmail.example");
+    CHECK(text::strip_mentions("prezzo @ 5 euro") == "prezzo @ 5 euro");
+    CHECK(text::strip_mentions("finisce con una @") == "finisce con una @");
+    CHECK(text::strip_mentions("@@doppia") == "doppia");
+    CHECK(text::strip_mentions("") == "");
+    CHECK(text::strip_mentions("niente da togliere") == "niente da togliere");
+}
+
