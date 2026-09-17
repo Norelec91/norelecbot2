@@ -1,6 +1,8 @@
 #ifndef NORELECBOT_CONFIG_HPP
 #define NORELECBOT_CONFIG_HPP
 
+#include "zodiac.hpp"
+
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -32,6 +34,8 @@ struct AppConfig {
     int cooldown_seconds = default_cooldown_seconds;
     int boost_cost = default_boost_cost;
     int boost_multiplier = default_boost_multiplier;
+    /* Players whose real sign the owner knows, instead of the one their name gives. */
+    std::vector<zodiac::Override> zodiac_signs;
     /* The players whose balloon cannot be popped, except by each other, and how long it holds. */
     std::vector<std::string> shield_users;
     int shield_seconds = default_shield_seconds;

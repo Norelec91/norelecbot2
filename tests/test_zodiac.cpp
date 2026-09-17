@@ -5,6 +5,7 @@
 
 #include <set>
 #include <string>
+#include <vector>
 
 using namespace norelecbot;
 
@@ -24,6 +25,22 @@ TEST_CASE("a name always falls on the same sign") {
         }
         CHECK(found.size() == 12);
     }
+}
+
+TEST_CASE("a sign can be set by hand") {
+    const std::vector<zodiac::Override> chosen{{"Giangiui", "vergine"}};
+    CHECK(zodiac::sign_of("Giangiui").name == "leone");
+    CHECK(zodiac::sign_of("Giangiui", chosen).name == "vergine");
+    CHECK(zodiac::sign_of("Giangiui", chosen).symbol == "♍");
+    CHECK(zodiac::sign_of("giangiui", chosen).name == "vergine");
+    /* Everyone else keeps the sign of their name. */
+    CHECK(zodiac::sign_of("Norelec", chosen).name == zodiac::sign_of("Norelec").name);
+
+    CHECK(zodiac::sign_named("VERGINE"));
+    CHECK_FALSE(zodiac::sign_named("ofiuco"));
+    /* A sign nobody knows is ignored, the name decides. */
+    const std::vector<zodiac::Override> wrong{{"Giangiui", "ofiuco"}};
+    CHECK(zodiac::sign_of("Giangiui", wrong).name == "leone");
 }
 
 TEST_CASE("the house turns every day") {

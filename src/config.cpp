@@ -74,6 +74,22 @@ constexpr std::array settings{
     Setting{"NORELECBOT_COOLDOWN_SECONDS", [](AppConfig &config, std::string_view value) {
         return set_number(config.cooldown_seconds, value, AppConfig::default_cooldown_seconds, 0);
     }},
+    Setting{"NORELECBOT_ZODIAC_SIGNS", [](AppConfig &config, std::string_view value) {
+        std::vector<zodiac::Override> chosen;
+        for (const std::string &pair : split_names(value)) {
+            const std::size_t equals = pair.find('=');
+            if (equals == std::string::npos) {
+                return false;
+            }
+            zodiac::Override entry{pair.substr(0, equals), pair.substr(equals + 1)};
+            if (entry.username.empty() || !zodiac::sign_named(entry.sign)) {
+                return false;
+            }
+            chosen.push_back(std::move(entry));
+        }
+        config.zodiac_signs = std::move(chosen);
+        return true;
+    }},
     Setting{"NORELECBOT_BOOST_COST", [](AppConfig &config, std::string_view value) {
         return set_number(config.boost_cost, value, AppConfig::default_boost_cost, 0);
     }},

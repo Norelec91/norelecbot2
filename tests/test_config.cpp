@@ -87,3 +87,20 @@ TEST_CASE("carriage returns, comments and quotes are handled") {
     CHECK(config->api_port == 9000);
     CHECK(config->quote_cost == 5);
 }
+
+TEST_CASE("the signs set by hand are read, and a wrong one is refused") {
+    const ConfigFile file;
+
+    const auto config = file.load("NORELECBOT_ZODIAC_SIGNS=Giangiui=vergine, mifaisonno=leone\n");
+    REQUIRE(config);
+    REQUIRE(config->zodiac_signs.size() == 2);
+    CHECK(config->zodiac_signs[0].username == "Giangiui");
+    CHECK(config->zodiac_signs[0].sign == "vergine");
+    CHECK(config->zodiac_signs[1].username == "mifaisonno");
+
+    CHECK(file.load("NORELECBOT_ZODIAC_SIGNS=\n"));
+    CHECK_FALSE(file.load("NORELECBOT_ZODIAC_SIGNS=Giangiui\n"));
+    CHECK_FALSE(file.load("NORELECBOT_ZODIAC_SIGNS=Giangiui=ofiuco\n"));
+    CHECK_FALSE(file.load("NORELECBOT_ZODIAC_SIGNS==vergine\n"));
+}
+

@@ -44,13 +44,13 @@ ParsedCommand parse_command(std::string_view message) {
 }
 
 /* What made this hold worth more or less than the seconds it lasted. */
-std::string earnings_note(const ClaimResult &result, std::int64_t now) {
+std::string earnings_note(const CommandContext &context, const ClaimResult &result, std::int64_t now) {
     std::string note;
     if (result.boost_multiplier > 0) {
         note += std::format(" col boost x{}", result.boost_multiplier);
     }
     if (result.zodiac_percent != 100) {
-        const zodiac::Sign sign = zodiac::sign_of(result.previous_username);
+        const zodiac::Sign sign = zodiac::sign_of(result.previous_username, context.config.zodiac_signs);
         note += std::format(
             "{} {} {} nel giorno di {} (x{}.{:02})",
             note.empty() ? "" : " e",
@@ -120,8 +120,11 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
             context.user_id,
             username,
             now,
-            context.config.cooldown_seconds,
-            is_shielded(context, username)
+            ClaimRules{
+                .cooldown_seconds = context.config.cooldown_seconds,
+                .ignores_shield = is_shielded(context, username),
+                .signs = context.config.zodiac_signs,
+            }
         );
     /* A name that came from IRC must not be written as a mention: on Telegram it would tag a stranger. */
     const std::string_view mention = result.previous_user_id != 0 ? "@" : "";
@@ -189,7 +192,7 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
             conquister_place,
             result.earned,
             mention,
-            earnings_note(result, now)
+            earnings_note(context, result, now)
         );
     }
     reply += std::format("🪐 {} sei in {}!", username, conquister_place);
@@ -217,7 +220,7 @@ std::string handle_leaderboard(const CommandContext &context, std::string_view) 
         reply += std::format(
             "\n{}) {} {} — {} palle",
             position++,
-            zodiac::sign_of(entry.username).symbol,
+            zodiac::sign_of(entry.username, context.config.zodiac_signs).symbol,
             entry.username,
             entry.score
         );

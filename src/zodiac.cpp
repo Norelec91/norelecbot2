@@ -1,5 +1,6 @@
 #include "zodiac.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <chrono>
@@ -41,7 +42,28 @@ std::uint64_t digest(std::string_view text) {
 
 }
 
-Sign sign_of(std::string_view username) {
+std::optional<Sign> sign_named(std::string_view name) {
+    const auto found = std::ranges::find_if(signs, [name](const Sign &sign) {
+        return std::ranges::equal(sign.name, name, [](char first, char second) {
+            return std::tolower(static_cast<unsigned char>(first)) ==
+                   std::tolower(static_cast<unsigned char>(second));
+        });
+    });
+    return found != signs.end() ? std::optional<Sign>{*found} : std::nullopt;
+}
+
+Sign sign_of(std::string_view username, Overrides overrides) {
+    const auto chosen = std::ranges::find_if(overrides, [username](const Override &entry) {
+        return std::ranges::equal(entry.username, username, [](char first, char second) {
+            return std::tolower(static_cast<unsigned char>(first)) ==
+                   std::tolower(static_cast<unsigned char>(second));
+        });
+    });
+    if (chosen != overrides.end()) {
+        if (const std::optional<Sign> named = sign_named(chosen->sign)) {
+            return *named;
+        }
+    }
     return signs.at(digest(username) % signs.size());
 }
 
@@ -74,12 +96,12 @@ bool opposed(Element first, Element second) {
            (first == Element::earth && second == Element::air);
 }
 
-int percent_for(std::string_view username, std::int64_t now) {
+int percent_for(std::string_view username, std::int64_t now, Overrides overrides) {
     if (username.empty()) {
         return plain_percent;
     }
     const Element house = element_of_day(now);
-    const Element own = sign_of(username).element;
+    const Element own = sign_of(username, overrides).element;
     if (own == house) {
         return matching_percent;
     }

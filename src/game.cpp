@@ -48,8 +48,7 @@ ClaimResult conquister_claim(
     std::int64_t user_id,
     const std::string &username,
     std::int64_t now,
-    int cooldown_seconds,
-    bool ignores_shield
+    const ClaimRules &rules
 ) {
     const ClaimResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
@@ -70,13 +69,13 @@ ClaimResult conquister_claim(
             const std::string holder = state.current->username;
             outcome.previous_user_id = state.current->user_id;
             if (const auto shield = find_entry(state.shields, holder); shield != state.shields.end()) {
-                if (shield->second > now && ignores_shield) {
+                if (shield->second > now && rules.ignores_shield) {
                     state.shields.erase(holder);
                     outcome.balloon_popped = true;
                 } else if (shield->second > now) {
-                    if (cooldown_seconds > 0) {
-                        state.cooldowns[username] = now + cooldown_seconds;
-                        outcome.penalty_seconds = cooldown_seconds;
+                    if (rules.cooldown_seconds > 0) {
+                        state.cooldowns[username] = now + rules.cooldown_seconds;
+                        outcome.penalty_seconds = rules.cooldown_seconds;
                     }
                     outcome.status = ClaimStatus::defended;
                     outcome.previous_username = holder;
@@ -89,9 +88,9 @@ ClaimResult conquister_claim(
                 const std::int64_t attempt = balloon->second + 1;
                 if (static_cast<std::int64_t>(session.random_index(balloon_attempts)) >= attempt) {
                     balloon->second = attempt;
-                    if (cooldown_seconds > 0) {
-                        state.cooldowns[username] = now + cooldown_seconds;
-                        outcome.penalty_seconds = cooldown_seconds;
+                    if (rules.cooldown_seconds > 0) {
+                        state.cooldowns[username] = now + rules.cooldown_seconds;
+                        outcome.penalty_seconds = rules.cooldown_seconds;
                     }
                     outcome.status = ClaimStatus::defended;
                     outcome.previous_username = holder;
@@ -113,7 +112,7 @@ ClaimResult conquister_claim(
                 outcome.earned *= outcome.boost_multiplier;
                 state.boosts.erase(holder);
             }
-            outcome.zodiac_percent = zodiac::percent_for(holder, now);
+            outcome.zodiac_percent = zodiac::percent_for(holder, now, rules.signs);
             outcome.earned = outcome.earned / 100 * outcome.zodiac_percent +
                              outcome.earned % 100 * outcome.zodiac_percent / 100;
             std::int64_t &score = state.scores[outcome.previous_username];

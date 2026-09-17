@@ -2,6 +2,7 @@
 #define NORELECBOT_GAME_HPP
 
 #include "storage.hpp"
+#include "zodiac.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -87,14 +88,20 @@ struct QuotePage {
 };
 
 /* A failed balloon attempt costs the attacker cooldown_seconds without a claim; 0 disables the penalty. */
-/* A player who ignores shields pops one on his first attempt, as the owner asked for those two. */
+struct ClaimRules {
+    /* The penalty a failed attempt leaves behind. */
+    int cooldown_seconds = 0;
+    /* Set for a player who pops a shielded balloon on his first attempt, as the owner asked for some. */
+    bool ignores_shield = false;
+    zodiac::Overrides signs;
+};
+
 [[nodiscard]] ClaimResult conquister_claim(
     Storage &storage,
     std::int64_t user_id,
     const std::string &username,
     std::int64_t now,
-    int cooldown_seconds,
-    bool ignores_shield
+    const ClaimRules &rules = {}
 );
 /* limit 0 returns every entry. */
 [[nodiscard]] Leaderboard conquister_leaderboard(Storage &storage, std::size_t limit);

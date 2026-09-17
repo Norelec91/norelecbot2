@@ -44,9 +44,9 @@ TEST_CASE("the REST routes answer with the documented JSON") {
     expect(storage, "/quote", 200, "{\"quote\":\"quote di prova\"}\n");
 
     expect(storage, "/leaderboard", 200, "{\"entries\":[],\"current\":null}\n");
-    static_cast<void>(conquister_claim(storage, 7, "Norelec", 100, 0, false));
+    static_cast<void>(conquister_claim(storage, 7, "Norelec", 100));
     expect(storage, "/leaderboard", 200, "{\"entries\":[],\"current\":{\"username\":\"Norelec\",\"since\":100}}\n");
-    static_cast<void>(conquister_claim(storage, 8, "bob", 150, 0, false));
+    static_cast<void>(conquister_claim(storage, 8, "bob", 150));
     expect(
         storage,
         "/leaderboard",
