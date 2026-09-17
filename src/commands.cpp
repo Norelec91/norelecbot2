@@ -156,6 +156,9 @@ std::string handle_raid(const CommandContext &context, std::string_view target) 
         return missing_username_reply();
     }
     const std::string username{context.username};
+    /* His own place is named after him, with the mention only where it reaches him. */
+    const std::string home =
+        std::format("{}{}", context.user_id != 0 ? "@" : "", username);
     const RaidResult result =
         raid_start(context.storage, context.user_id, username, target, seconds_now(), raid_rules(context));
     switch (result.status) {
@@ -167,24 +170,31 @@ std::string handle_raid(const CommandContext &context, std::string_view target) 
         return std::format("🚀 {} non conosco nessun giocatore di nome {}.", username, target);
     case RaidStatus::left_place:
         return std::format(
-            "🏠 {} lasci {} e torni a casa: hai guadagnato {} palle{}.",
+            "🏠 {} lasci {} e torni in {}: hai guadagnato {} palle{}.",
             username,
             conquister_place,
+            home,
             result.earned,
             hold_note(context, username, result.boost_multiplier, result.zodiac_percent, seconds_now())
         );
     case RaidStatus::coming_home:
-        return std::format("🚀 {} lasci perdere e torni a casa: arrivi tra {}.", username, format_wait(result.seconds));
+        return std::format(
+            "🚀 {} lasci perdere e torni in {}: arrivi tra {}.",
+            username,
+            home,
+            format_wait(result.seconds)
+        );
     case RaidStatus::home_already:
-        return std::format("🏠 {} sei già a casa tua.", username);
+        return std::format("🏠 {} sei già in {}.", username, home);
     case RaidStatus::started:
         break;
     }
     return std::format(
-        "🚀 {} parti per {}: arrivi tra {}. La tua base resta scoperta.",
+        "🚀 {} parti per {}: arrivi tra {}. {} resta scoperto.",
         username,
         result.target,
-        format_wait(result.seconds)
+        format_wait(result.seconds),
+        home
     );
 }
 
@@ -211,9 +221,11 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
     const std::string_view mention = result.previous_user_id != 0 ? "@" : "";
     if (result.status == ClaimStatus::travelling) {
         return std::format(
-            "🚀 {} sei per strada: non puoi entrare in {} prima di tornare a casa, tra {}.",
+            "🚀 {} sei per strada: non puoi entrare in {} prima di tornare in {}{}, tra {}.",
             username,
             conquister_place,
+            context.user_id != 0 ? "@" : "",
+            username,
             format_wait(result.travel_seconds)
         );
     }
@@ -488,19 +500,21 @@ bool command_is_for_bot(std::string_view text) {
 
 std::string raid_event_reply(const RaidEvent &event, const zodiac::Overrides &signs) {
     const std::string_view mention = event.target_on_telegram ? "@" : "";
+    const std::string home = std::format("{}{}", event.raider_on_telegram ? "@" : "", event.raider);
     if (event.kind == RaidEvent::Kind::returned) {
         if (event.loot > 0) {
-            return std::format("🏠 {} sei tornato alla tua base con {} palle.", event.raider, event.loot);
+            return std::format("🏠 {} sei tornato in {} con {} palle.", event.raider, home, event.loot);
         }
-        return std::format("🏠 {} sei tornato alla tua base a mani vuote.", event.raider);
+        return std::format("🏠 {} sei tornato in {} a mani vuote.", event.raider, home);
     }
     if (event.kind == RaidEvent::Kind::defended) {
         return std::format(
-            "🎈 {} il palloncino di {}{} ha resistito{}. Torni a mani vuote tra {}.",
+            "🎈 {} il palloncino di {}{} ha resistito{}. Torni in {} a mani vuote tra {}.",
             event.raider,
             mention,
             event.target,
             event.cost > 0 ? std::format(" e ti costa {} palle", event.cost) : "",
+            home,
             format_wait(event.seconds)
         );
     }
@@ -512,7 +526,7 @@ std::string raid_event_reply(const RaidEvent &event, const zodiac::Overrides &si
         event.target
     );
     if (event.undefended) {
-        reply += ", che era fuori casa";
+        reply += ", che era in giro";
     } else if (event.balloon_popped) {
         reply += ", bucandogli il palloncino";
     }
@@ -529,7 +543,7 @@ std::string raid_event_reply(const RaidEvent &event, const zodiac::Overrides &si
             event.target_percent
         );
     }
-    reply += std::format("! Torni a casa tra {}.", format_wait(event.seconds));
+    reply += std::format("! Torni in {} tra {}.", home, format_wait(event.seconds));
     return reply;
 }
 

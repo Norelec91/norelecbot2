@@ -249,13 +249,13 @@ TEST_CASE("We @someone sends the player out to rob them") {
         return command_dispatch(context, text).value_or("<nessuna risposta>");
     };
 
-    CHECK(reply("We @alice") == "🚀 bob parti per alice: arrivi tra 5 secondi. La tua base resta scoperta.");
+    CHECK(reply("We @alice") == "🚀 bob parti per alice: arrivi tra 5 secondi. @bob resta scoperto.");
     CHECK(reply("We @alice") == "🚀 bob sei già in viaggio, torni tra 10 secondi.");
     /* Another player, who is at home and can therefore get an answer of his own. */
     context.username = "carol";
     context.user_id = 3;
-    CHECK(reply("We @carol") == "🏠 carol sei già a casa tua.");
-    CHECK(reply("We @CAROL") == "🏠 carol sei già a casa tua.");
+    CHECK(reply("We @carol") == "🏠 carol sei già in @carol.");
+    CHECK(reply("We @CAROL") == "🏠 carol sei già in @carol.");
     CHECK(reply("We @nessuno") == "🚀 carol non conosco nessun giocatore di nome nessuno.");
     context.username = "bob";
     context.user_id = 2;
@@ -268,11 +268,11 @@ TEST_CASE("We @someone sends the player out to rob them") {
     CHECK_FALSE(command_dispatch(context, "we @alice").has_value());
 
     /* On the road, naming yourself turns you round. */
-    CHECK(reply("We @bob") == "🚀 bob lasci perdere e torni a casa: arrivi tra 10 secondi.");
+    CHECK(reply("We @bob") == "🚀 bob lasci perdere e torni in @bob: arrivi tra 10 secondi.");
     CHECK(reply("We @alice") == "🚀 bob sei già in viaggio, torni tra 10 secondi.");
 
     CHECK(reply("We @TheConquister37") ==
-          "🚀 bob sei per strada: non puoi entrare in @TheConquister37 prima di tornare a casa, tra 10 secondi.");
+          "🚀 bob sei per strada: non puoi entrare in @TheConquister37 prima di tornare in @bob, tra 10 secondi.");
 
     /* The one holding the place stays in it. */
     static_cast<void>(conquister_claim(storage, 9, "erin", seconds_now_for_test()));
@@ -294,12 +294,12 @@ TEST_CASE("the raids tell what happened") {
     RaidEvent event{.kind = RaidEvent::Kind::stolen, .raider = "bob", .target = "alice"};
     event.loot = 250;
     event.seconds = 52;
-    CHECK(raid_event_reply(event, none) == "💰 bob hai rubato 250 palle a alice! Torni a casa tra 52 secondi.");
+    CHECK(raid_event_reply(event, none) == "💰 bob hai rubato 250 palle a alice! Torni in bob tra 52 secondi.");
 
     event.target_on_telegram = true;
     event.undefended = true;
     CHECK(raid_event_reply(event, none) ==
-          "💰 bob hai rubato 250 palle a @alice, che era fuori casa! Torni a casa tra 52 secondi.");
+          "💰 bob hai rubato 250 palle a @alice, che era in giro! Torni in bob tra 52 secondi.");
 
     event.undefended = false;
     event.balloon_popped = true;
@@ -317,12 +317,12 @@ TEST_CASE("the raids tell what happened") {
         .seconds = 52,
     };
     CHECK(raid_event_reply(defended, none) ==
-          "🎈 bob il palloncino di alice ha resistito e ti costa 100 palle. Torni a mani vuote tra 52 secondi.");
+          "🎈 bob il palloncino di alice ha resistito e ti costa 100 palle. Torni in bob a mani vuote tra 52 secondi.");
 
     RaidEvent home{.kind = RaidEvent::Kind::returned, .raider = "bob", .target = "alice"};
     home.loot = 250;
-    CHECK(raid_event_reply(home, none) == "🏠 bob sei tornato alla tua base con 250 palle.");
+    CHECK(raid_event_reply(home, none) == "🏠 bob sei tornato in bob con 250 palle.");
     home.loot = 0;
-    CHECK(raid_event_reply(home, none) == "🏠 bob sei tornato alla tua base a mani vuote.");
+    CHECK(raid_event_reply(home, none) == "🏠 bob sei tornato in bob a mani vuote.");
 }
 

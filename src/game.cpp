@@ -444,6 +444,7 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 RaidEvent event{.kind = RaidEvent::Kind::stolen, .raider = raid.raider, .target = raid.target};
                 event.seconds = std::max<std::int64_t>(raid.back - now, 0);
                 event.target_on_telegram = counter(state.telegram_ids, raid.target) != 0;
+                event.raider_on_telegram = counter(state.telegram_ids, raid.raider) != 0;
                 const bool guarded = !is_away(state, raid.target);
                 event.undefended = !guarded;
                 const auto shield = find_entry(state.shields, raid.target);
@@ -485,6 +486,7 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                     .raider = raid.raider,
                     .target = raid.target,
                     .loot = raid.loot,
+                    .raider_on_telegram = counter(state.telegram_ids, raid.raider) != 0,
                 });
             }
         }
