@@ -170,7 +170,7 @@ std::string handle_raid(const CommandContext &context, std::string_view target) 
         return std::format("🚀 {} non conosco nessun giocatore di nome {}.", username, target);
     case RaidStatus::left_place:
         return std::format(
-            "🪐 {} lasci {} e torni in {}: hai guadagnato {} palle{}.",
+            "🪐 {} sei tornato da {} in {} con {} palle{}.",
             username,
             conquister_place,
             home,
@@ -185,7 +185,7 @@ std::string handle_raid(const CommandContext &context, std::string_view target) 
             format_wait(result.seconds)
         );
     case RaidStatus::home_already:
-        return std::format("🪐 {} sei già in {}.", username, home);
+        return std::format("🪐 {} sei già in {}!", username, home);
     case RaidStatus::started:
         break;
     }

@@ -254,8 +254,8 @@ TEST_CASE("We @someone sends the player out to rob them") {
     /* Another player, who is at home and can therefore get an answer of his own. */
     context.username = "carol";
     context.user_id = 3;
-    CHECK(reply("We @carol") == "🪐 carol sei già in @carol.");
-    CHECK(reply("We @CAROL") == "🪐 carol sei già in @carol.");
+    CHECK(reply("We @carol") == "🪐 carol sei già in @carol!");
+    CHECK(reply("We @CAROL") == "🪐 carol sei già in @carol!");
     CHECK(reply("We @nessuno") == "🚀 carol non conosco nessun giocatore di nome nessuno.");
     context.username = "bob";
     context.user_id = 2;
