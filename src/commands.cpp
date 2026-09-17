@@ -154,9 +154,9 @@ std::string handle_raid(const CommandContext &context, std::string_view target) 
         raid_start(context.storage, context.user_id, username, target, seconds_now(), raid_rules(context));
     switch (result.status) {
     case RaidStatus::already_travelling:
-        return std::format("🐎 {} sei già in viaggio, torni tra {}.", username, format_wait(result.seconds));
+        return std::format("🚀 {} sei già in viaggio, torni tra {}.", username, format_wait(result.seconds));
     case RaidStatus::unknown_target:
-        return std::format("🐎 {} non conosco nessun giocatore di nome {}.", username, target);
+        return std::format("🚀 {} non conosco nessun giocatore di nome {}.", username, target);
     case RaidStatus::oneself:
         if (result.lost > 0) {
             return std::format(
@@ -170,7 +170,7 @@ std::string handle_raid(const CommandContext &context, std::string_view target) 
         break;
     }
     return std::format(
-        "🐎 {} parti per la casa di {}: arrivi tra {}. La tua base resta scoperta.",
+        "🚀 {} parti per la casa di {}: arrivi tra {}. La tua base resta scoperta.",
         username,
         result.target,
         format_wait(result.seconds)
@@ -200,7 +200,7 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
     const std::string_view mention = result.previous_user_id != 0 ? "@" : "";
     if (result.status == ClaimStatus::travelling) {
         return std::format(
-            "🐎 {} sei per strada: non puoi entrare in {} prima di tornare a casa, tra {}.",
+            "🚀 {} sei per strada: non puoi entrare in {} prima di tornare a casa, tra {}.",
             username,
             conquister_place,
             format_wait(result.travel_seconds)
@@ -442,7 +442,7 @@ std::string handle_buy_boost(const CommandContext &context, std::string_view) {
         );
     }
     return std::format(
-        "🚀 {} hai comprato un boost spendendo {} palle! Il tuo prossimo possesso di {} vale x{}, "
+        "⚡ {} hai comprato un boost spendendo {} palle! Il tuo prossimo possesso di {} vale x{}, "
         "fino a quando ti spodestano.",
         username,
         cost,

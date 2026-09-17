@@ -103,7 +103,7 @@ TEST_CASE("the bot answers the commands it knows and ignores the rest") {
         context.user_id = 6;
         context.username = "frank";
         CHECK(reply("/buyboost") ==
-              "🚀 frank hai comprato un boost spendendo 0 palle! Il tuo prossimo possesso di "
+              "⚡ frank hai comprato un boost spendendo 0 palle! Il tuo prossimo possesso di "
               "@TheConquister37 vale x3, fino a quando ti spodestano.");
         CHECK(reply("/buyboost") == "frank hai già un boost x3 pronto.");
         CHECK(reply("/buyballoon") == "frank hai un boost attivo: il palloncino puoi comprarlo dopo.");
@@ -239,14 +239,14 @@ TEST_CASE("We @someone sends the player out to rob them") {
         return command_dispatch(context, text).value_or("<nessuna risposta>");
     };
 
-    CHECK(reply("We @alice") == "🐎 bob parti per la casa di alice: arrivi tra 5 secondi. La tua base resta scoperta.");
-    CHECK(reply("We @alice") == "🐎 bob sei già in viaggio, torni tra 10 secondi.");
+    CHECK(reply("We @alice") == "🚀 bob parti per la casa di alice: arrivi tra 5 secondi. La tua base resta scoperta.");
+    CHECK(reply("We @alice") == "🚀 bob sei già in viaggio, torni tra 10 secondi.");
     /* Another player, who is at home and can therefore get an answer of his own. */
     context.username = "carol";
     context.user_id = 3;
     CHECK(reply("We @carol") == "💀 carol hai svaligiato casa tua, ma non c'era niente da rubare.");
     CHECK(reply("We @CAROL") == "💀 carol hai svaligiato casa tua, ma non c'era niente da rubare.");
-    CHECK(reply("We @nessuno") == "🐎 carol non conosco nessun giocatore di nome nessuno.");
+    CHECK(reply("We @nessuno") == "🚀 carol non conosco nessun giocatore di nome nessuno.");
     context.username = "bob";
     context.user_id = 2;
 
@@ -265,7 +265,7 @@ TEST_CASE("We @someone sends the player out to rob them") {
     context.user_id = 2;
 
     CHECK(reply("We @TheConquister37") ==
-          "🐎 bob sei per strada: non puoi entrare in @TheConquister37 prima di tornare a casa, tra 10 secondi.");
+          "🚀 bob sei per strada: non puoi entrare in @TheConquister37 prima di tornare a casa, tra 10 secondi.");
 
     CHECK(command_is_for_bot("We @alice"));
     CHECK_FALSE(command_is_for_bot("We @"));
