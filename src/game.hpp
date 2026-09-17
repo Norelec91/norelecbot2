@@ -56,7 +56,7 @@ struct BoostResult {
     std::int64_t multiplier = 0;
 };
 
-enum class RaidStatus { started, already_travelling, unknown_target, oneself };
+enum class RaidStatus { started, already_travelling, holding_place, unknown_target, oneself };
 
 struct RaidRules {
     /* Seconds of travel per unit of distance, and the share of the loot: a quarter by default. */

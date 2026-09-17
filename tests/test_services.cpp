@@ -447,7 +447,7 @@ TEST_CASE("an empty house has no defences") {
     const TestPaths paths{"raid-away-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":{"user_id":1,"username":"alice","since":0},"scores":{"alice":1000,"bob":0,)"
+        file << R"({"current":null,"scores":{"alice":1000,"bob":0,)"
              << R"("carol":800},"quotes_added":{},"balloons":{"alice":0}})";
     }
     Storage storage{paths.conquister, paths.quotes};
@@ -488,23 +488,6 @@ TEST_CASE("nobody takes the place from the road") {
     CHECK(conquister_claim(storage, 1, "alice", 11).status == ClaimStatus::taken);
 }
 
-TEST_CASE("the place of someone away is taken without a roll") {
-    const TestPaths paths{"raid-claim-test"};
-    {
-        std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":{"user_id":1,"username":"alice","since":0},"scores":{"alice":500,"carol":10},)"
-             << R"("quotes_added":{},"balloons":{"alice":0}})";
-    }
-    Storage storage{paths.conquister, paths.quotes};
-
-    static_cast<void>(raid_start(storage, 0, "alice", "carol", 0, quick_rides()));
-    const ClaimResult taken = conquister_claim(storage, 2, "bob", 1);
-    CHECK(taken.status == ClaimStatus::taken);
-    CHECK(taken.previous_username == "alice");
-    CHECK_FALSE(taken.balloon_popped);
-    CHECK(conquister_user(storage, "bob")->in_conquister);
-}
-
 TEST_CASE("an id is drawn once and stays") {
     const TestPaths paths{"raid-id-test"};
     std::int64_t drawn = 0;
@@ -532,6 +515,26 @@ TEST_CASE("an id is drawn once and stays") {
     const RaidResult again = raid_start(reopened, 0, "alice", "bob", 1000, quick_rides());
     CHECK(again.seconds == drawn);
     CHECK(read_json(paths.conquister).at("ids").at("alice").get<std::int64_t>() == alice);
+}
+
+TEST_CASE("whoever holds the place does not leave it") {
+    const TestPaths paths{"raid-holder-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":1,"username":"alice","since":0},"scores":{"alice":900,"bob":10},)"
+             << R"("quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+
+    const RaidResult refused = raid_start(storage, 1, "ALICE", "bob", 1, quick_rides());
+    CHECK(refused.status == RaidStatus::holding_place);
+    /* Not even to burn her own house down. */
+    CHECK(raid_start(storage, 1, "alice", "alice", 1, quick_rides()).status == RaidStatus::holding_place);
+    CHECK(conquister_user(storage, "alice")->score == 900);
+
+    /* Out of the place, free to go. */
+    static_cast<void>(conquister_claim(storage, 2, "bob", 2));
+    CHECK(raid_start(storage, 1, "alice", "bob", 3, quick_rides()).status == RaidStatus::started);
 }
 
 TEST_CASE("robbing your own house burns everything in it") {

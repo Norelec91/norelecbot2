@@ -12,6 +12,16 @@
 
 using namespace norelecbot;
 
+namespace {
+
+std::int64_t seconds_now_for_test() {
+    return std::chrono::duration_cast<std::chrono::seconds>(
+               std::chrono::system_clock::now().time_since_epoch()
+    ).count();
+}
+
+}
+
 TEST_CASE("the bot answers the commands it knows and ignores the rest") {
     const TestPaths paths{"command-test"};
     AppConfig config;
@@ -266,6 +276,14 @@ TEST_CASE("We @someone sends the player out to rob them") {
 
     CHECK(reply("We @TheConquister37") ==
           "🚀 bob sei per strada: non puoi entrare in @TheConquister37 prima di tornare a casa, tra 10 secondi.");
+
+    /* The one holding the place stays in it. */
+    static_cast<void>(conquister_claim(storage, 9, "erin", seconds_now_for_test()));
+    context.username = "erin";
+    context.user_id = 9;
+    CHECK(reply("We @alice") == "🚀 erin sei in @TheConquister37 e da lì non si parte.");
+    context.username = "bob";
+    context.user_id = 2;
 
     CHECK(command_is_for_bot("We @alice"));
     CHECK_FALSE(command_is_for_bot("We @"));

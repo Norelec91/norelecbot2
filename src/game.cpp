@@ -139,8 +139,7 @@ ClaimResult conquister_claim(
         if (state.current && !state.current->username.empty()) {
             const std::string holder = state.current->username;
             outcome.previous_user_id = state.current->user_id;
-            const bool guarded = !is_away(state, holder);
-            if (const auto shield = find_entry(state.shields, holder); guarded && shield != state.shields.end()) {
+            if (const auto shield = find_entry(state.shields, holder); shield != state.shields.end()) {
                 if (shield->second > now && rules.ignores_shield) {
                     state.shields.erase(holder);
                     outcome.balloon_popped = true;
@@ -157,7 +156,7 @@ ClaimResult conquister_claim(
                 }
                 state.shields.erase(holder);
             }
-            if (const auto balloon = find_entry(state.balloons, holder); guarded && balloon != state.balloons.end()) {
+            if (const auto balloon = find_entry(state.balloons, holder); balloon != state.balloons.end()) {
                 const std::int64_t attempt = balloon->second + 1;
                 if (static_cast<std::int64_t>(session.random_index(balloon_attempts)) >= attempt) {
                     balloon->second = attempt;
@@ -347,6 +346,11 @@ RaidResult raid_start(
         if (const Raid *travelling = raid_of(state, username); travelling != nullptr) {
             outcome.status = RaidStatus::already_travelling;
             outcome.seconds = std::max<std::int64_t>(travelling->back - now, 0);
+            return outcome;
+        }
+        /* Whoever holds the place stays in it: leaving would be leaving it behind. */
+        if (state.current && text::equals_ignore_case(state.current->username, username)) {
+            outcome.status = RaidStatus::holding_place;
             return outcome;
         }
         /* Robbing your own house burns what is in it. */
