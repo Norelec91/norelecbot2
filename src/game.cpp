@@ -2,6 +2,7 @@
 
 #include "logging.hpp"
 #include "text.hpp"
+#include "zodiac.hpp"
 
 #include <algorithm>
 #include <iterator>
@@ -112,6 +113,9 @@ ClaimResult conquister_claim(
                 outcome.earned *= outcome.boost_multiplier;
                 state.boosts.erase(holder);
             }
+            outcome.zodiac_percent = zodiac::percent_for(holder, now);
+            outcome.earned = outcome.earned / 100 * outcome.zodiac_percent +
+                             outcome.earned % 100 * outcome.zodiac_percent / 100;
             std::int64_t &score = state.scores[outcome.previous_username];
             if (score > 0 && outcome.earned > std::numeric_limits<std::int64_t>::max() - score) {
                 log_error("Could not update Conquister score");

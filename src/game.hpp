@@ -30,6 +30,8 @@ struct ClaimResult {
     std::int64_t shield_seconds = 0;
     /* taken: the multiplier the kicked holder had bought, zero when there was none. */
     std::int64_t boost_multiplier = 0;
+    /* taken: what the house of the day was worth to the kicked holder, 100 when it was indifferent. */
+    int zodiac_percent = 100;
 };
 
 enum class BalloonStatus { bought, already_owned, has_boost, insufficient_score };

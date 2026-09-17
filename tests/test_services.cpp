@@ -2,6 +2,7 @@
 
 #include "game.hpp"
 #include "storage.hpp"
+#include "zodiac.hpp"
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
@@ -11,6 +12,11 @@
 using namespace norelecbot;
 
 namespace {
+
+/* Seconds held, times the boost, times what the house of the day was worth to the holder. */
+std::int64_t earnings(std::string_view holder, std::int64_t seconds, std::int64_t now, std::int64_t boost = 1) {
+    return seconds * boost * zodiac::percent_for(holder, now) / 100;
+}
 
 Json read_json(const std::string &path) {
     std::ifstream file{path, std::ios::binary};
@@ -31,12 +37,12 @@ TEST_CASE("claims, leaderboard, users and quotes") {
         CHECK(claim.previous_username.empty());
         claim = conquister_claim(storage, 2, "bob", 1100, 0, false);
         CHECK(claim.previous_username == "alice");
-        CHECK(claim.earned == 1000);
+        CHECK(claim.earned == earnings("alice", 1000, 1100));
 
         const Leaderboard leaderboard = conquister_leaderboard(storage, 10);
         REQUIRE(leaderboard.entries.size() == 1);
         CHECK(leaderboard.entries[0].username == "alice");
-        CHECK(leaderboard.entries[0].score == 1000);
+        CHECK(leaderboard.entries[0].score == earnings("alice", 1000, 1100));
         REQUIRE(leaderboard.current);
         CHECK(leaderboard.current->username == "bob");
         CHECK(leaderboard.current->since == 1100);
@@ -44,7 +50,7 @@ TEST_CASE("claims, leaderboard, users and quotes") {
         std::optional<ConquisterUser> user = conquister_user(storage, "ALICE");
         REQUIRE(user);
         CHECK(user->username == "alice");
-        CHECK(user->score == 1000);
+        CHECK(user->score == earnings("alice", 1000, 1100));
         CHECK(user->rank == 1);
         CHECK(user->quotes_added == 0);
         CHECK_FALSE(user->in_conquister);
@@ -56,9 +62,10 @@ TEST_CASE("claims, leaderboard, users and quotes") {
         CHECK(user->rank == 0);
         CHECK_FALSE(conquister_user(storage, "carol"));
 
+        const std::int64_t alice_score = earnings("alice", 1000, 1100);
         QuoteAddResult addition = quote_add(storage, "alice", "quote di prova", 1000);
         CHECK(addition.status == QuoteAddStatus::added);
-        CHECK(addition.available_score == 0);
+        CHECK(addition.available_score == alice_score - 1000);
         CHECK(quote_random(storage) == "quote di prova");
 
         static_cast<void>(conquister_claim(storage, 1, "alice", 1101, 0, false));
@@ -265,11 +272,12 @@ TEST_CASE("a boost multiplies what the hold earns, once") {
 
     static_cast<void>(conquister_claim(storage, 1, "alice", 0, 0, false));
     static_cast<void>(conquister_claim(storage, 2, "bob", 1000, 0, false));
-    CHECK(conquister_user(storage, "alice")->score == 1000);
+    const std::int64_t first_hold = earnings("alice", 1000, 1000);
+    CHECK(conquister_user(storage, "alice")->score == first_hold);
 
     const BoostResult bought = boost_buy(storage, "alice", 1000, 3, 1000);
     CHECK(bought.status == BoostStatus::bought);
-    CHECK(bought.available_score == 0);
+    CHECK(bought.available_score == first_hold - 1000);
     CHECK(boost_buy(storage, "alice", 0, 3, 1000).status == BoostStatus::already_owned);
 
     SUBCASE("it is cashed in when the place is taken away") {
@@ -277,14 +285,14 @@ TEST_CASE("a boost multiplies what the hold earns, once") {
         const ClaimResult kicked = conquister_claim(storage, 2, "bob", 2100, 0, false);
         CHECK(kicked.previous_username == "alice");
         CHECK(kicked.boost_multiplier == 3);
-        CHECK(kicked.earned == 300);
-        CHECK(conquister_user(storage, "alice")->score == 300);
+        CHECK(kicked.earned == earnings("alice", 100, 2100, 3));
+        CHECK(conquister_user(storage, "alice")->score == first_hold - 1000 + kicked.earned);
 
         /* Spent: the next hold earns the usual. */
         static_cast<void>(conquister_claim(storage, 1, "alice", 3000, 0, false));
         const ClaimResult again = conquister_claim(storage, 2, "bob", 3100, 0, false);
         CHECK(again.boost_multiplier == 0);
-        CHECK(again.earned == 100);
+        CHECK(again.earned == earnings("alice", 100, 3100));
     }
 
     SUBCASE("it rules out a balloon while it waits") {

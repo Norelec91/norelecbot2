@@ -2,6 +2,7 @@
 
 #include "game.hpp"
 #include "text.hpp"
+#include "zodiac.hpp"
 
 #include <algorithm>
 #include <array>
@@ -40,6 +41,27 @@ ParsedCommand parse_command(std::string_view message) {
         return static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
     });
     return {std::move(name), text::trim(message.substr(length))};
+}
+
+/* What made this hold worth more or less than the seconds it lasted. */
+std::string earnings_note(const ClaimResult &result, std::int64_t now) {
+    std::string note;
+    if (result.boost_multiplier > 0) {
+        note += std::format(" col boost x{}", result.boost_multiplier);
+    }
+    if (result.zodiac_percent != 100) {
+        const zodiac::Sign sign = zodiac::sign_of(result.previous_username);
+        note += std::format(
+            "{} {} {} nel giorno di {} (x{}.{:02})",
+            note.empty() ? "" : " e",
+            sign.symbol,
+            sign.name,
+            zodiac::element_name(zodiac::element_of_day(now)),
+            result.zodiac_percent / 100,
+            result.zodiac_percent % 100
+        );
+    }
+    return note;
 }
 
 std::int64_t seconds_now() {
@@ -167,7 +189,7 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
             conquister_place,
             result.earned,
             mention,
-            result.boost_multiplier > 0 ? std::format(" col boost x{}", result.boost_multiplier) : ""
+            earnings_note(result, now)
         );
     }
     reply += std::format("🪐 {} sei in {}!", username, conquister_place);
@@ -186,9 +208,19 @@ std::string handle_leaderboard(const CommandContext &context, std::string_view) 
             conquister_place
         );
     }
-    std::string reply = std::format("🏆 Classifica {}\n", conquister_place);
+    std::string reply = std::format(
+        "🏆 Classifica {}\nOggi è giorno di {}.\n",
+        conquister_place,
+        zodiac::element_name(zodiac::element_of_day(seconds_now()))
+    );
     for (std::size_t position = 1; const LeaderboardEntry &entry : leaderboard.entries) {
-        reply += std::format("\n{}) {} — {} palle", position++, entry.username, entry.score);
+        reply += std::format(
+            "\n{}) {} {} — {} palle",
+            position++,
+            zodiac::sign_of(entry.username).symbol,
+            entry.username,
+            entry.score
+        );
         if (entry.quotes_added > 0) {
             reply += std::format(
                 " — 📜 {} {}",

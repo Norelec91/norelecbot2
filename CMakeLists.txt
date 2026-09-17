@@ -59,6 +59,7 @@ set(CORE_SOURCES
     src/irc_session.cpp
     src/rest_routes.cpp
     src/text.cpp
+    src/zodiac.cpp
 )
 
 add_library(norelecbot_core STATIC ${CORE_SOURCES})
@@ -82,7 +83,7 @@ endif()
 include(CTest)
 if(BUILD_TESTING)
     find_package(doctest REQUIRED)
-    foreach(test config services commands rest-routes text irc-protocol irc-session)
+    foreach(test config services commands rest-routes text zodiac irc-protocol irc-session)
         string(REPLACE "-" "_" source "${test}")
         add_executable(test-${test} tests/test_${source}.cpp)
         target_link_libraries(test-${test} PRIVATE norelecbot_core doctest::doctest)
