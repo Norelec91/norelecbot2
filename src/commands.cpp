@@ -170,7 +170,7 @@ std::string handle_raid(const CommandContext &context, std::string_view target) 
         break;
     }
     return std::format(
-        "🚀 {} parti per la casa di {}: arrivi tra {}. La tua base resta scoperta.",
+        "🚀 {} parti per {}: arrivi tra {}. La tua base resta scoperta.",
         username,
         result.target,
         format_wait(result.seconds)

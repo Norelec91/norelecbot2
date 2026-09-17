@@ -239,7 +239,7 @@ TEST_CASE("We @someone sends the player out to rob them") {
         return command_dispatch(context, text).value_or("<nessuna risposta>");
     };
 
-    CHECK(reply("We @alice") == "🚀 bob parti per la casa di alice: arrivi tra 5 secondi. La tua base resta scoperta.");
+    CHECK(reply("We @alice") == "🚀 bob parti per alice: arrivi tra 5 secondi. La tua base resta scoperta.");
     CHECK(reply("We @alice") == "🚀 bob sei già in viaggio, torni tra 10 secondi.");
     /* Another player, who is at home and can therefore get an answer of his own. */
     context.username = "carol";
