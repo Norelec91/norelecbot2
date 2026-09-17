@@ -41,7 +41,7 @@ TEST_CASE("a quote does not tag anyone") {
     CHECK(text::strip_mentions("due @tizio e @caio_91 insieme") == "due tizio e caio_91 insieme");
 
     /* An @ that names nobody stays where it is. */
-    CHECK(text::strip_mentions("norelec@gmail.example") == "norelec@gmail.example");
+    CHECK(text::strip_mentions("tizio@posta.example") == "tizio@posta.example");
     CHECK(text::strip_mentions("prezzo @ 5 euro") == "prezzo @ 5 euro");
     CHECK(text::strip_mentions("finisce con una @") == "finisce con una @");
     CHECK(text::strip_mentions("@@doppia") == "doppia");
