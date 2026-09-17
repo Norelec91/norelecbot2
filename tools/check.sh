@@ -37,7 +37,11 @@ cppcheck --enable=warning,style,performance,portability --language=c++ --std=c++
     -I src src tests fuzz
 
 echo "==> clang-tidy"
-clang-tidy -p "$OUT/clang-fuzz" --quiet src/*.cpp tests/*.cpp fuzz/*.cpp 2> >(grep -v "warnings generated" >&2)
+# One file at a time took five minutes; run-clang-tidy spreads them over the cores.
+if ! run-clang-tidy -p "$OUT/clang-fuzz" -quiet -j "$(nproc)" > "$OUT/clang-tidy.log" 2>&1; then
+    grep -vE "^\[|warnings generated|^Enabled checks|^$" "$OUT/clang-tidy.log" >&2 || true
+    exit 1
+fi
 
 echo "==> restart check"
 tools/check_restart.sh bin/norelecbot

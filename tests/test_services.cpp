@@ -469,6 +469,25 @@ TEST_CASE("an empty house has no defences") {
     CHECK(balloon_buy(storage, "alice", 0, 5, 0).status == BalloonStatus::already_owned);
 }
 
+TEST_CASE("nobody takes the place from the road") {
+    const TestPaths paths{"raid-claim-away-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":100,"carol":10},"quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+
+    static_cast<void>(raid_start(storage, 0, "alice", "carol", 0, quick_rides()));
+    const ClaimResult refused = conquister_claim(storage, 1, "alice", 1);
+    CHECK(refused.status == ClaimStatus::travelling);
+    CHECK(refused.travel_seconds == 9);
+    CHECK_FALSE(conquister_user(storage, "alice")->in_conquister);
+
+    /* Home again, and the place is his to take. */
+    static_cast<void>(raid_due(storage, 10, quick_rides()));
+    CHECK(conquister_claim(storage, 1, "alice", 11).status == ClaimStatus::taken);
+}
+
 TEST_CASE("the place of someone away is taken without a roll") {
     const TestPaths paths{"raid-claim-test"};
     {

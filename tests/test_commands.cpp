@@ -264,6 +264,9 @@ TEST_CASE("We @someone sends the player out to rob them") {
     context.username = "bob";
     context.user_id = 2;
 
+    CHECK(reply("We @TheConquister37") ==
+          "🐎 bob sei per strada: non puoi entrare in @TheConquister37 prima di tornare a casa, tra 10 secondi.");
+
     CHECK(command_is_for_bot("We @alice"));
     CHECK_FALSE(command_is_for_bot("We @"));
 

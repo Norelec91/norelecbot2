@@ -13,7 +13,7 @@
 
 namespace norelecbot {
 
-enum class ClaimStatus { taken, already_held, defended, cooldown };
+enum class ClaimStatus { taken, already_held, defended, cooldown, travelling };
 
 struct ClaimResult {
     ClaimStatus status = ClaimStatus::taken;
@@ -31,6 +31,8 @@ struct ClaimResult {
     std::int64_t attack_cost = 0;
     /* defended: how long a balloon no attempt can pop still holds, zero for an ordinary one. */
     std::int64_t shield_seconds = 0;
+    /* travelling: how long before the claimer is home again. */
+    std::int64_t travel_seconds = 0;
     /* taken: the multiplier the kicked holder had bought, zero when there was none. */
     std::int64_t boost_multiplier = 0;
     /* taken: what the house of the day was worth to the kicked holder, 100 when it was indifferent. */

@@ -15,8 +15,10 @@ WELCOME = [
 
 
 class Server:
-    def __init__(self, certificate, key, port):
+    def __init__(self, certificate, key, port, transcript):
         self.started = time.monotonic()
+        """Written line by line: the checks watch this file while the bot talks."""
+        self.transcript = open(transcript, "w", encoding="utf-8", buffering=1)
         self.context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         self.context.load_cert_chain(certificate, key)
         self.listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -49,6 +51,7 @@ class Server:
                     if not line:
                         continue
                     self.received.append(line)
+                    self.transcript.write(line + "\n")
                     print("<< %7.3f %s" % (time.monotonic() - self.started, line), flush=True)
                     parts = line.split(" ")
                     command = parts[0].upper()
@@ -85,13 +88,12 @@ def main():
         whois.append(":fake.azzurra.chat 307 {nick} {target} :has identified for this nick")
     whois.append(":fake.azzurra.chat 318 {nick} {target} :End of /WHOIS list.")
 
-    server = Server(options.certificate, options.key, options.port)
+    server = Server(options.certificate, options.key, options.port, options.transcript)
     script = {"whois": whois, "messages": options.message}
     worker = threading.Thread(target=server.serve, args=(script,), daemon=True)
     worker.start()
     worker.join(25)
-    with open(options.transcript, "w", encoding="utf-8") as transcript:
-        transcript.write("\n".join(server.received) + "\n")
+    server.transcript.close()
     return 0
 
 

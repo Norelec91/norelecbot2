@@ -198,6 +198,14 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
         );
     /* A name that came from IRC must not be written as a mention: on Telegram it would tag a stranger. */
     const std::string_view mention = result.previous_user_id != 0 ? "@" : "";
+    if (result.status == ClaimStatus::travelling) {
+        return std::format(
+            "🐎 {} sei per strada: non puoi entrare in {} prima di tornare a casa, tra {}.",
+            username,
+            conquister_place,
+            format_wait(result.travel_seconds)
+        );
+    }
     if (result.status == ClaimStatus::cooldown) {
         return std::format("⏳ {} hai ancora {} di penalità.", username, format_wait(result.penalty_seconds));
     }

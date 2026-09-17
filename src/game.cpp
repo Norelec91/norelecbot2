@@ -118,6 +118,12 @@ ClaimResult conquister_claim(
         ConquisterState &state = session.state();
         remember_telegram(state, username, user_id);
         ClaimResult outcome;
+        /* A place is held by standing in it, not from the road. */
+        if (const Raid *travelling = raid_of(state, username); travelling != nullptr) {
+            outcome.status = ClaimStatus::travelling;
+            outcome.travel_seconds = std::max<std::int64_t>(travelling->back - now, 0);
+            return outcome;
+        }
         if (const auto penalty = find_entry(state.cooldowns, username); penalty != state.cooldowns.end()) {
             if (penalty->second > now) {
                 outcome.status = ClaimStatus::cooldown;
@@ -218,6 +224,9 @@ ClaimResult conquister_claim(
         break;
     case ClaimStatus::cooldown:
         log_info("claim blocked user={} wait={}", username, result.penalty_seconds);
+        break;
+    case ClaimStatus::travelling:
+        log_info("claim refused user={} travelling={}", username, result.travel_seconds);
         break;
     case ClaimStatus::already_held:
         break;
