@@ -170,7 +170,7 @@ std::string handle_raid(const CommandContext &context, std::string_view target) 
         return std::format("🚀 {} non conosco nessun giocatore di nome {}.", username, target);
     case RaidStatus::left_place:
         return std::format(
-            "🏠 {} lasci {} e torni in {}: hai guadagnato {} palle{}.",
+            "🪐 {} lasci {} e torni in {}: hai guadagnato {} palle{}.",
             username,
             conquister_place,
             home,
@@ -185,7 +185,7 @@ std::string handle_raid(const CommandContext &context, std::string_view target) 
             format_wait(result.seconds)
         );
     case RaidStatus::home_already:
-        return std::format("🏠 {} sei già in {}.", username, home);
+        return std::format("🪐 {} sei già in {}.", username, home);
     case RaidStatus::started:
         break;
     }
@@ -503,9 +503,9 @@ std::string raid_event_reply(const RaidEvent &event, const zodiac::Overrides &si
     const std::string home = std::format("{}{}", event.raider_on_telegram ? "@" : "", event.raider);
     if (event.kind == RaidEvent::Kind::returned) {
         if (event.loot > 0) {
-            return std::format("🏠 {} sei tornato in {} con {} palle.", event.raider, home, event.loot);
+            return std::format("🪐 {} sei tornato in {} con {} palle.", event.raider, home, event.loot);
         }
-        return std::format("🏠 {} sei tornato in {} a mani vuote.", event.raider, home);
+        return std::format("🪐 {} sei tornato in {} a mani vuote.", event.raider, home);
     }
     if (event.kind == RaidEvent::Kind::defended) {
         return std::format(

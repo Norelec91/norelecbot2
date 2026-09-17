@@ -254,8 +254,8 @@ TEST_CASE("We @someone sends the player out to rob them") {
     /* Another player, who is at home and can therefore get an answer of his own. */
     context.username = "carol";
     context.user_id = 3;
-    CHECK(reply("We @carol") == "🏠 carol sei già in @carol.");
-    CHECK(reply("We @CAROL") == "🏠 carol sei già in @carol.");
+    CHECK(reply("We @carol") == "🪐 carol sei già in @carol.");
+    CHECK(reply("We @CAROL") == "🪐 carol sei già in @carol.");
     CHECK(reply("We @nessuno") == "🚀 carol non conosco nessun giocatore di nome nessuno.");
     context.username = "bob";
     context.user_id = 2;
@@ -321,8 +321,8 @@ TEST_CASE("the raids tell what happened") {
 
     RaidEvent home{.kind = RaidEvent::Kind::returned, .raider = "bob", .target = "alice"};
     home.loot = 250;
-    CHECK(raid_event_reply(home, none) == "🏠 bob sei tornato in bob con 250 palle.");
+    CHECK(raid_event_reply(home, none) == "🪐 bob sei tornato in bob con 250 palle.");
     home.loot = 0;
-    CHECK(raid_event_reply(home, none) == "🏠 bob sei tornato in bob a mani vuote.");
+    CHECK(raid_event_reply(home, none) == "🪐 bob sei tornato in bob a mani vuote.");
 }
 
