@@ -17,7 +17,7 @@ struct AppConfig {
     static constexpr int default_balloon_cost = 1000;
     static constexpr int default_cooldown_seconds = 300;
     static constexpr int default_attack_cost = 100;
-    static constexpr int default_travel_divisor = 300;
+    static constexpr int default_travel_divisor = 350;
     static constexpr int default_raid_share = 4;
     static constexpr int default_shield_seconds = 3600;
     static constexpr int default_boost_cost = 1500;
