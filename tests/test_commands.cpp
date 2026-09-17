@@ -97,6 +97,20 @@ TEST_CASE("the bot answers the commands it knows and ignores the rest") {
         context.username = "erin";
         CHECK(reply("/buyballoon") == "erin ti servono 1000 palle per un palloncino (ne hai 0).");
 
+        config.boost_cost = 0;
+        context.owner = false;
+        context.user_id = 6;
+        context.username = "frank";
+        CHECK(reply("/buyboost") ==
+              "🚀 frank hai comprato un boost spendendo 0 palle! Il tuo prossimo possesso di "
+              "@TheConquister37 vale x3, fino a quando ti spodestano.");
+        CHECK(reply("/buyboost") == "frank hai già un boost x3 pronto.");
+        CHECK(reply("/buyballoon") == "frank hai un boost attivo: il palloncino puoi comprarlo dopo.");
+        config.boost_cost = 1500;
+        context.user_id = 7;
+        context.username = "grace";
+        CHECK(reply("/buyboost") == "grace ti servono 1500 palle per un boost (ne hai 0).");
+
         config.quote_cost = 0;
         context.user_id = 3;
         context.username = "carol";

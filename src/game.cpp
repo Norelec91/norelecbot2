@@ -103,6 +103,15 @@ ClaimResult conquister_claim(
             }
             outcome.previous_username = holder;
             outcome.earned = now > state.current->since ? now - state.current->since : 0;
+            if (const auto boost = find_entry(state.boosts, holder); boost != state.boosts.end()) {
+                outcome.boost_multiplier = boost->second;
+                if (outcome.earned > std::numeric_limits<std::int64_t>::max() / outcome.boost_multiplier) {
+                    log_error("Could not multiply the Conquister score");
+                    throw StorageError("Conquister score overflow");
+                }
+                outcome.earned *= outcome.boost_multiplier;
+                state.boosts.erase(holder);
+            }
             std::int64_t &score = state.scores[outcome.previous_username];
             if (score > 0 && outcome.earned > std::numeric_limits<std::int64_t>::max() - score) {
                 log_error("Could not update Conquister score");
@@ -117,11 +126,12 @@ ClaimResult conquister_claim(
     switch (result.status) {
     case ClaimStatus::taken:
         log_info(
-            "claim taken user={} previous={} earned={} balloon_popped={}",
+            "claim taken user={} previous={} earned={} balloon_popped={} boost={}",
             username,
             result.previous_username,
             result.earned,
-            result.balloon_popped ? 1 : 0
+            result.balloon_popped ? 1 : 0,
+            result.boost_multiplier
         );
         break;
     case ClaimStatus::defended:
@@ -213,6 +223,9 @@ BalloonResult balloon_buy(
         if (find_entry(state.balloons, username) != state.balloons.end()) {
             return BalloonResult{BalloonStatus::already_owned, score};
         }
+        if (find_entry(state.boosts, username) != state.boosts.end()) {
+            return BalloonResult{BalloonStatus::has_boost, score};
+        }
         if (score < cost) {
             return BalloonResult{BalloonStatus::insufficient_score, score};
         }
@@ -232,6 +245,48 @@ BalloonResult balloon_buy(
             cost,
             result.available_score,
             result.shield_seconds
+        );
+    }
+    return result;
+}
+
+BoostResult boost_buy(
+    Storage &storage,
+    const std::string &username,
+    int cost,
+    std::int64_t multiplier,
+    std::int64_t now
+) {
+    const BoostResult result = storage.transaction([&](StorageSession &session) {
+        ConquisterState &state = session.state();
+        const std::int64_t score = counter(state.scores, username);
+        if (const auto boost = find_entry(state.boosts, username); boost != state.boosts.end()) {
+            return BoostResult{BoostStatus::already_owned, score, boost->second};
+        }
+        if (find_entry(state.balloons, username) != state.balloons.end()) {
+            return BoostResult{BoostStatus::has_balloon, score};
+        }
+        if (const auto shield = find_entry(state.shields, username); shield != state.shields.end()) {
+            if (shield->second > now) {
+                return BoostResult{BoostStatus::has_balloon, score};
+            }
+            state.shields.erase(username);
+        }
+        if (score < cost) {
+            return BoostResult{BoostStatus::insufficient_score, score};
+        }
+        state.scores[username] = score - cost;
+        state.boosts[username] = multiplier;
+        return BoostResult{BoostStatus::bought, score - cost, multiplier};
+    });
+
+    if (result.status == BoostStatus::bought) {
+        log_info(
+            "boost bought user={} cost={} left={} multiplier={}",
+            username,
+            cost,
+            result.available_score,
+            result.multiplier
         );
     }
     return result;

@@ -15,6 +15,8 @@ struct AppConfig {
     static constexpr int default_balloon_cost = 1000;
     static constexpr int default_cooldown_seconds = 300;
     static constexpr int default_shield_seconds = 3600;
+    static constexpr int default_boost_cost = 1500;
+    static constexpr int default_boost_multiplier = 3;
     static constexpr int default_api_port = 8000;
     static constexpr int default_irc_port = 6697;
     static constexpr std::string_view default_irc_nick = "NorelecBot";
@@ -28,6 +30,8 @@ struct AppConfig {
     int quote_cost = default_quote_cost;
     int balloon_cost = default_balloon_cost;
     int cooldown_seconds = default_cooldown_seconds;
+    int boost_cost = default_boost_cost;
+    int boost_multiplier = default_boost_multiplier;
     /* The players whose balloon cannot be popped, except by each other, and how long it holds. */
     std::vector<std::string> shield_users;
     int shield_seconds = default_shield_seconds;

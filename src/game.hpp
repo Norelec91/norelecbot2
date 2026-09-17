@@ -28,15 +28,25 @@ struct ClaimResult {
     std::int64_t penalty_seconds = 0;
     /* defended: how long a balloon no attempt can pop still holds, zero for an ordinary one. */
     std::int64_t shield_seconds = 0;
+    /* taken: the multiplier the kicked holder had bought, zero when there was none. */
+    std::int64_t boost_multiplier = 0;
 };
 
-enum class BalloonStatus { bought, already_owned, insufficient_score };
+enum class BalloonStatus { bought, already_owned, has_boost, insufficient_score };
+
+enum class BoostStatus { bought, already_owned, has_balloon, insufficient_score };
 
 struct BalloonResult {
     BalloonStatus status = BalloonStatus::bought;
     std::int64_t available_score = 0;
     /* How long the balloon just bought cannot be popped, zero for an ordinary one. */
     std::int64_t shield_seconds = 0;
+};
+
+struct BoostResult {
+    BoostStatus status = BoostStatus::bought;
+    std::int64_t available_score = 0;
+    std::int64_t multiplier = 0;
 };
 
 struct LeaderboardEntry {
@@ -97,6 +107,15 @@ struct QuotePage {
     int cost,
     std::int64_t now,
     std::int64_t shield_seconds
+);
+
+/* The multiplier is kept until the place is taken from the buyer, and rules out a balloon meanwhile. */
+[[nodiscard]] BoostResult boost_buy(
+    Storage &storage,
+    const std::string &username,
+    int cost,
+    std::int64_t multiplier,
+    std::int64_t now
 );
 
 [[nodiscard]] QuoteAddResult quote_add(

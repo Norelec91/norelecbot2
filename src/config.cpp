@@ -74,6 +74,12 @@ constexpr std::array settings{
     Setting{"NORELECBOT_COOLDOWN_SECONDS", [](AppConfig &config, std::string_view value) {
         return set_number(config.cooldown_seconds, value, AppConfig::default_cooldown_seconds, 0);
     }},
+    Setting{"NORELECBOT_BOOST_COST", [](AppConfig &config, std::string_view value) {
+        return set_number(config.boost_cost, value, AppConfig::default_boost_cost, 0);
+    }},
+    Setting{"NORELECBOT_BOOST_MULTIPLIER", [](AppConfig &config, std::string_view value) {
+        return set_number(config.boost_multiplier, value, AppConfig::default_boost_multiplier, 1, 100);
+    }},
     Setting{"NORELECBOT_SHIELD_USERS", [](AppConfig &config, std::string_view value) {
         config.shield_users = split_names(value);
         return true;

@@ -161,12 +161,13 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
     }
     if (!result.previous_username.empty()) {
         reply += std::format(
-            "{0} hai cacciato {4}{1} da {2}.\n{1} hai guadagnato {3} palle!\n",
+            "{0} hai cacciato {4}{1} da {2}.\n{1} hai guadagnato {3} palle{5}!\n",
             username,
             result.previous_username,
             conquister_place,
             result.earned,
-            mention
+            mention,
+            result.boost_multiplier > 0 ? std::format(" col boost x{}", result.boost_multiplier) : ""
         );
     }
     reply += std::format("🪐 {} sei in {}!", username, conquister_place);
@@ -250,6 +251,9 @@ std::string handle_buy_balloon(const CommandContext &context, std::string_view) 
         }
         return std::format("{} hai già un palloncino.", username);
     }
+    if (result.status == BalloonStatus::has_boost) {
+        return std::format("{} hai un boost attivo: il palloncino puoi comprarlo dopo.", username);
+    }
     if (result.status == BalloonStatus::insufficient_score) {
         return std::format(
             "{} ti servono {} palle per un palloncino (ne hai {}).",
@@ -320,10 +324,43 @@ std::string handle_delete_quote(const CommandContext &context, std::string_view 
     return removed ? std::format("Citazione eliminata: {}", *removed) : "Citazione non trovata.";
 }
 
+std::string handle_buy_boost(const CommandContext &context, std::string_view) {
+    if (context.username.empty()) {
+        return missing_username_reply();
+    }
+    const std::string username{context.username};
+    const int cost = context.config.boost_cost;
+    const BoostResult result =
+        boost_buy(context.storage, username, cost, context.config.boost_multiplier, seconds_now());
+    if (result.status == BoostStatus::already_owned) {
+        return std::format("{} hai già un boost x{} pronto.", username, result.multiplier);
+    }
+    if (result.status == BoostStatus::has_balloon) {
+        return std::format("{} hai un palloncino: il boost puoi comprarlo dopo.", username);
+    }
+    if (result.status == BoostStatus::insufficient_score) {
+        return std::format(
+            "{} ti servono {} palle per un boost (ne hai {}).",
+            username,
+            cost,
+            result.available_score
+        );
+    }
+    return std::format(
+        "🚀 {} hai comprato un boost spendendo {} palle! Il tuo prossimo possesso di {} vale x{}, "
+        "fino a quando ti spodestano.",
+        username,
+        cost,
+        conquister_place,
+        result.multiplier
+    );
+}
+
 constexpr std::array commands{
     CommandDefinition{"/leaderboard", handle_leaderboard},
     CommandDefinition{"/addquote", handle_add_quote},
     CommandDefinition{"/buyballoon", handle_buy_balloon},
+    CommandDefinition{"/buyboost", handle_buy_boost},
     CommandDefinition{"/quotes", handle_quotes},
     CommandDefinition{"/delquote", handle_delete_quote},
 };

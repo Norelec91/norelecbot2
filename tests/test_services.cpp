@@ -258,3 +258,49 @@ TEST_CASE("two shielded players can pop each other's balloon") {
     /* Popped for good: alice has to buy another one. */
     CHECK(balloon_buy(storage, "alice", 0, 300, 3600).status == BalloonStatus::bought);
 }
+
+TEST_CASE("a boost multiplies what the hold earns, once") {
+    const TestPaths paths{"boost-test"};
+    Storage storage{paths.conquister, paths.quotes};
+
+    static_cast<void>(conquister_claim(storage, 1, "alice", 0, 0, false));
+    static_cast<void>(conquister_claim(storage, 2, "bob", 1000, 0, false));
+    CHECK(conquister_user(storage, "alice")->score == 1000);
+
+    const BoostResult bought = boost_buy(storage, "alice", 1000, 3, 1000);
+    CHECK(bought.status == BoostStatus::bought);
+    CHECK(bought.available_score == 0);
+    CHECK(boost_buy(storage, "alice", 0, 3, 1000).status == BoostStatus::already_owned);
+
+    SUBCASE("it is cashed in when the place is taken away") {
+        static_cast<void>(conquister_claim(storage, 1, "alice", 2000, 0, false));
+        const ClaimResult kicked = conquister_claim(storage, 2, "bob", 2100, 0, false);
+        CHECK(kicked.previous_username == "alice");
+        CHECK(kicked.boost_multiplier == 3);
+        CHECK(kicked.earned == 300);
+        CHECK(conquister_user(storage, "alice")->score == 300);
+
+        /* Spent: the next hold earns the usual. */
+        static_cast<void>(conquister_claim(storage, 1, "alice", 3000, 0, false));
+        const ClaimResult again = conquister_claim(storage, 2, "bob", 3100, 0, false);
+        CHECK(again.boost_multiplier == 0);
+        CHECK(again.earned == 100);
+    }
+
+    SUBCASE("it rules out a balloon while it waits") {
+        CHECK(balloon_buy(storage, "alice", 0, 2000, 0).status == BalloonStatus::has_boost);
+    }
+}
+
+TEST_CASE("a balloon rules out a boost") {
+    const TestPaths paths{"boost-balloon-test"};
+    Storage storage{paths.conquister, paths.quotes};
+
+    CHECK(balloon_buy(storage, "alice", 0, 0, 0).status == BalloonStatus::bought);
+    CHECK(boost_buy(storage, "alice", 0, 3, 0).status == BoostStatus::has_balloon);
+
+    CHECK(balloon_buy(storage, "bob", 0, 0, 3600).status == BalloonStatus::bought);
+    CHECK(boost_buy(storage, "bob", 0, 3, 100).status == BoostStatus::has_balloon);
+    /* Once the hour is over the shield is gone and the boost can be bought. */
+    CHECK(boost_buy(storage, "bob", 0, 3, 3700).status == BoostStatus::bought);
+}
