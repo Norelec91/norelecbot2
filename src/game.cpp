@@ -334,13 +334,19 @@ RaidResult raid_start(
         ConquisterState &state = session.state();
         remember_telegram(state, username, user_id);
         RaidResult outcome;
+        /* Whoever is already on the road only gets told so, his own house included. */
         if (const Raid *travelling = raid_of(state, username); travelling != nullptr) {
             outcome.status = RaidStatus::already_travelling;
             outcome.seconds = std::max<std::int64_t>(travelling->back - now, 0);
             return outcome;
         }
+        /* Robbing your own house burns what is in it. */
         if (text::equals_ignore_case(username, target)) {
             outcome.status = RaidStatus::oneself;
+            outcome.lost = counter(state.scores, username);
+            if (outcome.lost > 0) {
+                state.scores[username] = 0;
+            }
             return outcome;
         }
         const std::optional<std::string> known = known_player(state, target);
@@ -365,6 +371,9 @@ RaidResult raid_start(
 
     if (result.status == RaidStatus::started) {
         log_info("raid started user={} target={} travel={}", username, result.target, result.seconds);
+    }
+    if (result.status == RaidStatus::oneself) {
+        log_info("raid on oneself user={} lost={}", username, result.lost);
     }
     return result;
 }

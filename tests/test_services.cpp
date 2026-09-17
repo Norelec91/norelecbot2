@@ -514,3 +514,30 @@ TEST_CASE("an id is drawn once and stays") {
     CHECK(again.seconds == drawn);
     CHECK(read_json(paths.conquister).at("ids").at("alice").get<std::int64_t>() == alice);
 }
+
+TEST_CASE("robbing your own house burns everything in it") {
+    const TestPaths paths{"raid-oneself-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":1000,"bob":700},"quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+
+    const RaidResult burnt = raid_start(storage, 0, "alice", "ALICE", 0, quick_rides());
+    CHECK(burnt.status == RaidStatus::oneself);
+    CHECK(burnt.lost == 1000);
+    CHECK(conquister_user(storage, "alice")->score == 0);
+
+    /* Nothing left, so nothing more to lose. */
+    const RaidResult again = raid_start(storage, 0, "alice", "alice", 1, quick_rides());
+    CHECK(again.status == RaidStatus::oneself);
+    CHECK(again.lost == 0);
+
+    SUBCASE("on the road it costs nothing: he is told he is already out") {
+        static_cast<void>(raid_start(storage, 0, "bob", "alice", 2, quick_rides()));
+        const RaidResult away = raid_start(storage, 0, "bob", "bob", 3, quick_rides());
+        CHECK(away.status == RaidStatus::already_travelling);
+        CHECK(away.lost == 0);
+        CHECK(conquister_user(storage, "bob")->score == 700);
+    }
+}

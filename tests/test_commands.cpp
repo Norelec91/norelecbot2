@@ -244,8 +244,8 @@ TEST_CASE("We @someone sends the player out to rob them") {
     /* Another player, who is at home and can therefore get an answer of his own. */
     context.username = "carol";
     context.user_id = 3;
-    CHECK(reply("We @carol") == "🐎 carol a casa tua ci sei già.");
-    CHECK(reply("We @CAROL") == "🐎 carol a casa tua ci sei già.");
+    CHECK(reply("We @carol") == "💀 carol hai svaligiato casa tua, ma non c'era niente da rubare.");
+    CHECK(reply("We @CAROL") == "💀 carol hai svaligiato casa tua, ma non c'era niente da rubare.");
     CHECK(reply("We @nessuno") == "🐎 carol non conosco nessun giocatore di nome nessuno.");
     context.username = "bob";
     context.user_id = 2;
@@ -256,6 +256,13 @@ TEST_CASE("We @someone sends the player out to rob them") {
     CHECK_FALSE(command_dispatch(context, "We @ alice").has_value());
     CHECK_FALSE(command_dispatch(context, "We @alice ora").has_value());
     CHECK_FALSE(command_dispatch(context, "we @alice").has_value());
+
+    /* A player with something to lose loses it. */
+    context.username = "alice";
+    context.user_id = 4;
+    CHECK(reply("We @alice") == "💀 alice hai svaligiato casa tua: 1000 palle bruciate, non ti resta niente.");
+    context.username = "bob";
+    context.user_id = 2;
 
     CHECK(command_is_for_bot("We @alice"));
     CHECK_FALSE(command_is_for_bot("We @"));

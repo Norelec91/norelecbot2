@@ -158,7 +158,14 @@ std::string handle_raid(const CommandContext &context, std::string_view target) 
     case RaidStatus::unknown_target:
         return std::format("🐎 {} non conosco nessun giocatore di nome {}.", username, target);
     case RaidStatus::oneself:
-        return std::format("🐎 {} a casa tua ci sei già.", username);
+        if (result.lost > 0) {
+            return std::format(
+                "💀 {} hai svaligiato casa tua: {} palle bruciate, non ti resta niente.",
+                username,
+                result.lost
+            );
+        }
+        return std::format("💀 {} hai svaligiato casa tua, ma non c'era niente da rubare.", username);
     case RaidStatus::started:
         break;
     }

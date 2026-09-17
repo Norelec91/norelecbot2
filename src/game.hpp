@@ -71,6 +71,8 @@ struct RaidResult {
     std::string target;
     /* Seconds to get there, or still to wait when already on the road. */
     std::int64_t seconds = 0;
+    /* oneself: the palle that robbing himself cost him. */
+    std::int64_t lost = 0;
 };
 
 struct RaidEvent {
