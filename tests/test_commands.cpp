@@ -277,11 +277,12 @@ TEST_CASE("We @someone sends the player out to rob them") {
     context.user_id = 2;
 
     /* On the road, naming yourself turns you round. */
-    CHECK(reply("We @bob") == "🚀 bob lasci perdere e torni in @bob: arrivi tra 10 secondi.");
-    CHECK(reply("We @alice") == "🚀 bob sei già in viaggio, torni tra 10 secondi.");
+    /* The seconds left depend on the clock, so only the wording is pinned here. */
+    CHECK(reply("We @bob").starts_with("🚀 bob lasci perdere e torni in @bob: arrivi tra "));
+    CHECK(reply("We @alice").starts_with("🚀 bob sei già in viaggio, torni tra "));
 
-    CHECK(reply("We @TheConquister37") ==
-          "🚀 bob sei per strada: non puoi entrare in @TheConquister37 prima di tornare in @bob, tra 10 secondi.");
+    CHECK(reply("We @TheConquister37")
+              .starts_with("🚀 bob sei per strada: non puoi entrare in @TheConquister37 prima di tornare in @bob, tra "));
 
     /* The one holding the place stays in it. */
     static_cast<void>(conquister_claim(storage, 9, "erin", seconds_now_for_test()));
@@ -412,5 +413,37 @@ TEST_CASE("a shadowed player is answered for and his quote is dropped") {
     CHECK(reply("/addquote la citazione di alice").starts_with("alice hai aggiunto la citazione"));
     CHECK(reply("/addquote LA FRODE") == "alice questa citazione non si può aggiungere: nessun addebito.");
     CHECK(quote_page_load(storage, 1).total == 1);
+}
+
+TEST_CASE("the zimbelli are the ones below zero") {
+    const TestPaths paths{"zimbelli-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":500,"bob":-170,"carol":-70,"dave":0},)"
+             << R"("quotes_added":{}})";
+    }
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{config.conquister_path, config.quotes_path};
+
+    const CommandContext context{.storage = storage, .config = config, .user_id = 1, .username = "alice"};
+    const std::string reply = command_dispatch(context, "/zimbelli").value_or("<nessuna risposta>");
+    CHECK(reply.starts_with("🤡 Zimbelli\n"));
+    CHECK(reply.contains("\n1) "));
+    CHECK(reply.contains("bob — 170 palle sotto zero"));
+    CHECK(reply.contains("carol — 70 palle sotto zero"));
+    /* Deepest first, and nobody who is not in the red. */
+    CHECK(reply.find("bob") < reply.find("carol"));
+    CHECK_FALSE(reply.contains("alice"));
+    CHECK_FALSE(reply.contains("dave"));
+
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":500},"quotes_added":{}})";
+    }
+    Storage rich{config.conquister_path, config.quotes_path};
+    const CommandContext theirs{.storage = rich, .config = config, .user_id = 1, .username = "alice"};
+    CHECK(command_dispatch(theirs, "/zimbelli") == "Nessuno zimbello: nessuno è sotto zero in @TheConquister37.");
 }
 

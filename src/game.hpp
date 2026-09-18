@@ -158,6 +158,8 @@ struct ClaimRules {
 );
 /* limit 0 returns every entry. */
 [[nodiscard]] Leaderboard conquister_leaderboard(Storage &storage, std::size_t limit);
+/* The players who own less than nothing, the deepest first. */
+[[nodiscard]] std::vector<LeaderboardEntry> conquister_negatives(Storage &storage, std::size_t limit);
 /* Case-insensitive lookup; rank is 0 when the user has no score yet. */
 [[nodiscard]] std::optional<ConquisterUser> conquister_user(Storage &storage, std::string_view username);
 /* One balloon per user: it survives 4 attempts at most, then has to be bought again. */

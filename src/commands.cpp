@@ -324,6 +324,24 @@ std::string handle_leaderboard(const CommandContext &context, std::string_view) 
     return reply;
 }
 
+std::string handle_zimbelli(const CommandContext &context, std::string_view) {
+    const std::vector<LeaderboardEntry> zimbelli = conquister_negatives(context.storage, leaderboard_size);
+    if (zimbelli.empty()) {
+        return std::format("Nessuno zimbello: nessuno è sotto zero in {}.", conquister_place);
+    }
+    std::string reply = "🤡 Zimbelli\n";
+    for (std::size_t position = 1; const LeaderboardEntry &entry : zimbelli) {
+        reply += std::format(
+            "\n{}) {} {} — {} palle sotto zero",
+            position++,
+            zodiac::sign_of(entry.username, context.config.zodiac_signs).symbol,
+            entry.username,
+            -entry.score
+        );
+    }
+    return reply;
+}
+
 std::string handle_add_quote(const CommandContext &context, std::string_view argument) {
     if (context.username.empty()) {
         return missing_username_reply();
@@ -501,6 +519,7 @@ std::string handle_buy_boost(const CommandContext &context, std::string_view) {
 
 constexpr std::array commands{
     CommandDefinition{"/leaderboard", handle_leaderboard},
+    CommandDefinition{"/zimbelli", handle_zimbelli},
     CommandDefinition{"/addquote", handle_add_quote},
     CommandDefinition{"/buyballoon", handle_buy_balloon},
     CommandDefinition{"/buyboost", handle_buy_boost},

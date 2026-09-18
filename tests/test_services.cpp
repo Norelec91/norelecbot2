@@ -335,7 +335,7 @@ TEST_CASE("an attempt that a balloon survives costs palle") {
     }
 }
 
-TEST_CASE("nobody is charged more than they have") {
+TEST_CASE("a failed attempt is paid even in the red") {
     const TestPaths paths{"attack-cost-empty-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
@@ -344,16 +344,26 @@ TEST_CASE("nobody is charged more than they have") {
     }
     Storage storage{paths.conquister, paths.quotes};
 
-    const ClaimResult first =
-        conquister_claim(storage, 2, "bob", 10, ClaimRules{.cooldown_seconds = 0, .attack_cost = 100, .ignores_shield = false, .signs = {}});
+    const ClaimResult first = conquister_claim(
+        storage,
+        2,
+        "bob",
+        10,
+        ClaimRules{.cooldown_seconds = 0, .attack_cost = 100, .ignores_shield = false, .signs = {}}
+    );
     CHECK(first.status == ClaimStatus::defended);
-    CHECK(first.attack_cost == 30);
-    CHECK(conquister_user(storage, "bob")->score == 0);
+    CHECK(first.attack_cost == 100);
+    CHECK(conquister_user(storage, "bob")->score == -70);
 
-    const ClaimResult second =
-        conquister_claim(storage, 2, "bob", 20, ClaimRules{.cooldown_seconds = 0, .attack_cost = 100, .ignores_shield = false, .signs = {}});
-    CHECK(second.attack_cost == 0);
-    CHECK(conquister_user(storage, "bob")->score == 0);
+    const ClaimResult second = conquister_claim(
+        storage,
+        2,
+        "bob",
+        20,
+        ClaimRules{.cooldown_seconds = 0, .attack_cost = 100, .ignores_shield = false, .signs = {}}
+    );
+    CHECK(second.attack_cost == 100);
+    CHECK(conquister_user(storage, "bob")->score == -170);
 }
 
 namespace {
@@ -657,5 +667,21 @@ TEST_CASE("a shadowed raider always comes home empty handed") {
     REQUIRE(theirs.size() == 1);
     CHECK(theirs[0].kind == RaidEvent::Kind::stolen);
     CHECK(theirs[0].loot > 0);
+}
+
+TEST_CASE("there is nothing to steal from somebody in the red") {
+    const TestPaths paths{"raid-red-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":-500,"bob":100},"quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+
+    static_cast<void>(raid_start(storage, 0, "bob", "alice", 0, quick_rides()));
+    const std::vector<RaidEvent> arrival = raid_due(storage, 5, quick_rides());
+    REQUIRE(arrival.size() == 1);
+    CHECK(arrival[0].loot == 0);
+    CHECK(conquister_user(storage, "alice")->score == -500);
+    CHECK(conquister_user(storage, "bob")->score == 100);
 }
 

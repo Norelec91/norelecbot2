@@ -46,14 +46,13 @@ Counters::iterator find_entry(Counters &counters, const std::string &username) {
 
 namespace {
 
-/* A balloon that holds costs the attacker, who cannot go below nothing. */
+/* A balloon that holds costs the attacker, even when it puts him in the red. */
 std::int64_t charge_attacker(ConquisterState &state, const std::string &username, int attack_cost) {
-    const std::int64_t available = counter(state.scores, username);
-    const std::int64_t charged = std::min<std::int64_t>(attack_cost, available);
-    if (charged > 0) {
-        state.scores[username] = available - charged;
+    if (attack_cost <= 0) {
+        return 0;
     }
-    return charged;
+    state.scores[username] = counter(state.scores, username) - attack_cost;
+    return attack_cost;
 }
 
 /* What a hold was worth: the seconds it lasted, times the boost he had bought, times the house of the
@@ -275,6 +274,30 @@ Leaderboard conquister_leaderboard(Storage &storage, std::size_t limit) {
     });
 }
 
+std::vector<LeaderboardEntry> conquister_negatives(Storage &storage, std::size_t limit) {
+    return storage.transaction([limit](StorageSession &session) {
+        const ConquisterState &state = session.state();
+        std::vector<std::pair<std::string, std::int64_t>> ranked;
+        for (const Counters::value_type &entry : state.scores) {
+            if (entry.second < 0) {
+                ranked.emplace_back(entry.first, entry.second);
+            }
+        }
+        /* Deepest in the red first, then username in byte order. */
+        std::ranges::sort(ranked, [](const auto &first, const auto &second) {
+            return first.second != second.second ? first.second < second.second : first.first < second.first;
+        });
+        if (limit != 0 && ranked.size() > limit) {
+            ranked.resize(limit);
+        }
+        std::vector<LeaderboardEntry> entries;
+        std::ranges::transform(ranked, std::back_inserter(entries), [&state](const auto &entry) {
+            return LeaderboardEntry{entry.first, entry.second, counter(state.quotes_added, entry.first)};
+        });
+        return entries;
+    });
+}
+
 std::optional<ConquisterUser> conquister_user(Storage &storage, std::string_view username) {
     return storage.transaction([username](StorageSession &session) -> std::optional<ConquisterUser> {
         const ConquisterState &state = session.state();
@@ -473,10 +496,13 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 }
                 if (event.kind == RaidEvent::Kind::stolen) {
                     const std::int64_t theirs = counter(state.scores, raid.target);
-                    const std::int64_t share = rules.loot_share > 0 ? theirs / rules.loot_share : 0;
                     event.raider_percent = zodiac::percent_for(raid.raider, now, rules.signs);
                     event.target_percent = zodiac::percent_for(raid.target, now, rules.signs);
-                    event.loot = std::min(theirs, share * event.raider_percent / event.target_percent);
+                    /* Nothing to carry away from somebody who owns less than nothing. */
+                    if (theirs > 0 && rules.loot_share > 0) {
+                        const std::int64_t share = theirs / rules.loot_share;
+                        event.loot = std::min(theirs, share * event.raider_percent / event.target_percent);
+                    }
                     if (event.loot > 0) {
                         state.scores[raid.target] = theirs - event.loot;
                     }
