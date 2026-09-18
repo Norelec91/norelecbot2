@@ -55,6 +55,16 @@ std::optional<std::int64_t> parse_int64(std::string_view text) {
     return value;
 }
 
+bool contains_ignore_case(std::string_view text, std::string_view piece) {
+    if (piece.empty()) {
+        return false;
+    }
+    const auto found = std::ranges::search(text, piece, [](char first, char second) {
+        return to_lower(first) == to_lower(second);
+    });
+    return !found.empty();
+}
+
 std::string strip_mentions(std::string_view text) {
     std::string stripped;
     stripped.reserve(text.size());

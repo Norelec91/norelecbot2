@@ -34,6 +34,8 @@ struct AppConfig {
     /* Whoever may see and delete the quotes, on Telegram. */
     std::vector<std::int64_t> owner_ids;
     int quote_cost = default_quote_cost;
+    /* Pieces of word a quote may not contain, whatever the spelling. */
+    std::vector<std::string> quote_banned;
     int balloon_cost = default_balloon_cost;
     int cooldown_seconds = default_cooldown_seconds;
     int attack_cost = default_attack_cost;

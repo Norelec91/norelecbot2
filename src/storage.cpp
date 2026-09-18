@@ -62,6 +62,20 @@ Counters parse_counters(const Json &state, const char *name) {
     return counters;
 }
 
+Authors parse_authors(const Json &state) {
+    Authors authors;
+    const auto section = state.find("quote_authors");
+    if (section == state.end() || !section->is_object()) {
+        return authors;
+    }
+    for (const auto &entry : section->items()) {
+        if (entry.value().is_string()) {
+            authors.emplace(entry.key(), entry.value().get<std::string>());
+        }
+    }
+    return authors;
+}
+
 std::vector<Raid> parse_raids(const Json &state) {
     std::vector<Raid> raids;
     const auto section = state.find("raids");
@@ -108,6 +122,7 @@ ConquisterState parse_state(const Json &json) {
         parse_counters(json, "ids"),
         parse_counters(json, "telegram_ids"),
         parse_raids(json),
+        parse_authors(json),
     };
 }
 
@@ -142,6 +157,7 @@ Json state_to_json(const ConquisterState &state) {
         {"ids", state.ids},
         {"telegram_ids", state.telegram_ids},
         {"raids", std::move(raids)},
+        {"quote_authors", state.quote_authors},
     };
 }
 

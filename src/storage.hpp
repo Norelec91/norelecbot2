@@ -34,6 +34,8 @@ struct Holder {
 
 /* Usernames in file order. */
 using Counters = nlohmann::ordered_map<std::string, std::int64_t>;
+/* Quotes mapped to whoever added them, in file order. */
+using Authors = nlohmann::ordered_map<std::string, std::string>;
 
 /* A player away from home, robbing another one. */
 struct Raid {
@@ -67,6 +69,8 @@ struct ConquisterState {
     Counters telegram_ids;
     /* The raids under way, in the order they left. */
     std::vector<Raid> raids;
+    /* Who added each quote, for the ones added since the bot started writing it down. */
+    Authors quote_authors;
 
     bool operator==(const ConquisterState &) const = default;
 };

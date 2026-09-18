@@ -336,3 +336,29 @@ TEST_CASE("the raids tell what happened") {
     CHECK(raid_event_reply(home, none) == "🪐 bob sei tornato in bob a mani vuote.");
 }
 
+TEST_CASE("a quote about what the owner has banned is turned away") {
+    const TestPaths paths{"banned-quote-test"};
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    config.quote_cost = 0;
+    config.quote_banned = {"frod", "scommess"};
+    Storage storage{config.conquister_path, config.quotes_path};
+
+    const CommandContext context{.storage = storage, .config = config, .user_id = 1, .username = "alice"};
+    const auto reply = [&](std::string_view text) {
+        return command_dispatch(context, text).value_or("<nessuna risposta>");
+    };
+
+    const std::string refused = "alice questa citazione non si può aggiungere: nessun addebito.";
+    CHECK(reply("/addquote LA FRODE LA FRODE LA FRODE") == refused);
+    CHECK(reply("/addquote parliamo di frodi") == refused);
+    CHECK(reply("/addquote chi frodava allora") == refused);
+    CHECK(reply("/addquote una bella scommessa") == refused);
+    /* Nothing was written down. */
+    CHECK(quote_page_load(storage, 1).total == 0);
+
+    CHECK(reply("/addquote una citazione qualunque").starts_with("alice hai aggiunto la citazione"));
+    CHECK(quote_page_load(storage, 1).total == 1);
+}
+

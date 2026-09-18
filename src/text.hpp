@@ -13,6 +13,7 @@ namespace norelecbot::text {
 [[nodiscard]] std::string_view trim(std::string_view text);
 /* Surrounding whitespace and a leading '+' are allowed; empty input, trailing characters and overflow are not. */
 [[nodiscard]] std::optional<std::int64_t> parse_int64(std::string_view text);
+[[nodiscard]] bool contains_ignore_case(std::string_view text, std::string_view piece);
 /* Drops the @ in front of a name, so that a quote does not tag whoever owns it on Telegram. */
 [[nodiscard]] std::string strip_mentions(std::string_view text);
 /* Invalid UTF-8 bytes count as one codepoint each. */

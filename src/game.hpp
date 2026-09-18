@@ -128,6 +128,8 @@ struct QuoteAddResult {
 
 struct QuotePage {
     std::vector<std::string> items;
+    /* Who added each of them, empty for the ones added before the bot wrote it down. */
+    std::vector<std::string> authors;
     std::size_t total = 0;
     std::size_t page = 0;
     std::size_t pages = 0;

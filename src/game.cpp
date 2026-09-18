@@ -582,6 +582,7 @@ QuoteAddResult quote_add(
             throw StorageError("Quote counter overflow");
         }
         quotes.push_back(quote);
+        state.quote_authors[quote] = username;
         state.scores[username] = score - cost;
         state.quotes_added[username] = added + 1;
         return QuoteAddResult{QuoteAddStatus::added, score - cost};
@@ -607,6 +608,11 @@ QuotePage quote_page_load(Storage &storage, int requested_page) {
         page.first_number = offset + 1;
         page.items = quotes | std::views::drop(offset) | std::views::take(quotes_page_size) |
                      std::ranges::to<std::vector<std::string>>();
+        const Authors &authors = session.state().quote_authors;
+        std::ranges::transform(page.items, std::back_inserter(page.authors), [&authors](const std::string &quote) {
+            const auto found = authors.find(quote);
+            return found != authors.end() ? found->second : std::string{};
+        });
         return page;
     });
 }
@@ -633,6 +639,7 @@ std::optional<std::string> quote_delete(Storage &storage, std::string_view selec
         }
         std::string removed = std::move(*selected);
         quotes.erase(selected);
+        session.state().quote_authors.erase(removed);
         return removed;
     });
 }

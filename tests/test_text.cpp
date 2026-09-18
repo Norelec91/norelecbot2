@@ -49,3 +49,13 @@ TEST_CASE("a quote does not tag anyone") {
     CHECK(text::strip_mentions("niente da togliere") == "niente da togliere");
 }
 
+TEST_CASE("a piece of word is found whatever the spelling") {
+    CHECK(text::contains_ignore_case("LA FRODE LA FRODE", "frod"));
+    CHECK(text::contains_ignore_case("chi frodava allora", "FROD"));
+    CHECK(text::contains_ignore_case("frode", "frode"));
+    CHECK_FALSE(text::contains_ignore_case("una citazione", "frod"));
+    CHECK_FALSE(text::contains_ignore_case("frod", "frode"));
+    CHECK_FALSE(text::contains_ignore_case("qualunque cosa", ""));
+    CHECK_FALSE(text::contains_ignore_case("", "frod"));
+}
+

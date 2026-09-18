@@ -329,6 +329,12 @@ std::string handle_add_quote(const CommandContext &context, std::string_view arg
     const std::string username{context.username};
     /* Nobody gets tagged by a quote read out months later. */
     const std::string quote = text::strip_mentions(argument);
+    const auto banned = std::ranges::find_if(context.config.quote_banned, [&quote](const std::string &piece) {
+        return text::contains_ignore_case(quote, piece);
+    });
+    if (banned != context.config.quote_banned.end()) {
+        return std::format("{} questa citazione non si può aggiungere: nessun addebito.", username);
+    }
     const QuoteAddResult result = quote_add(context.storage, username, quote, cost);
     if (result.status == QuoteAddStatus::insufficient_score) {
         return std::format(
@@ -416,12 +422,20 @@ std::string handle_quotes(const CommandContext &context, std::string_view argume
         quotes.page,
         quotes.pages
     );
-    for (std::size_t number = quotes.first_number; const std::string &quote : quotes.items) {
+    for (std::size_t index = 0; index < quotes.items.size(); ++index) {
+        const std::string &quote = quotes.items[index];
         const bool truncated = text::utf8_prefix_bytes(quote, 80) < quote.size();
         const std::string_view shown = truncated
             ? std::string_view{quote}.substr(0, text::utf8_prefix_bytes(quote, 77))
             : std::string_view{quote};
-        reply += std::format("\n{}) {}{}", number++, shown, truncated ? "…" : "");
+        const std::string &author = quotes.authors[index];
+        reply += std::format(
+            "\n{}) {}{}{}",
+            quotes.first_number + index,
+            shown,
+            truncated ? "…" : "",
+            author.empty() ? "" : std::format(" — {}", author)
+        );
     }
     if (quotes.pages > 1) {
         reply += "\n\nUsa /quotes <pagina> per le altre pagine.";

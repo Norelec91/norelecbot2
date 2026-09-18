@@ -580,3 +580,35 @@ TEST_CASE("naming yourself is the way home") {
     }
 }
 
+TEST_CASE("a quote remembers who added it") {
+    const TestPaths paths{"quote-author-test"};
+    Storage storage{paths.conquister, paths.quotes};
+
+    CHECK(quote_add(storage, "alice", "una citazione", 0).status == QuoteAddStatus::added);
+    CHECK(quote_add(storage, "bob", "un'altra", 0).status == QuoteAddStatus::added);
+
+    QuotePage page = quote_page_load(storage, 1);
+    REQUIRE(page.authors.size() == 2);
+    CHECK(page.authors[0] == "alice");
+    CHECK(page.authors[1] == "bob");
+    CHECK(read_json(paths.conquister).at("quote_authors").at("una citazione") == "alice");
+
+    /* Deleting a quote forgets its author too. */
+    CHECK(quote_delete(storage, "1") == "una citazione");
+    page = quote_page_load(storage, 1);
+    REQUIRE(page.authors.size() == 1);
+    CHECK(page.authors[0] == "bob");
+    CHECK(read_json(paths.conquister).at("quote_authors").size() == 1);
+
+    /* A quote from before the bot wrote it down has no author, and that is not a hole. */
+    {
+        std::ofstream file{paths.quotes, std::ios::binary};
+        file << R"(["vecchia","un'altra"])";
+    }
+    Storage reopened{paths.conquister, paths.quotes};
+    page = quote_page_load(reopened, 1);
+    REQUIRE(page.authors.size() == 2);
+    CHECK(page.authors[0].empty());
+    CHECK(page.authors[1] == "bob");
+}
+
