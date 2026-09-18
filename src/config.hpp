@@ -28,6 +28,12 @@ struct AppConfig {
     static constexpr int default_flipper_odds = 0;
     static constexpr int default_lucky_swing = 500;
     static constexpr int default_cascade_most = 5;
+    static constexpr int default_tax_percent = 0;
+    static constexpr int default_reprogram_min_seconds = 1800;
+    static constexpr int default_reprogram_max_seconds = 7200;
+    static constexpr int default_flegyas_share = 3;
+    static constexpr int default_flegyas_min_seconds = 0;
+    static constexpr int default_flegyas_max_seconds = 3600;
     static constexpr int default_shield_seconds = 3600;
     static constexpr int default_boost_cost = 1500;
     static constexpr int default_boost_multiplier = 3;
@@ -61,12 +67,23 @@ struct AppConfig {
     int magic_most = default_magic_most;
     /* One message in this many hits the pinball table; zero and there is no table. */
     int flipper_odds = default_flipper_odds;
+    /* Words that hit the table for certain, whatever the odds say. */
+    std::vector<std::string> flipper_words;
     /* Words that win or lose palle for whoever says them, and how much is at stake. */
     std::vector<std::string> lucky_words;
     int lucky_swing = default_lucky_swing;
-    /* A word that sets off a run of things at once, and how many at most. */
-    std::string cascade_word;
+    /* Words that set off a run of things at once, and how many at most. */
+    std::vector<std::string> cascade_words;
     int cascade_most = default_cascade_most;
+    /* What the taxman takes from whoever tops the leaderboard, once a day. */
+    int tax_percent = default_tax_percent;
+    /* How often Kio takes over somebody. */
+    int reprogram_min_seconds = default_reprogram_min_seconds;
+    int reprogram_max_seconds = default_reprogram_max_seconds;
+    /* How often something comes down on a player and takes its share; zero and nothing does. */
+    int flegyas_min_seconds = default_flegyas_min_seconds;
+    int flegyas_max_seconds = default_flegyas_max_seconds;
+    int flegyas_share = default_flegyas_share;
     int balloon_cost = default_balloon_cost;
     int cooldown_seconds = default_cooldown_seconds;
     int attack_cost = default_attack_cost;

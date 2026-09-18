@@ -104,6 +104,10 @@ struct ConquisterState {
     /* Open disputes, kept under the name of whoever took the palle. */
     Authors dispute_buyer;
     Counters dispute_amount;
+    /* Players Kio has reprogrammed, mapped to when it happened. */
+    Counters reprogrammed;
+    /* When the taxman last called. */
+    Counters taxed;
 
     bool operator==(const ConquisterState &) const = default;
 };

@@ -522,6 +522,27 @@ std::string handle_virus(const CommandContext &context, std::string_view argumen
     return reply;
 }
 
+std::string handle_free(const CommandContext &context, std::string_view argument) {
+    if (context.username.empty()) {
+        return missing_username_reply();
+    }
+    const std::string_view asked = argument.starts_with('@') ? argument.substr(1) : argument;
+    if (asked.empty()) {
+        return "🔓 Uso: /libera <nome>.";
+    }
+    const FreeingResult freeing = set_free(context.storage, asked);
+    if (!freeing.known) {
+        return std::format("🔓 {} non è riprogrammato.", asked);
+    }
+    return freeing.worked
+        ? std::format("🔓 {} ha liberato {}: Kio non lo controlla più.", context.username, asked)
+        : std::format(
+              "🤖 {} ha provato a liberare {}, ma la pratica non è andata a buon fine.",
+              context.username,
+              asked
+          );
+}
+
 std::string handle_report(const CommandContext &context, std::string_view) {
     if (context.username.empty()) {
         return missing_username_reply();
@@ -855,6 +876,7 @@ constexpr std::array commands{
     CommandDefinition{"/profilo", handle_profile},
     CommandDefinition{"/reso", handle_return},
     CommandDefinition{"/segnala", handle_report},
+    CommandDefinition{"/libera", handle_free},
     CommandDefinition{"/virus", handle_virus},
     CommandDefinition{"/ruolo", handle_role},
     CommandDefinition{"/infetta", handle_infect},
@@ -978,7 +1000,10 @@ std::optional<std::string> cascade_reply(const CommandContext &context, std::str
     if (context.username.empty() || !context.claims_allowed) {
         return std::nullopt;
     }
-    if (!says_the_word(lowered, text::to_lower_copy(context.config.cascade_word))) {
+    const auto word = std::ranges::find_if(context.config.cascade_words, [lowered](const std::string &said) {
+        return says_the_word(lowered, text::to_lower_copy(said));
+    });
+    if (word == context.config.cascade_words.end()) {
         return std::nullopt;
     }
     const std::string username{context.username};
@@ -992,7 +1017,7 @@ std::optional<std::string> cascade_reply(const CommandContext &context, std::str
     if (chain.empty()) {
         return std::nullopt;
     }
-    std::string reply = std::format("🌀 {} ha detto \"{}\" e si è messo in moto tutto:", username, context.config.cascade_word);
+    std::string reply = std::format("🌀 {} ha detto \"{}\" e si è messo in moto tutto:", username, *word);
     for (const FlipperResult &hit : chain) {
         reply += "\n";
         reply += std::vformat(flippers.at(hit.which).text, std::make_format_args(username));
@@ -1028,14 +1053,22 @@ std::optional<std::string> lucky_word_reply(const CommandContext &context, std::
 }
 
 /* The pinball table under the chat: now and then a message hits a bumper. */
-std::optional<std::string> flipper_reply(const CommandContext &context, std::int64_t now) {
+std::optional<std::string> flipper_reply(
+    const CommandContext &context,
+    std::string_view lowered,
+    std::int64_t now
+) {
     if (context.username.empty() || !context.claims_allowed) {
         return std::nullopt;
     }
+    /* A word off the list is a target hit; otherwise it is down to the odds. */
+    const bool said_one = std::ranges::any_of(context.config.flipper_words, [lowered](const std::string &word) {
+        return says_the_word(lowered, text::to_lower_copy(word));
+    });
     const std::optional<FlipperResult> hit = flipper_hit(
         context.storage,
         std::string{context.username},
-        context.config.flipper_odds,
+        said_one ? 1 : context.config.flipper_odds,
         now,
         context.config.boost_multiplier
     );
@@ -1078,6 +1111,11 @@ std::optional<std::string> magic_word_reply(const CommandContext &context, std::
 std::optional<std::string> command_dispatch(const CommandContext &context, std::string_view text) {
     try {
         const std::string_view message = text::trim(text);
+        /* Kio decides for whoever he has taken over, until somebody gets him out. */
+        if (!context.username.empty() && command_is_for_bot(message) &&
+            !message.starts_with("/libera") && is_reprogrammed(context.storage, std::string{context.username})) {
+            return std::format("🤖 {} è riprogrammato: decide Kio per lui.", context.username);
+        }
         if (message == conquister_trigger) {
             if (!context.claims_allowed) {
                 return std::nullopt;
@@ -1106,7 +1144,7 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
             if (const std::optional<std::string> luck = lucky_word_reply(context, lowered)) {
                 return luck;
             }
-            return flipper_reply(context, seconds_now());
+            return flipper_reply(context, lowered, seconds_now());
         }
         /* A handler with nothing to say out loud has already said it in private. */
         std::string reply = definition->handler(context, command.argument);

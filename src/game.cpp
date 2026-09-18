@@ -377,6 +377,119 @@ ReturnResult loot_return(
     return result;
 }
 
+std::optional<ReprogramResult> reprogram(Storage &storage, std::int64_t now) {
+    const std::optional<ReprogramResult> result =
+        storage.transaction([now](StorageSession &session) -> std::optional<ReprogramResult> {
+            ConquisterState &state = session.state();
+            std::vector<std::string> free_men;
+            for (const Counters::value_type &entry : state.scores) {
+                if (find_entry(state.reprogrammed, entry.first) == state.reprogrammed.end()) {
+                    free_men.push_back(entry.first);
+                }
+            }
+            if (free_men.empty()) {
+                return std::nullopt;
+            }
+            ReprogramResult taken;
+            taken.player = free_men[session.random_index(free_men.size())];
+            state.reprogrammed[taken.player] = now;
+            return taken;
+        });
+
+    if (result) {
+        log_info("reprogrammed user={}", result->player);
+    }
+    return result;
+}
+
+bool is_reprogrammed(Storage &storage, const std::string &username) {
+    return storage.transaction([&username](StorageSession &session) {
+        ConquisterState &state = session.state();
+        return find_entry(state.reprogrammed, username) != state.reprogrammed.end();
+    });
+}
+
+FreeingResult set_free(Storage &storage, std::string_view username) {
+    const FreeingResult result = storage.transaction([username](StorageSession &session) {
+        ConquisterState &state = session.state();
+        FreeingResult freeing;
+        const Counters::value_type *held = find_ignore_case(state.reprogrammed, username);
+        if (held == nullptr) {
+            return freeing;
+        }
+        freeing.known = true;
+        /* The paperwork does not always go through. */
+        freeing.worked = session.random_index(freeing_fails_one_in) != 0;
+        if (freeing.worked) {
+            state.reprogrammed.erase(held->first);
+        }
+        return freeing;
+    });
+
+    if (result.known) {
+        log_info("freeing user={} worked={}", username, result.worked ? 1 : 0);
+    }
+    return result;
+}
+
+std::optional<TaxResult> flegyas_strike(Storage &storage, int share) {
+    const std::optional<TaxResult> result =
+        storage.transaction([share](StorageSession &session) -> std::optional<TaxResult> {
+            ConquisterState &state = session.state();
+            if (share <= 0 || state.scores.empty()) {
+                return std::nullopt;
+            }
+            const std::size_t who = session.random_index(state.scores.size());
+            const auto player = std::next(state.scores.begin(), static_cast<std::ptrdiff_t>(who));
+            if (player->second <= 0) {
+                return std::nullopt;
+            }
+            TaxResult taken;
+            taken.player = player->first;
+            taken.palle = player->second / share;
+            player->second -= taken.palle;
+            taken.left = player->second;
+            return taken;
+        });
+
+    if (result) {
+        log_info("flegyas user={} palle={} left={}", result->player, result->palle, result->left);
+    }
+    return result;
+}
+
+std::optional<TaxResult> tax_the_leader(Storage &storage, int percent, std::int64_t now) {
+    const std::optional<TaxResult> result =
+        storage.transaction([percent, now](StorageSession &session) -> std::optional<TaxResult> {
+            ConquisterState &state = session.state();
+            if (percent <= 0 || state.scores.empty()) {
+                return std::nullopt;
+            }
+            const auto leader = std::ranges::max_element(state.scores, [](const auto &first, const auto &second) {
+                return ranks_before(second, first);
+            });
+            if (leader == state.scores.end() || leader->second <= 0) {
+                return std::nullopt;
+            }
+            const std::int64_t last = counter(state.taxed, leader->first);
+            if (last != 0 && now - last < 86400) {
+                return std::nullopt;
+            }
+            TaxResult taken;
+            taken.player = leader->first;
+            taken.palle = leader->second * percent / 100;
+            leader->second -= taken.palle;
+            taken.left = leader->second;
+            state.taxed[leader->first] = now;
+            return taken;
+        });
+
+    if (result) {
+        log_info("taxed user={} palle={} left={}", result->player, result->palle, result->left);
+    }
+    return result;
+}
+
 std::optional<FlipperResult> flipper_hit(
     Storage &storage,
     const std::string &username,

@@ -4,6 +4,8 @@
 #include "game.hpp"
 #include "irc.hpp"
 #include "logging.hpp"
+
+#include <format>
 #include "telegram.hpp"
 
 #include <algorithm>
@@ -74,6 +76,9 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
     Clock ghost{config.ghost_min_seconds, config.ghost_max_seconds};
     const bool mishaps_happen = config.mishap_min_seconds > 0;
     Clock mishaps{config.mishap_min_seconds, config.mishap_max_seconds};
+    Clock reprogramming{config.reprogram_min_seconds, config.reprogram_max_seconds};
+    const bool flegyas_comes = config.flegyas_min_seconds > 0;
+    Clock flegyas{config.flegyas_min_seconds, config.flegyas_max_seconds};
     while (!stop.load(std::memory_order_relaxed)) {
         try {
             for (const RaidEvent &event : raid_due(storage, seconds_now(), rules)) {
@@ -92,6 +97,48 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
                     announce(config, *said);
                 }
                 ghost.rest();
+            }
+            if (const std::optional<TaxResult> taxed =
+                    tax_the_leader(storage, config.tax_percent, seconds_now())) {
+                announce(
+                    config,
+                    std::format(
+                        "🧾 La Guardia di Finanza ha bussato a {}, primo in classifica: {} palle di tasse. "
+                        "Gliene restano {}.",
+                        taxed->player,
+                        taxed->palle,
+                        taxed->left
+                    )
+                );
+            }
+            if (ghost_plays && reprogramming.due(seconds_now())) {
+                if (const std::optional<ReprogramResult> taken = reprogram(storage, seconds_now())) {
+                    announce(
+                        config,
+                        std::format(
+                            "🤖 {} ha riprogrammato {}: da adesso le sue azioni le decide lui, finché "
+                            "qualcuno non lo libera con /libera {}.",
+                            config.ghost_raider,
+                            taken->player,
+                            taken->player
+                        )
+                    );
+                }
+                reprogramming.rest();
+            }
+            if (flegyas_comes && flegyas.due(seconds_now())) {
+                if (const std::optional<TaxResult> taken = flegyas_strike(storage, config.flegyas_share)) {
+                    announce(
+                        config,
+                        std::format(
+                            "😈 Flegiàs è sceso su {} e si è portato via {} palle. Gliene restano {}.",
+                            taken->player,
+                            taken->palle,
+                            taken->left
+                        )
+                    );
+                }
+                flegyas.rest();
             }
             if (mishaps_happen && mishaps.due(seconds_now())) {
                 if (const std::optional<MishapResult> mishap =

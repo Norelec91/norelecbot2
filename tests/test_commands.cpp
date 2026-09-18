@@ -2,6 +2,7 @@
 
 #include "game.hpp"
 #include "commands.hpp"
+#include "game.hpp"
 #include "virus.hpp"
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
@@ -600,5 +601,73 @@ TEST_CASE("the word the owner picked multiplies whoever says it") {
     config.magic_word.clear();
     context.username = "alice";
     CHECK_FALSE(said("ho visto la luna").has_value());
+}
+
+TEST_CASE("Kio takes people over, and the paperwork to free them can fail") {
+    const TestPaths paths{"reprogram-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":1000,"bob":1000},"quotes_added":{}})";
+    }
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{config.conquister_path, config.quotes_path};
+
+    const std::optional<ReprogramResult> first = reprogram(storage, 100);
+    REQUIRE(first);
+    const std::optional<ReprogramResult> second = reprogram(storage, 100);
+    REQUIRE(second);
+    CHECK(second->player != first->player);
+    /* Everybody is his now. */
+    CHECK_FALSE(reprogram(storage, 100));
+
+    CommandContext context{
+        .storage = storage,
+        .config = config,
+        .user_id = 1,
+        .username = first->player,
+        .claims_allowed = true,
+        .owner = false,
+        .whisper = {},
+    };
+    const auto reply = [&](std::string_view text) {
+        return command_dispatch(context, text).value_or("<nessuna risposta>");
+    };
+
+    /* Whatever he tries, Kio decides. */
+    CHECK(reply("We @TheConquister37") == std::format("🤖 {} è riprogrammato: decide Kio per lui.", first->player));
+    CHECK(reply("/leaderboard") == std::format("🤖 {} è riprogrammato: decide Kio per lui.", first->player));
+    /* Except asking for somebody to be set free. */
+    CHECK(reply("/libera nessuno") == "🔓 nessuno non è riprogrammato.");
+
+    int attempts = 0;
+    while (is_reprogrammed(storage, first->player) && attempts < 50) {
+        const std::string said = reply(std::format("/libera {}", first->player));
+        CHECK((said.starts_with("🔓") || said.starts_with("🤖")));
+        ++attempts;
+    }
+    CHECK(attempts < 50);
+    CHECK(reply("/leaderboard").contains("Classifica"));
+}
+
+TEST_CASE("the taxman calls on the leader once a day") {
+    const TestPaths paths{"tax-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":10000,"bob":500},"quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+
+    const std::optional<TaxResult> first = tax_the_leader(storage, 10, 1000);
+    REQUIRE(first);
+    CHECK(first->player == "alice");
+    CHECK(first->palle == 1000);
+    CHECK(first->left == 9000);
+    /* Not twice in the same day. */
+    CHECK_FALSE(tax_the_leader(storage, 10, 2000));
+    CHECK(tax_the_leader(storage, 10, 1000 + 86400).has_value());
+    /* Off unless the owner asks for it. */
+    CHECK_FALSE(tax_the_leader(storage, 0, 1000 + (3 * 86400)));
 }
 

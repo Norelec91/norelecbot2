@@ -229,6 +229,36 @@ struct ReturnResult {
     bool postage_on_seller
 );
 
+/* One attempt in three at setting somebody free comes to nothing. */
+inline constexpr int freeing_fails_one_in = 3;
+
+struct ReprogramResult {
+    std::string player;
+    bool already = false;
+};
+
+struct FreeingResult {
+    bool known = false;
+    bool worked = false;
+};
+
+/* Kio takes over somebody who is not already his; nothing when everybody is. */
+[[nodiscard]] std::optional<ReprogramResult> reprogram(Storage &storage, std::int64_t now);
+[[nodiscard]] bool is_reprogrammed(Storage &storage, const std::string &username);
+[[nodiscard]] FreeingResult set_free(Storage &storage, std::string_view username);
+
+struct TaxResult {
+    std::string player;
+    std::int64_t palle = 0;
+    std::int64_t left = 0;
+};
+
+/* Comes down on somebody at random and takes a share of what he has, which is lost for good. */
+[[nodiscard]] std::optional<TaxResult> flegyas_strike(Storage &storage, int share);
+
+/* Takes its share from whoever tops the leaderboard, once a day. */
+[[nodiscard]] std::optional<TaxResult> tax_the_leader(Storage &storage, int percent, std::int64_t now);
+
 struct FlipperResult {
     std::size_t which = 0;
     std::int64_t palle = 0;

@@ -99,11 +99,34 @@ constexpr std::array settings{
     Setting{"NORELECBOT_VIRUS_COOLDOWN_SECONDS", [](AppConfig &config, std::string_view value) {
         return set_number(config.virus_cooldown_seconds, value, AppConfig::default_virus_cooldown_seconds, 0);
     }},
+    Setting{"NORELECBOT_FLIPPER_WORDS", [](AppConfig &config, std::string_view value) {
+        config.flipper_words = split_names(value);
+        return true;
+    }},
     Setting{"NORELECBOT_FLIPPER_ODDS", [](AppConfig &config, std::string_view value) {
         return set_number(config.flipper_odds, value, AppConfig::default_flipper_odds, 0);
     }},
-    Setting{"NORELECBOT_CASCADE_WORD", [](AppConfig &config, std::string_view value) {
-        return set_text(config.cascade_word, value, {});
+    Setting{"NORELECBOT_CASCADE_WORDS", [](AppConfig &config, std::string_view value) {
+        config.cascade_words = split_names(value);
+        return true;
+    }},
+    Setting{"NORELECBOT_REPROGRAM_MIN_SECONDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.reprogram_min_seconds, value, AppConfig::default_reprogram_min_seconds, 30);
+    }},
+    Setting{"NORELECBOT_REPROGRAM_MAX_SECONDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.reprogram_max_seconds, value, AppConfig::default_reprogram_max_seconds, 30);
+    }},
+    Setting{"NORELECBOT_FLEGYAS_MIN_SECONDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.flegyas_min_seconds, value, AppConfig::default_flegyas_min_seconds, 0);
+    }},
+    Setting{"NORELECBOT_FLEGYAS_MAX_SECONDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.flegyas_max_seconds, value, AppConfig::default_flegyas_max_seconds, 1);
+    }},
+    Setting{"NORELECBOT_FLEGYAS_SHARE", [](AppConfig &config, std::string_view value) {
+        return set_number(config.flegyas_share, value, AppConfig::default_flegyas_share, 1);
+    }},
+    Setting{"NORELECBOT_TAX_PERCENT", [](AppConfig &config, std::string_view value) {
+        return set_number(config.tax_percent, value, AppConfig::default_tax_percent, 0, 100);
     }},
     Setting{"NORELECBOT_CASCADE_MOST", [](AppConfig &config, std::string_view value) {
         return set_number(config.cascade_most, value, AppConfig::default_cascade_most, 1);
