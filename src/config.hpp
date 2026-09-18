@@ -23,6 +23,7 @@ struct AppConfig {
     static constexpr int default_ghost_max_seconds = 600;
     static constexpr int default_mishap_min_seconds = 0;
     static constexpr int default_mishap_max_seconds = 1800;
+    static constexpr int default_virus_cooldown_seconds = 600;
     static constexpr int default_shield_seconds = 3600;
     static constexpr int default_boost_cost = 1500;
     static constexpr int default_boost_multiplier = 3;
@@ -49,6 +50,8 @@ struct AppConfig {
     /* How often something small happens to somebody, for no reason; zero and nothing ever does. */
     int mishap_min_seconds = default_mishap_min_seconds;
     int mishap_max_seconds = default_mishap_max_seconds;
+    /* How long a player waits between one move of the virus game and the next. */
+    int virus_cooldown_seconds = default_virus_cooldown_seconds;
     int balloon_cost = default_balloon_cost;
     int cooldown_seconds = default_cooldown_seconds;
     int attack_cost = default_attack_cost;

@@ -2,6 +2,7 @@
 
 #include "game.hpp"
 #include "commands.hpp"
+#include "virus.hpp"
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
@@ -9,6 +10,7 @@
 #include <filesystem>
 #include <chrono>
 #include <fstream>
+#include <map>
 
 using namespace norelecbot;
 
@@ -31,7 +33,7 @@ TEST_CASE("the bot answers the commands it knows and ignores the rest") {
 
     {
         Storage storage{config.conquister_path, config.quotes_path};
-        CommandContext context{.storage = storage, .config = config, .user_id = 1, .username = "alice"};
+        CommandContext context{.storage = storage, .config = config, .user_id = 1, .username = "alice", .whisper = {}};
         const auto ignored = [&](std::string_view text) {
             return !command_dispatch(context, text).has_value();
         };
@@ -154,7 +156,7 @@ TEST_CASE("the balloon replies are the ones the players read") {
     config.quotes_path = paths.quotes;
 
     Storage storage{config.conquister_path, config.quotes_path};
-    CommandContext context{.storage = storage, .config = config, .user_id = 5, .username = "erin"};
+    CommandContext context{.storage = storage, .config = config, .user_id = 5, .username = "erin", .whisper = {}};
     const auto reply = [&](std::string_view text) {
         return command_dispatch(context, text).value_or("<nessuna risposta>");
     };
@@ -197,6 +199,7 @@ TEST_CASE("a name that came from IRC is never written as a mention") {
             .config = config,
             .user_id = user_id,
             .username = username,
+            .whisper = {},
         };
         return command_dispatch(context, "We @TheConquister37").value_or("<nessuna risposta>");
     };
@@ -226,7 +229,7 @@ TEST_CASE("the balloon replies follow the same rule") {
     config.quotes_path = paths.quotes;
     Storage storage{config.conquister_path, config.quotes_path};
 
-    const CommandContext context{.storage = storage, .config = config, .user_id = 2, .username = "bob"};
+    const CommandContext context{.storage = storage, .config = config, .user_id = 2, .username = "bob", .whisper = {}};
     const std::string reply = command_dispatch(context, "We @TheConquister37").value_or("<nessuna risposta>");
     CHECK(reply.starts_with("💥 bob hai bucato il palloncino di alice!\n"));
     CHECK_FALSE(reply.contains("@alice"));
@@ -244,7 +247,7 @@ TEST_CASE("We @someone sends the player out to rob them") {
     config.travel_divisor = 1000000;
     Storage storage{config.conquister_path, config.quotes_path};
 
-    CommandContext context{.storage = storage, .config = config, .user_id = 2, .username = "bob"};
+    CommandContext context{.storage = storage, .config = config, .user_id = 2, .username = "bob", .whisper = {}};
     const auto reply = [&](std::string_view text) {
         return command_dispatch(context, text).value_or("<nessuna risposta>");
     };
@@ -357,7 +360,7 @@ TEST_CASE("a quote about what the owner has banned is turned away") {
     config.quote_banned = {"frod", "scommess"};
     Storage storage{config.conquister_path, config.quotes_path};
 
-    const CommandContext context{.storage = storage, .config = config, .user_id = 1, .username = "alice"};
+    const CommandContext context{.storage = storage, .config = config, .user_id = 1, .username = "alice", .whisper = {}};
     const auto reply = [&](std::string_view text) {
         return command_dispatch(context, text).value_or("<nessuna risposta>");
     };
@@ -392,7 +395,7 @@ TEST_CASE("a shadowed player is answered for and his quote is dropped") {
     config.shadowed = {"Giangiui"};
     Storage storage{config.conquister_path, config.quotes_path};
 
-    CommandContext context{.storage = storage, .config = config, .user_id = 1, .username = "giangiui"};
+    CommandContext context{.storage = storage, .config = config, .user_id = 1, .username = "giangiui", .whisper = {}};
     const auto reply = [&](std::string_view text) {
         return command_dispatch(context, text).value_or("<nessuna risposta>");
     };
@@ -427,7 +430,7 @@ TEST_CASE("the zimbelli are the ones below zero") {
     config.quotes_path = paths.quotes;
     Storage storage{config.conquister_path, config.quotes_path};
 
-    const CommandContext context{.storage = storage, .config = config, .user_id = 1, .username = "alice"};
+    const CommandContext context{.storage = storage, .config = config, .user_id = 1, .username = "alice", .whisper = {}};
     const std::string reply = command_dispatch(context, "/zimbelli").value_or("<nessuna risposta>");
     CHECK(reply.starts_with("🤡 Zimbelli\n"));
     CHECK(reply.contains("\n1) "));
@@ -443,7 +446,7 @@ TEST_CASE("the zimbelli are the ones below zero") {
         file << R"({"current":null,"scores":{"alice":500},"quotes_added":{}})";
     }
     Storage rich{config.conquister_path, config.quotes_path};
-    const CommandContext theirs{.storage = rich, .config = config, .user_id = 1, .username = "alice"};
+    const CommandContext theirs{.storage = rich, .config = config, .user_id = 1, .username = "alice", .whisper = {}};
     CHECK(command_dispatch(theirs, "/zimbelli") == "Nessuno zimbello: nessuno è sotto zero in @TheConquister37.");
 }
 
@@ -461,7 +464,7 @@ TEST_CASE("the profile card says what a player has") {
     config.travel_divisor = 1000000;
     Storage storage{config.conquister_path, config.quotes_path};
 
-    CommandContext context{.storage = storage, .config = config, .user_id = 1, .username = "alice"};
+    CommandContext context{.storage = storage, .config = config, .user_id = 1, .username = "alice", .whisper = {}};
     const auto reply = [&](std::string_view text) {
         return command_dispatch(context, text).value_or("<nessuna risposta>");
     };
@@ -484,5 +487,71 @@ TEST_CASE("the profile card says what a player has") {
 
     CHECK(reply("/profilo bob").starts_with("🪐 bob "));
     CHECK(reply("/profilo nessuno") == "alice non conosco nessun giocatore di nome nessuno.");
+}
+
+TEST_CASE("the virus is a game of who is what") {
+    const TestPaths paths{"virus-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":1000,"bob":1000,"carol":1000,"dave":1000},)"
+             << R"("quotes_added":{}})";
+    }
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    config.virus_cooldown_seconds = 0;
+    Storage storage{config.conquister_path, config.quotes_path};
+
+    std::map<std::string, std::string> whispered;
+    const Whisper whisper = [&whispered](std::string_view name, std::string_view said) {
+        whispered[std::string{name}] = std::string{said};
+    };
+    CommandContext context{
+        .storage = storage,
+        .config = config,
+        .user_id = 1,
+        .username = "alice",
+        .claims_allowed = true,
+        .owner = true,
+        .whisper = whisper,
+    };
+    const auto reply = [&](std::string_view text) {
+        return command_dispatch(context, text).value_or("<nessuna risposta>");
+    };
+
+    CHECK(reply("/virus") == "🦠 Nessuna epidemia in corso.");
+    const std::string started = reply("/virus start");
+    CHECK(started.starts_with("🦠 IL VIRUS DORONZO STA COLPENDO TUTTI I GIOCATORI!"));
+    CHECK(started.contains("4 in gioco"));
+    /* Each of them has been told in private what he is, and nobody else can read it. */
+    CHECK(whispered.size() == 4);
+    CHECK_FALSE(started.contains("DORONZO. Infetti"));
+
+    const auto doronzo_of = [&](const std::string &name) {
+        return whispered.at(name).starts_with("🦠");
+    };
+    std::string doronzo;
+    std::vector<std::string> healthy;
+    for (const auto &[name, said] : whispered) {
+        (doronzo_of(name) ? doronzo : healthy.emplace_back()) = name;
+    }
+    REQUIRE_FALSE(doronzo.empty());
+    REQUIRE(healthy.size() == 3);
+
+    /* A move nobody may make is refused in private, so the channel learns nothing. */
+    context.username = healthy[0];
+    whispered.clear();
+    CHECK_FALSE(command_dispatch(context, "/infetta " + healthy[1]).has_value());
+    CHECK(whispered.at(healthy[0]) == "🦠 Non è una cosa che puoi fare tu.");
+
+    /* Shooting says out loud what the one shot turned out to be. */
+    const std::string shot = reply("/spara " + doronzo);
+    CHECK(shot.starts_with("🔫 " + healthy[0] + " ha sparato a " + doronzo + ", che era un doronzo"));
+    CHECK(shot.contains("500 palle"));
+    CHECK(shot.contains("🏁 Non è rimasto nessun doronzo: VINCONO I SANI."));
+
+    const VirusReport over = virus_report(storage);
+    CHECK_FALSE(over.running);
+    CHECK(over.dead == 1);
 }
 

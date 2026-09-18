@@ -288,6 +288,13 @@ ClaimResult conquister_claim(
     return result;
 }
 
+std::int64_t telegram_id_of(Storage &storage, const std::string &username) {
+    return storage.transaction([&username](StorageSession &session) {
+        const Counters::value_type *found = find_ignore_case(session.state().telegram_ids, username);
+        return found != nullptr ? found->second : 0;
+    });
+}
+
 Leaderboard conquister_leaderboard(Storage &storage, std::size_t limit) {
     return storage.transaction([limit](StorageSession &session) {
         const ConquisterState &state = session.state();

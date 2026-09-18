@@ -40,6 +40,8 @@ public:
     void tick(std::int64_t now);
     /* Repeats in the channel something the bot already said on Telegram. */
     [[nodiscard]] std::vector<std::string> announce(std::string_view text) const;
+    /* Says something to one nick, in query: the bridge carries nothing of this. */
+    [[nodiscard]] std::vector<std::string> whisper(std::string_view nick, std::string_view text) const;
     [[nodiscard]] bool joined() const { return joined_; }
     [[nodiscard]] const std::string &nick() const { return nick_; }
 

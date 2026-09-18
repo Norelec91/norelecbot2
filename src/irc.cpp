@@ -51,6 +51,12 @@ constexpr std::size_t max_pending_bytes = 1024;
 /* A disconnected channel must not pile up replies for ever. */
 constexpr std::size_t max_waiting_replies = 32;
 
+/* What the bot has to say in the channel or in query, waiting for the one IRC connection. */
+struct Waiting {
+    std::string nick;
+    std::string text;
+};
+
 /* Answers to IRC commands, to be written in the Telegram group once they have left for the channel.
    Only the IRC thread touches this one. */
 std::deque<std::string> &answers_for_telegram() {
@@ -69,20 +75,29 @@ void send_answers_to_telegram(const AppConfig &config) {
 /* What the bot answered on Telegram, waiting for the one IRC connection to repeat it. */
 std::mutex waiting_mutex;
 
-std::deque<std::string> &waiting_replies() {
-    static std::deque<std::string> replies;
+std::deque<Waiting> &waiting_replies() {
+    static std::deque<Waiting> replies;
     return replies;
 }
 
-std::vector<std::string> take_waiting_replies() {
+std::vector<Waiting> take_waiting_replies() {
     const std::lock_guard guard{waiting_mutex};
-    std::deque<std::string> &replies = waiting_replies();
-    std::vector<std::string> taken{
+    std::deque<Waiting> &replies = waiting_replies();
+    std::vector<Waiting> taken{
         std::make_move_iterator(replies.begin()),
         std::make_move_iterator(replies.end())
     };
     replies.clear();
     return taken;
+}
+
+void wait_in_line(std::string nick, std::string text) {
+    const std::lock_guard guard{waiting_mutex};
+    std::deque<Waiting> &replies = waiting_replies();
+    if (replies.size() >= max_waiting_replies) {
+        replies.pop_front();
+    }
+    replies.push_back({std::move(nick), std::move(text)});
 }
 
 #ifdef _WIN32
@@ -302,8 +317,9 @@ public:
         }
         session_.tick(now);
         if (session_.joined()) {
-            for (const std::string &said : take_waiting_replies()) {
-                queue(session_.announce(said));
+            for (const Waiting &said : take_waiting_replies()) {
+                queue(said.nick.empty() ? session_.announce(said.text)
+                                        : session_.whisper(said.nick, said.text));
             }
         }
         return flush();
@@ -347,12 +363,11 @@ private:
 }
 
 void irc_say(std::string text) {
-    const std::lock_guard guard{waiting_mutex};
-    std::deque<std::string> &replies = waiting_replies();
-    if (replies.size() >= max_waiting_replies) {
-        replies.pop_front();
-    }
-    replies.push_back(std::move(text));
+    wait_in_line({}, std::move(text));
+}
+
+void irc_whisper(std::string nick, std::string text) {
+    wait_in_line(std::move(nick), std::move(text));
 }
 
 void irc_run(Storage &storage, const AppConfig &config, const std::atomic<bool> &stop) {
@@ -371,6 +386,10 @@ void irc_run(Storage &storage, const AppConfig &config, const std::atomic<bool> 
                 .username = username,
                 .claims_allowed = true,
                 .owner = owner,
+                /* In query, where the channel reads nothing. */
+                .whisper = [](std::string_view name, std::string_view said) {
+                    irc_whisper(std::string{name}, std::string{said});
+                },
             };
             const std::optional<std::string> reply = command_dispatch(command, text);
             /* Answered in the group by the bot itself, so it reads there as Telegram writes: whole

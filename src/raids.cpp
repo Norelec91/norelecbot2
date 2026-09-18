@@ -86,7 +86,8 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
                     .config = config,
                     .user_id = 0,
                     .username = config.ghost_raider,
-                };
+            .whisper = {},
+        };
                 if (const std::optional<std::string> said = command_dispatch(context, conquister_trigger)) {
                     announce(config, *said);
                 }

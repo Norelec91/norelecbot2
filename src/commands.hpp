@@ -6,6 +6,7 @@
 #include "storage.hpp"
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -17,6 +18,9 @@ inline constexpr std::string_view conquister_trigger = "We @TheConquister37";
 /* "We @someone" sends the player to rob them instead. */
 inline constexpr std::string_view raid_trigger = "We @";
 
+/* Says something where only one player reads it: in private on Telegram, in query on IRC. */
+using Whisper = std::function<void(std::string_view name, std::string_view text)>;
+
 struct CommandContext {
     Storage &storage;
     const AppConfig &config;
@@ -25,6 +29,8 @@ struct CommandContext {
     /* The front end decides both: the chat or channel where the game is played, and who owns the bot. */
     bool claims_allowed = true;
     bool owner = false;
+    /* Empty when the front end has no way to reach one player alone. */
+    Whisper whisper;
 };
 
 /* What the bot says when one of the mishaps happens to somebody. */

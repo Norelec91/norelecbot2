@@ -3,6 +3,7 @@
 #include "game.hpp"
 #include "mishaps.hpp"
 #include "text.hpp"
+#include "virus.hpp"
 #include "zodiac.hpp"
 
 #include <algorithm>
@@ -325,6 +326,192 @@ std::string handle_leaderboard(const CommandContext &context, std::string_view) 
     return reply;
 }
 
+void tell_only_him(const CommandContext &context, std::string_view text) {
+    if (context.whisper) {
+        context.whisper(context.username, text);
+    }
+}
+
+std::string_view virus_refusal(VirusStatus status) {
+    switch (status) {
+    case VirusStatus::not_running:
+        return "🦠 Non c'è nessuna epidemia in corso.";
+    case VirusStatus::not_playing:
+        return "🦠 Non sei in partita: questa epidemia è cominciata senza di te.";
+    case VirusStatus::dead:
+        return "⚰️ Sei morto. Da lì si guarda e basta.";
+    case VirusStatus::wrong_role:
+        return "🦠 Non è una cosa che puoi fare tu.";
+    case VirusStatus::no_vaccine:
+        return "💉 Non hai nessuna fiala.";
+    case VirusStatus::unknown_target:
+        return "🦠 Quel nome non è in partita.";
+    case VirusStatus::target_dead:
+        return "⚰️ Quello è già morto.";
+    case VirusStatus::oneself:
+        return "🦠 Su te stesso no.";
+    case VirusStatus::already_running:
+        return "🦠 C'è già un'epidemia in corso.";
+    case VirusStatus::too_few_players:
+        return "🦠 Servono almeno due giocatori.";
+    case VirusStatus::too_soon:
+    case VirusStatus::done:
+        break;
+    }
+    return {};
+}
+
+std::optional<std::string> handle_virus_move(
+    const CommandContext &context,
+    std::string_view argument,
+    VirusAction action
+) {
+    if (context.username.empty()) {
+        return missing_username_reply();
+    }
+    const std::string username{context.username};
+    const std::string_view target = argument.starts_with('@') ? argument.substr(1) : argument;
+    const VirusOutcome outcome = virus_move(
+        context.storage,
+        username,
+        target,
+        action,
+        seconds_now(),
+        context.config.virus_cooldown_seconds
+    );
+    if (outcome.status == VirusStatus::too_soon) {
+        tell_only_him(context, std::format("⏳ Puoi muoverti di nuovo tra {}.", format_wait(outcome.wait_seconds)));
+        return std::nullopt;
+    }
+    if (outcome.status != VirusStatus::done) {
+        /* Whispered: said out loud, a refusal would tell everybody what he is. */
+        tell_only_him(context, virus_refusal(outcome.status));
+        return std::nullopt;
+    }
+
+    std::string reply;
+    switch (action) {
+    case VirusAction::infect:
+        reply = outcome.target_was_doronzo
+            ? std::format("🦠 {} ha provato a infettare {}, che era già un doronzo.", username, outcome.target)
+            : std::format("🦠 {} ha infettato {}: adesso è un doronzo.", username, outcome.target);
+        break;
+    case VirusAction::shoot:
+        reply = std::format(
+            "🔫 {} ha sparato a {}, che era {} e perde {} palle.",
+            username,
+            outcome.target,
+            outcome.target_was_doronzo ? "un doronzo" : "sano",
+            outcome.palle_lost
+        );
+        break;
+    case VirusAction::cure:
+        reply = outcome.target_was_doronzo
+            ? std::format("💉 {} ha vaccinato {}: è tornato sano.", username, outcome.target)
+            : std::format("💉 {} ha vaccinato {}, che stava benissimo.", username, outcome.target);
+        break;
+    }
+    if (!outcome.vaccinated.empty()) {
+        reply += "\n💉 Una fiala di vaccino è stata consegnata a un sano.";
+        if (context.whisper) {
+            context.whisper(
+                outcome.vaccinated,
+                "💉 Hai ricevuto una fiala: /vaccina <nome> riporta sano un doronzo."
+            );
+        }
+    }
+    if (outcome.over) {
+        reply += outcome.doronzi_won
+            ? "\n🏁 Non è rimasto nessun sano: VINCONO I DORONZI."
+            : "\n🏁 Non è rimasto nessun doronzo: VINCONO I SANI.";
+    } else {
+        reply += std::format("\n🦠 In piedi: {} contagiati e {} sani.", outcome.doronzi_left, outcome.healthy_left);
+    }
+    return reply;
+}
+
+std::string handle_infect(const CommandContext &context, std::string_view argument) {
+    return handle_virus_move(context, argument, VirusAction::infect).value_or(std::string{});
+}
+
+std::string handle_shoot(const CommandContext &context, std::string_view argument) {
+    return handle_virus_move(context, argument, VirusAction::shoot).value_or(std::string{});
+}
+
+std::string handle_cure(const CommandContext &context, std::string_view argument) {
+    return handle_virus_move(context, argument, VirusAction::cure).value_or(std::string{});
+}
+
+std::string handle_role(const CommandContext &context, std::string_view) {
+    if (context.username.empty()) {
+        return missing_username_reply();
+    }
+    const std::optional<VirusPlayer> role = virus_role(context.storage, std::string{context.username});
+    if (!role) {
+        tell_only_him(context, "🦠 Non sei in partita.");
+        return {};
+    }
+    std::string said = role->doronzo
+        ? "🦠 Sei un DORONZO. Infetti con /infetta <nome>."
+        : "💉 Sei SANO. Spari con /spara <nome>, ma un colpo addosso a un sano lo uccide lo stesso.";
+    if (!role->alive) {
+        said = "⚰️ Sei morto. Da lì si guarda e basta.";
+    } else if (role->vaccines > 0) {
+        said += std::format(" Hai {} fiale di vaccino: /vaccina <nome>.", role->vaccines);
+    }
+    tell_only_him(context, said);
+    return {};
+}
+
+std::string handle_virus(const CommandContext &context, std::string_view argument) {
+    if (text::equals_ignore_case(text::trim(argument), "start")) {
+        if (!context.owner) {
+            return "Solo il proprietario può far scoppiare l'epidemia.";
+        }
+        const VirusStart start = virus_start(context.storage, seconds_now());
+        if (start.status != VirusStatus::done) {
+            return std::string{virus_refusal(start.status)};
+        }
+        if (context.whisper) {
+            for (const auto &[name, doronzo] : start.roles) {
+                context.whisper(
+                    name,
+                    doronzo
+                        ? "🦠 Sei un DORONZO. Infetti con /infetta <nome>, una mossa ogni dieci minuti."
+                        : "💉 Sei SANO. Spari con /spara <nome>, una mossa ogni dieci minuti: attento a chi colpisci."
+                );
+            }
+        }
+        return std::format(
+            "🦠 IL VIRUS DORONZO STA COLPENDO TUTTI I GIOCATORI!\n"
+            "{} in gioco, e nessuno sa chi è cosa. I contagiati infettano con /infetta <nome>, i sani "
+            "sparano con /spara <nome>: una mossa ogni dieci minuti.\n"
+            "Chi spara a un sano lo ammazza lo stesso, e chi muore perde metà delle palle. "
+            "Ogni quattro contagi un sano riceve una fiala.\n"
+            "Il ruolo ve l'ho scritto in privato: chi non l'ha ricevuto scriva /ruolo al bot in privato.",
+            start.players
+        );
+    }
+    const VirusReport report = virus_report(context.storage);
+    if (!report.running) {
+        return "🦠 Nessuna epidemia in corso.";
+    }
+    std::string reply = std::format(
+        "🦠 Epidemia in corso: {} in piedi, {} a terra, {} contagi finora.",
+        report.alive,
+        report.dead,
+        report.infections
+    );
+    if (!report.fallen.empty()) {
+        reply += "\n⚰️ Caduti: ";
+        for (std::size_t index = 0; index < report.fallen.size(); ++index) {
+            reply += index == 0 ? "" : ", ";
+            reply += report.fallen[index];
+        }
+    }
+    return reply;
+}
+
 std::string handle_profile(const CommandContext &context, std::string_view argument) {
     if (context.username.empty()) {
         return missing_username_reply();
@@ -588,6 +775,11 @@ constexpr std::array commands{
     CommandDefinition{"/leaderboard", handle_leaderboard},
     CommandDefinition{"/zimbelli", handle_zimbelli},
     CommandDefinition{"/profilo", handle_profile},
+    CommandDefinition{"/virus", handle_virus},
+    CommandDefinition{"/ruolo", handle_role},
+    CommandDefinition{"/infetta", handle_infect},
+    CommandDefinition{"/spara", handle_shoot},
+    CommandDefinition{"/vaccina", handle_cure},
     CommandDefinition{"/addquote", handle_add_quote},
     CommandDefinition{"/buyballoon", handle_buy_balloon},
     CommandDefinition{"/buyboost", handle_buy_boost},
@@ -703,7 +895,12 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
         if (definition == nullptr) {
             return std::nullopt;
         }
-        return definition->handler(context, command.argument);
+        /* A handler with nothing to say out loud has already said it in private. */
+        std::string reply = definition->handler(context, command.argument);
+        if (reply.empty()) {
+            return std::nullopt;
+        }
+        return reply;
     } catch (const std::exception &) {
         return std::string{internal_error_reply};
     }

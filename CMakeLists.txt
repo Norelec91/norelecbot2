@@ -61,6 +61,7 @@ set(CORE_SOURCES
     src/text.cpp
     src/zodiac.cpp
     src/position.cpp
+    src/virus.cpp
 )
 
 add_library(norelecbot_core STATIC ${CORE_SOURCES})

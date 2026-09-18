@@ -178,6 +178,15 @@ std::vector<std::string> Session::handle(const Message &message, std::int64_t no
     return lines;
 }
 
+std::vector<std::string> Session::whisper(std::string_view nick, std::string_view text) const {
+    const std::vector<std::string> parts = split_text(text);
+    std::vector<std::string> lines;
+    std::ranges::transform(parts, std::back_inserter(lines), [nick](const std::string &part) {
+        return line("PRIVMSG", {nick}, part);
+    });
+    return lines;
+}
+
 std::vector<std::string> Session::announce(std::string_view text) const {
     std::vector<std::string> lines;
     say(text, lines);

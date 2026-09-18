@@ -3,6 +3,7 @@
 #include "logging.hpp"
 #include "storage.hpp"
 #include "commands.hpp"
+#include "game.hpp"
 #include "irc.hpp"
 
 #include <httplib.h>
@@ -94,6 +95,12 @@ void process_message(Storage &storage, const AppConfig &config, const Json &mess
             : std::string_view{},
         .claims_allowed = config.conquister_chat_id == 0 || chat == config.conquister_chat_id,
         .owner = std::ranges::find(config.owner_ids, sender_id) != config.owner_ids.end(),
+        /* Straight to him, where nobody else reads it; silent for whoever never wrote to the bot. */
+        .whisper = [&storage, &config](std::string_view name, std::string_view said) {
+            if (const std::int64_t id = telegram_id_of(storage, std::string{name}); id != 0) {
+                telegram_say(config, id, std::string{said});
+            }
+        },
     };
     const std::optional<std::string> reply = command_dispatch(context, text->get_ref<const std::string &>());
     if (!reply) {

@@ -62,6 +62,52 @@ Counters parse_counters(const Json &state, const char *name) {
     return counters;
 }
 
+Virus parse_virus(const Json &state) {
+    Virus virus;
+    const auto section = state.find("virus");
+    if (section == state.end() || !section->is_object()) {
+        return virus;
+    }
+    virus.running = section->value("running", false);
+    virus.infections = integer(section->value("infections", Json(0)));
+    const auto players = section->find("players");
+    if (players == section->end() || !players->is_object()) {
+        return virus;
+    }
+    for (const auto &entry : players->items()) {
+        if (!entry.value().is_object()) {
+            continue;
+        }
+        virus.players.emplace(
+            entry.key(),
+            VirusPlayer{
+                .doronzo = entry.value().value("doronzo", false),
+                .alive = entry.value().value("alive", true),
+                .vaccines = integer(entry.value().value("vaccines", Json(0))),
+                .acted = integer(entry.value().value("acted", Json(0))),
+            }
+        );
+    }
+    return virus;
+}
+
+Json virus_to_json(const Virus &virus) {
+    Json players = Json::object();
+    for (const auto &[name, player] : virus.players) {
+        players[name] = Json{
+            {"doronzo", player.doronzo},
+            {"alive", player.alive},
+            {"vaccines", player.vaccines},
+            {"acted", player.acted},
+        };
+    }
+    return Json{
+        {"running", virus.running},
+        {"infections", virus.infections},
+        {"players", std::move(players)},
+    };
+}
+
 Authors parse_authors(const Json &state) {
     Authors authors;
     const auto section = state.find("quote_authors");
@@ -125,6 +171,7 @@ ConquisterState parse_state(const Json &json) {
         parse_authors(json),
         parse_counters(json, "simpatia"),
         parse_counters(json, "simpatia_seen"),
+        parse_virus(json),
     };
 }
 
@@ -162,6 +209,7 @@ Json state_to_json(const ConquisterState &state) {
         {"quote_authors", state.quote_authors},
         {"simpatia", state.simpatia},
         {"simpatia_seen", state.simpatia_seen},
+        {"virus", virus_to_json(state.virus)},
     };
 }
 

@@ -187,6 +187,9 @@ struct ClaimRules {
     const ClaimRules &rules = {}
 );
 /* limit 0 returns every entry. */
+/* The Telegram id of a player, zero when the bot has never seen him write from there. */
+[[nodiscard]] std::int64_t telegram_id_of(Storage &storage, const std::string &username);
+
 [[nodiscard]] Leaderboard conquister_leaderboard(Storage &storage, std::size_t limit);
 /* The players who own less than nothing, the deepest first. */
 [[nodiscard]] std::vector<LeaderboardEntry> conquister_negatives(Storage &storage, std::size_t limit);

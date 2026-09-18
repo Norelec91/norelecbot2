@@ -51,6 +51,28 @@ struct Raid {
     bool operator==(const Raid &) const = default;
 };
 
+/* One player in the game of the Doronzo virus. */
+struct VirusPlayer {
+    bool doronzo = false;
+    bool alive = true;
+    std::int64_t vaccines = 0;
+    /* When he last shot, infected or cured. */
+    std::int64_t acted = 0;
+
+    bool operator==(const VirusPlayer &) const = default;
+};
+
+using VirusPlayers = nlohmann::ordered_map<std::string, VirusPlayer>;
+
+struct Virus {
+    bool running = false;
+    /* How many people have been infected since it started, for the vaccines. */
+    std::int64_t infections = 0;
+    VirusPlayers players;
+
+    bool operator==(const Virus &) const = default;
+};
+
 struct ConquisterState {
     std::optional<Holder> current;
     Counters scores;
@@ -74,6 +96,7 @@ struct ConquisterState {
     /* How well liked each player is, and when that was last worked out. */
     Counters simpatia;
     Counters simpatia_seen;
+    Virus virus;
 
     bool operator==(const ConquisterState &) const = default;
 };

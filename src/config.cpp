@@ -96,6 +96,9 @@ constexpr std::array settings{
     Setting{"NORELECBOT_MISHAP_MAX_SECONDS", [](AppConfig &config, std::string_view value) {
         return set_number(config.mishap_max_seconds, value, AppConfig::default_mishap_max_seconds, 1);
     }},
+    Setting{"NORELECBOT_VIRUS_COOLDOWN_SECONDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.virus_cooldown_seconds, value, AppConfig::default_virus_cooldown_seconds, 0);
+    }},
     Setting{"NORELECBOT_SHADOWED", [](AppConfig &config, std::string_view value) {
         config.shadowed = split_names(value);
         return true;
