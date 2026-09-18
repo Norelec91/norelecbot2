@@ -490,6 +490,84 @@ std::optional<TaxResult> tax_the_leader(Storage &storage, int percent, std::int6
     return result;
 }
 
+namespace {
+
+constexpr std::array rule_names{
+    "quote_cost",
+    "balloon_cost",
+    "boost_cost",
+    "boost_multiplier",
+    "raid_share",
+    "travel_divisor",
+    "attack_cost",
+    "cooldown_seconds",
+};
+
+std::array<std::int64_t *, rule_names.size()> rule_fields(Rules &rules) {
+    return {
+        &rules.quote_cost,
+        &rules.balloon_cost,
+        &rules.boost_cost,
+        &rules.boost_multiplier,
+        &rules.raid_share,
+        &rules.travel_divisor,
+        &rules.attack_cost,
+        &rules.cooldown_seconds,
+    };
+}
+
+}
+
+Rules rules_now(Storage &storage, const Rules &fallback) {
+    return storage.transaction([&fallback](StorageSession &session) {
+        const ConquisterState &state = session.state();
+        Rules rules = fallback;
+        const auto fields = rule_fields(rules);
+        for (std::size_t which = 0; which < rule_names.size(); ++which) {
+            const auto found = std::ranges::find_if(state.rules, [which](const Counters::value_type &entry) {
+                return entry.first == rule_names.at(which);
+            });
+            if (found != state.rules.end()) {
+                *fields.at(which) = found->second;
+            }
+        }
+        return rules;
+    });
+}
+
+Rules scramble_rules(Storage &storage, const Rules &least, const Rules &most) {
+    const Rules drawn = storage.transaction([&least, &most](StorageSession &session) {
+        ConquisterState &state = session.state();
+        Rules rules;
+        Rules floors = least;
+        Rules ceilings = most;
+        const auto fields = rule_fields(rules);
+        const auto lowest = rule_fields(floors);
+        const auto highest = rule_fields(ceilings);
+        for (std::size_t which = 0; which < rule_names.size(); ++which) {
+            const std::int64_t low = *lowest.at(which);
+            const std::int64_t high = std::max(*highest.at(which), low);
+            const auto span = static_cast<std::size_t>(high - low + 1);
+            *fields.at(which) = low + static_cast<std::int64_t>(session.random_index(span));
+            state.rules[rule_names.at(which)] = *fields.at(which);
+        }
+        return rules;
+    });
+
+    log_info(
+        "rules shuffled quote={} balloon={} boost={}x{} share={} travel={} attack={} cooldown={}",
+        drawn.quote_cost,
+        drawn.balloon_cost,
+        drawn.boost_cost,
+        drawn.boost_multiplier,
+        drawn.raid_share,
+        drawn.travel_divisor,
+        drawn.attack_cost,
+        drawn.cooldown_seconds
+    );
+    return drawn;
+}
+
 std::optional<FlipperResult> flipper_hit(
     Storage &storage,
     const std::string &username,

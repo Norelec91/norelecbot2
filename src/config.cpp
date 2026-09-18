@@ -116,6 +116,12 @@ constexpr std::array settings{
     Setting{"NORELECBOT_REPROGRAM_MAX_SECONDS", [](AppConfig &config, std::string_view value) {
         return set_number(config.reprogram_max_seconds, value, AppConfig::default_reprogram_max_seconds, 30);
     }},
+    Setting{"NORELECBOT_CHAOS_MIN_SECONDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.chaos_min_seconds, value, AppConfig::default_chaos_min_seconds, 0);
+    }},
+    Setting{"NORELECBOT_CHAOS_MAX_SECONDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.chaos_max_seconds, value, AppConfig::default_chaos_max_seconds, 1);
+    }},
     Setting{"NORELECBOT_FLEGYAS_MIN_SECONDS", [](AppConfig &config, std::string_view value) {
         return set_number(config.flegyas_min_seconds, value, AppConfig::default_flegyas_min_seconds, 0);
     }},

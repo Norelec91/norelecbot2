@@ -259,6 +259,23 @@ struct TaxResult {
 /* Takes its share from whoever tops the leaderboard, once a day. */
 [[nodiscard]] std::optional<TaxResult> tax_the_leader(Storage &storage, int percent, std::int64_t now);
 
+/* The numbers the game runs on, as they stand: shuffled now and then, and read before every move. */
+struct Rules {
+    std::int64_t quote_cost = 0;
+    std::int64_t balloon_cost = 0;
+    std::int64_t boost_cost = 0;
+    std::int64_t boost_multiplier = 0;
+    std::int64_t raid_share = 0;
+    std::int64_t travel_divisor = 0;
+    std::int64_t attack_cost = 0;
+    std::int64_t cooldown_seconds = 0;
+};
+
+/* What is written down, falling back on what the owner configured. */
+[[nodiscard]] Rules rules_now(Storage &storage, const Rules &fallback);
+/* Draws them all again, between the given floors and ceilings. */
+[[nodiscard]] Rules scramble_rules(Storage &storage, const Rules &least, const Rules &most);
+
 struct FlipperResult {
     std::size_t which = 0;
     std::int64_t palle = 0;

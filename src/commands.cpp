@@ -152,11 +152,30 @@ std::string failed_attempt_toll(const ClaimResult &result) {
     return {};
 }
 
+/* What the owner configured, before anybody shuffled it. */
+Rules configured(const AppConfig &config) {
+    return Rules{
+        .quote_cost = config.quote_cost,
+        .balloon_cost = config.balloon_cost,
+        .boost_cost = config.boost_cost,
+        .boost_multiplier = config.boost_multiplier,
+        .raid_share = config.raid_share,
+        .travel_divisor = config.travel_divisor,
+        .attack_cost = config.attack_cost,
+        .cooldown_seconds = config.cooldown_seconds,
+    };
+}
+
+Rules rules_of(const CommandContext &context) {
+    return rules_now(context.storage, configured(context.config));
+}
+
 RaidRules raid_rules(const CommandContext &context) {
+    const Rules rules = rules_of(context);
     return {
-        .travel_divisor = context.config.travel_divisor,
-        .loot_share = context.config.raid_share,
-        .attack_cost = context.config.attack_cost,
+        .travel_divisor = static_cast<int>(rules.travel_divisor),
+        .loot_share = static_cast<int>(rules.raid_share),
+        .attack_cost = static_cast<int>(rules.attack_cost),
         .signs = context.config.zodiac_signs,
         .shadowed = context.config.shadowed,
     };
@@ -229,8 +248,8 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
             username,
             now,
             ClaimRules{
-                .cooldown_seconds = context.config.cooldown_seconds,
-                .attack_cost = context.config.attack_cost,
+                .cooldown_seconds = static_cast<int>(rules_of(context).cooldown_seconds),
+                .attack_cost = static_cast<int>(rules_of(context).attack_cost),
                 .ignores_shield = is_shielded(context, username),
                 .signs = context.config.zodiac_signs,
             }
@@ -620,7 +639,7 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
     const std::string_view name = asked.starts_with('@') ? asked.substr(1) : asked;
     const std::int64_t now = seconds_now();
     const std::optional<PlayerCard> card =
-        player_card(context.storage, username, name, now, context.config.travel_divisor);
+        player_card(context.storage, username, name, now, static_cast<int>(rules_of(context).travel_divisor));
     if (!card) {
         return std::format("{} non conosco nessun giocatore di nome {}.", username, name);
     }
@@ -699,7 +718,7 @@ std::string handle_add_quote(const CommandContext &context, std::string_view arg
     if (context.username.empty()) {
         return missing_username_reply();
     }
-    const int cost = context.config.quote_cost;
+    const auto cost = static_cast<int>(rules_of(context).quote_cost);
     if (argument.empty()) {
         return std::format("Uso: /addquote <testo>. Costa {} palle.", cost);
     }
@@ -744,7 +763,7 @@ std::string handle_buy_balloon(const CommandContext &context, std::string_view) 
         return missing_username_reply();
     }
     const std::string username{context.username};
-    const int cost = context.config.balloon_cost;
+    const auto cost = static_cast<int>(rules_of(context).balloon_cost);
     const std::int64_t shield_seconds = is_shielded(context, username) ? context.config.shield_seconds : 0;
     const BalloonResult result = balloon_buy(context.storage, username, cost, seconds_now(), shield_seconds);
     if (result.status == BalloonStatus::already_owned) {
@@ -843,9 +862,10 @@ std::string handle_buy_boost(const CommandContext &context, std::string_view) {
         return missing_username_reply();
     }
     const std::string username{context.username};
-    const int cost = context.config.boost_cost;
+    const Rules rules = rules_of(context);
+    const auto cost = static_cast<int>(rules.boost_cost);
     const BoostResult result =
-        boost_buy(context.storage, username, cost, context.config.boost_multiplier, seconds_now());
+        boost_buy(context.storage, username, cost, rules.boost_multiplier, seconds_now());
     if (result.status == BoostStatus::already_owned) {
         return std::format("{} hai già un boost x{} pronto.", username, result.multiplier);
     }

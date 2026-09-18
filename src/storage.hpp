@@ -108,6 +108,8 @@ struct ConquisterState {
     Counters reprogrammed;
     /* When the taxman last called. */
     Counters taxed;
+    /* The rules as they stand right now, when they have been shuffled. */
+    Counters rules;
 
     bool operator==(const ConquisterState &) const = default;
 };

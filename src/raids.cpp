@@ -77,6 +77,8 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
     const bool mishaps_happen = config.mishap_min_seconds > 0;
     Clock mishaps{config.mishap_min_seconds, config.mishap_max_seconds};
     Clock reprogramming{config.reprogram_min_seconds, config.reprogram_max_seconds};
+    const bool rules_shuffle = config.chaos_min_seconds > 0;
+    Clock chaos{config.chaos_min_seconds, config.chaos_max_seconds};
     const bool flegyas_comes = config.flegyas_min_seconds > 0;
     Clock flegyas{config.flegyas_min_seconds, config.flegyas_max_seconds};
     while (!stop.load(std::memory_order_relaxed)) {
@@ -125,6 +127,29 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
                     );
                 }
                 reprogramming.rest();
+            }
+            if (rules_shuffle && chaos.due(seconds_now())) {
+                /* Floors and ceilings wide enough to be unrecognisable, narrow enough to still be a game. */
+                const Rules least{100, 100, 100, 2, 2, 100, 0, 0};
+                const Rules most{5000, 5000, 5000, 10, 10, 2000, 1000, 1800};
+                const Rules drawn = scramble_rules(storage, least, most);
+                announce(
+                    config,
+                    std::format(
+                        "🎲 LE REGOLE SONO CAMBIATE!\n"
+                        "Citazione {} palle · palloncino {} · boost x{} a {} · le razzie prendono un "
+                        "{}esimo · viaggi divisi per {} · attacco fallito {} palle · penalità {} secondi.",
+                        drawn.quote_cost,
+                        drawn.balloon_cost,
+                        drawn.boost_multiplier,
+                        drawn.boost_cost,
+                        drawn.raid_share,
+                        drawn.travel_divisor,
+                        drawn.attack_cost,
+                        drawn.cooldown_seconds
+                    )
+                );
+                chaos.rest();
             }
             if (flegyas_comes && flegyas.due(seconds_now())) {
                 if (const std::optional<TaxResult> taken = flegyas_strike(storage, config.flegyas_share)) {

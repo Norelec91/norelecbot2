@@ -34,6 +34,8 @@ struct AppConfig {
     static constexpr int default_flegyas_share = 3;
     static constexpr int default_flegyas_min_seconds = 0;
     static constexpr int default_flegyas_max_seconds = 3600;
+    static constexpr int default_chaos_min_seconds = 0;
+    static constexpr int default_chaos_max_seconds = 7200;
     static constexpr int default_shield_seconds = 3600;
     static constexpr int default_boost_cost = 1500;
     static constexpr int default_boost_multiplier = 3;
@@ -84,6 +86,9 @@ struct AppConfig {
     int flegyas_min_seconds = default_flegyas_min_seconds;
     int flegyas_max_seconds = default_flegyas_max_seconds;
     int flegyas_share = default_flegyas_share;
+    /* How often the rules themselves are drawn again; zero and they stay as they are. */
+    int chaos_min_seconds = default_chaos_min_seconds;
+    int chaos_max_seconds = default_chaos_max_seconds;
     int balloon_cost = default_balloon_cost;
     int cooldown_seconds = default_cooldown_seconds;
     int attack_cost = default_attack_cost;

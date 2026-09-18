@@ -838,3 +838,32 @@ TEST_CASE("nothing comes back after fourteen days") {
     CHECK(loot_return(storage, "bob", late, true).status == ReturnStatus::too_late);
 }
 
+TEST_CASE("the rules themselves can be drawn again") {
+    const TestPaths paths{"chaos-test"};
+    Storage storage{paths.conquister, paths.quotes};
+
+    const Rules configured{1000, 1000, 1500, 3, 4, 350, 100, 300};
+    /* Nothing written down, so the owner's numbers stand. */
+    const Rules before = rules_now(storage, configured);
+    CHECK(before.quote_cost == 1000);
+    CHECK(before.raid_share == 4);
+    CHECK(before.cooldown_seconds == 300);
+
+    const Rules least{100, 100, 100, 2, 2, 100, 0, 0};
+    const Rules most{5000, 5000, 5000, 10, 10, 2000, 1000, 1800};
+    const Rules drawn = scramble_rules(storage, least, most);
+    CHECK(drawn.quote_cost >= 100);
+    CHECK(drawn.quote_cost <= 5000);
+    CHECK(drawn.boost_multiplier >= 2);
+    CHECK(drawn.boost_multiplier <= 10);
+    CHECK(drawn.travel_divisor >= 100);
+    CHECK(drawn.travel_divisor <= 2000);
+
+    /* And from now on those are the rules, reread from the file and all. */
+    Storage reopened{paths.conquister, paths.quotes};
+    const Rules after = rules_now(reopened, configured);
+    CHECK(after.quote_cost == drawn.quote_cost);
+    CHECK(after.raid_share == drawn.raid_share);
+    CHECK(after.attack_cost == drawn.attack_cost);
+}
+
