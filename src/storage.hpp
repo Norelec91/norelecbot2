@@ -110,6 +110,8 @@ struct ConquisterState {
     Counters taxed;
     /* The rules as they stand right now, when they have been shuffled. */
     Counters rules;
+    /* Whoever asked for trouble, and when: the next thing that happens happens to him. */
+    Counters marked;
 
     bool operator==(const ConquisterState &) const = default;
 };

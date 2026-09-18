@@ -565,7 +565,7 @@ TEST_CASE("the word the owner picked multiplies whoever says it") {
     AppConfig config;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
-    config.magic_word = "la";
+    config.magic_words = {"la"};
     config.magic_most = 5;
     Storage storage{config.conquister_path, config.quotes_path};
 
@@ -582,7 +582,7 @@ TEST_CASE("the word the owner picked multiplies whoever says it") {
 
     const std::optional<std::string> reply = said("ho visto la luna");
     REQUIRE(reply);
-    CHECK(reply->starts_with("✨ alice ha detto \"la\": le sue palle si moltiplicano per "));
+    CHECK(reply->starts_with("🥤 alice ha detto \"la\" · MOUNTAIN DEW: le palle si moltiplicano per "));
     const std::int64_t now = conquister_user(storage, "alice")->score;
     CHECK(now >= 2000);
     CHECK(now <= 5000);
@@ -598,7 +598,7 @@ TEST_CASE("the word the owner picked multiplies whoever says it") {
     CHECK_FALSE(said("la la la").has_value());
 
     /* Off unless the owner sets it. */
-    config.magic_word.clear();
+    config.magic_words.clear();
     context.username = "alice";
     CHECK_FALSE(said("ho visto la luna").has_value());
 }

@@ -180,6 +180,7 @@ ConquisterState parse_state(const Json &json) {
         parse_counters(json, "reprogrammed"),
         parse_counters(json, "taxed"),
         parse_counters(json, "rules"),
+        parse_counters(json, "marked"),
     };
 }
 
@@ -226,6 +227,7 @@ Json state_to_json(const ConquisterState &state) {
         {"reprogrammed", state.reprogrammed},
         {"taxed", state.taxed},
         {"rules", state.rules},
+        {"marked", state.marked},
     };
 }
 

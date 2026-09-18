@@ -79,6 +79,8 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
     Clock reprogramming{config.reprogram_min_seconds, config.reprogram_max_seconds};
     const bool rules_shuffle = config.chaos_min_seconds > 0;
     Clock chaos{config.chaos_min_seconds, config.chaos_max_seconds};
+    const bool world_happens = config.happening_min_seconds > 0;
+    Clock happenings{config.happening_min_seconds, config.happening_max_seconds};
     const bool flegyas_comes = config.flegyas_min_seconds > 0;
     Clock flegyas{config.flegyas_min_seconds, config.flegyas_max_seconds};
     while (!stop.load(std::memory_order_relaxed)) {
@@ -150,6 +152,12 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
                     )
                 );
                 chaos.rest();
+            }
+            if (world_happens && happenings.due(seconds_now())) {
+                if (const std::optional<HappeningResult> what = happening_strike(storage, seconds_now())) {
+                    announce(config, happening_reply(*what));
+                }
+                happenings.rest();
             }
             if (flegyas_comes && flegyas.due(seconds_now())) {
                 if (const std::optional<TaxResult> taken = flegyas_strike(storage, config.flegyas_share)) {

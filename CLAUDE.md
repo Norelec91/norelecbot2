@@ -6,9 +6,10 @@ deployment notes are in `DEPLOY.md`, which is not tracked.
 
 ## The mishaps
 
-`src/mishaps.hpp` holds the twenty-five small things that happen to a player for no reason.
+`src/mishaps.hpp` holds the small things that happen to a player for no reason, and the pinball targets
+a message can hit.
 
-**Every change to the code rewrites all twenty-five, and each set is more absurd than the one before
+**Every change to the code rewrites the whole table, and each set is more absurd than the one before
 it.** Half of them are nuisances worth a palla or two; the rest hand out something absurd — a balloon
 arriving in the post, a triple on the next hold, a nick teleported elsewhere on the map, a penalty
 quashed on a technicality, a point of simpatia won or lost. The cast of `Boon` says what a mishap can

@@ -36,6 +36,8 @@ struct AppConfig {
     static constexpr int default_flegyas_max_seconds = 3600;
     static constexpr int default_chaos_min_seconds = 0;
     static constexpr int default_chaos_max_seconds = 7200;
+    static constexpr int default_happening_min_seconds = 0;
+    static constexpr int default_happening_max_seconds = 5400;
     static constexpr int default_shield_seconds = 3600;
     static constexpr int default_boost_cost = 1500;
     static constexpr int default_boost_multiplier = 3;
@@ -64,9 +66,19 @@ struct AppConfig {
     int mishap_max_seconds = default_mishap_max_seconds;
     /* How long a player waits between one move of the virus game and the next. */
     int virus_cooldown_seconds = default_virus_cooldown_seconds;
-    /* A word that multiplies the palle of whoever says it; empty and nothing happens. */
-    std::string magic_word;
+    /* Words that multiply the palle of whoever says them; empty and nothing happens. */
+    std::vector<std::string> magic_words;
     int magic_most = default_magic_most;
+    /* The five small spells: double or halve, give to the poorest, earn or lose a point of simpatia. */
+    std::vector<std::string> bet_words;
+    std::vector<std::string> alms_words;
+    std::vector<std::string> charisma_words;
+    std::vector<std::string> taunt_words;
+    std::vector<std::string> sixseven_words;
+    std::vector<std::string> blessing_words;
+    /* How often something happens to the world at large; zero and nothing does. */
+    int happening_min_seconds = default_happening_min_seconds;
+    int happening_max_seconds = default_happening_max_seconds;
     /* One message in this many hits the pinball table; zero and there is no table. */
     int flipper_odds = default_flipper_odds;
     /* Words that hit the table for certain, whatever the odds say. */

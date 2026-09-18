@@ -432,6 +432,200 @@ FreeingResult set_free(Storage &storage, std::string_view username) {
     return result;
 }
 
+void mark_target(Storage &storage, const std::string &username, std::int64_t now) {
+    storage.transaction([&username, now](StorageSession &session) {
+        session.state().marked[username] = now;
+        return 0;
+    });
+    log_info("marked user={}", username);
+}
+
+namespace {
+
+/* Whoever asked for it, if anybody did, and otherwise one of them at random. */
+std::string someone(StorageSession &session, ConquisterState &state) {
+    if (!state.marked.empty()) {
+        const std::string chosen = state.marked.begin()->first;
+        state.marked.erase(chosen);
+        if (find_entry(state.scores, chosen) != state.scores.end()) {
+            return chosen;
+        }
+    }
+    if (state.scores.empty()) {
+        return {};
+    }
+    const std::size_t which = session.random_index(state.scores.size());
+    return std::next(state.scores.begin(), static_cast<std::ptrdiff_t>(which))->first;
+}
+
+}
+
+std::optional<HappeningResult> happening_strike(Storage &storage, std::int64_t now) {
+    const std::optional<HappeningResult> result =
+        storage.transaction([now](StorageSession &session) -> std::optional<HappeningResult> {
+            ConquisterState &state = session.state();
+            if (state.scores.empty()) {
+                return std::nullopt;
+            }
+            HappeningResult happened;
+            happened.what = static_cast<Happening>(session.random_index(8));
+            switch (happened.what) {
+            case Happening::earthquake:
+                state.ids.clear();
+                happened.players = state.scores.size();
+                break;
+            case Happening::amnesty:
+                happened.players = state.cooldowns.size();
+                state.cooldowns.clear();
+                break;
+            case Happening::rain:
+                happened.palle = 100 + static_cast<std::int64_t>(session.random_index(900));
+                for (Counters::value_type &entry : state.scores) {
+                    entry.second += happened.palle;
+                }
+                happened.players = state.scores.size();
+                break;
+            case Happening::inflation:
+                for (Counters::value_type &entry : state.scores) {
+                    if (entry.second > 0) {
+                        entry.second -= entry.second / 10;
+                    }
+                }
+                happened.players = state.scores.size();
+                break;
+            case Happening::black_market:
+                happened.player = someone(session, state);
+                if (happened.player.empty()) {
+                    return std::nullopt;
+                }
+                if (find_entry(state.balloons, happened.player) == state.balloons.end()) {
+                    state.balloons[happened.player] = 0;
+                }
+                break;
+            case Happening::pedlar: {
+                /* Sold something he never asked for, at a price he never agreed to. */
+                happened.player = someone(session, state);
+                if (happened.player.empty()) {
+                    return std::nullopt;
+                }
+                happened.palle = 1000 + static_cast<std::int64_t>(session.random_index(9000));
+                state.scores[happened.player] = counter(state.scores, happened.player) - happened.palle;
+                break;
+            }
+            case Happening::ministry: {
+                /* Either the palle are certified as the real thing, or they are seized as fakes. */
+                happened.player = someone(session, state);
+                if (happened.player.empty()) {
+                    return std::nullopt;
+                }
+                const std::int64_t had = counter(state.scores, happened.player);
+                const bool genuine = session.random_index(2) == 0;
+                happened.palle = had / 5;
+                state.scores[happened.player] = genuine ? had + happened.palle : had - happened.palle;
+                happened.players = genuine ? 1 : 0;
+                break;
+            }
+            case Happening::famine:
+                happened.player = someone(session, state);
+                if (happened.player.empty()) {
+                    return std::nullopt;
+                }
+                state.boosts.erase(happened.player);
+                state.balloons.erase(happened.player);
+                state.shields.erase(happened.player);
+                break;
+            }
+            static_cast<void>(now);
+            return happened;
+        });
+
+    if (result) {
+        log_info("happening what={} player={}", static_cast<int>(result->what), result->player);
+    }
+    return result;
+}
+
+std::optional<SpellResult> spell_cast(
+    Storage &storage,
+    const std::string &username,
+    Spell spell,
+    std::int64_t now
+) {
+    const std::optional<SpellResult> result =
+        storage.transaction([&](StorageSession &session) -> std::optional<SpellResult> {
+            ConquisterState &state = session.state();
+            SpellResult cast;
+            cast.spell = spell;
+            const std::int64_t had = counter(state.scores, username);
+            switch (spell) {
+            case Spell::multiply:
+                if (had == 0) {
+                    return std::nullopt;
+                }
+                cast.multiplier = 2 + static_cast<std::int64_t>(session.random_index(4));
+                if (std::abs(had) > std::numeric_limits<std::int64_t>::max() / cast.multiplier) {
+                    return std::nullopt;
+                }
+                cast.score = had * cast.multiplier;
+                cast.palle = cast.score - had;
+                state.scores[username] = cast.score;
+                break;
+            case Spell::bet:
+                if (had == 0) {
+                    return std::nullopt;
+                }
+                cast.score = session.random_index(2) == 0 ? had * 2 : had / 2;
+                cast.palle = cast.score - had;
+                state.scores[username] = cast.score;
+                break;
+            case Spell::alms: {
+                if (had < 100) {
+                    return std::nullopt;
+                }
+                const auto poorest = std::ranges::min_element(state.scores, [](const auto &a, const auto &b) {
+                    return a.second < b.second;
+                });
+                if (poorest == state.scores.end() || poorest->first == username) {
+                    return std::nullopt;
+                }
+                cast.other = poorest->first;
+                cast.palle = 100;
+                poorest->second += cast.palle;
+                cast.score = had - cast.palle;
+                state.scores[username] = cast.score;
+                break;
+            }
+            case Spell::charisma:
+                cast.palle = simpatia_change(state, username, 1, now);
+                break;
+            case Spell::taunt:
+                cast.palle = simpatia_change(state, username, -1, now);
+                state.marked[username] = now;
+                break;
+            case Spell::sixseven:
+                /* Whatever he had, it now ends in sixty-seven. */
+                cast.score = had - (((had % 100) + 100) % 100) + 67;
+                cast.palle = cast.score - had;
+                state.scores[username] = cast.score;
+                break;
+            case Spell::blessing:
+                /* An indulgence: the debt is wiped and he is well liked again. */
+                cast.score = std::max<std::int64_t>(had, 0);
+                cast.palle = cast.score - had;
+                state.scores[username] = cast.score;
+                state.cooldowns.erase(username);
+                cast.multiplier = simpatia_change(state, username, simpatia_full, now);
+                break;
+            }
+            return cast;
+        });
+
+    if (result) {
+        log_info("spell user={} which={} palle={}", username, static_cast<int>(spell), result->palle);
+    }
+    return result;
+}
+
 std::optional<TaxResult> flegyas_strike(Storage &storage, int share) {
     const std::optional<TaxResult> result =
         storage.transaction([share](StorageSession &session) -> std::optional<TaxResult> {
@@ -439,9 +633,9 @@ std::optional<TaxResult> flegyas_strike(Storage &storage, int share) {
             if (share <= 0 || state.scores.empty()) {
                 return std::nullopt;
             }
-            const std::size_t who = session.random_index(state.scores.size());
-            const auto player = std::next(state.scores.begin(), static_cast<std::ptrdiff_t>(who));
-            if (player->second <= 0) {
+            const std::string name = someone(session, state);
+            const auto player = find_entry(state.scores, name);
+            if (player == state.scores.end() || player->second <= 0) {
                 return std::nullopt;
             }
             TaxResult taken;

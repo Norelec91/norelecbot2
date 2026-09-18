@@ -144,8 +144,39 @@ constexpr std::array settings{
     Setting{"NORELECBOT_LUCKY_SWING", [](AppConfig &config, std::string_view value) {
         return set_number(config.lucky_swing, value, AppConfig::default_lucky_swing, 1);
     }},
-    Setting{"NORELECBOT_MAGIC_WORD", [](AppConfig &config, std::string_view value) {
-        return set_text(config.magic_word, value, {});
+    Setting{"NORELECBOT_MAGIC_WORDS", [](AppConfig &config, std::string_view value) {
+        config.magic_words = split_names(value);
+        return true;
+    }},
+    Setting{"NORELECBOT_BET_WORDS", [](AppConfig &config, std::string_view value) {
+        config.bet_words = split_names(value);
+        return true;
+    }},
+    Setting{"NORELECBOT_ALMS_WORDS", [](AppConfig &config, std::string_view value) {
+        config.alms_words = split_names(value);
+        return true;
+    }},
+    Setting{"NORELECBOT_CHARISMA_WORDS", [](AppConfig &config, std::string_view value) {
+        config.charisma_words = split_names(value);
+        return true;
+    }},
+    Setting{"NORELECBOT_TAUNT_WORDS", [](AppConfig &config, std::string_view value) {
+        config.taunt_words = split_names(value);
+        return true;
+    }},
+    Setting{"NORELECBOT_SIXSEVEN_WORDS", [](AppConfig &config, std::string_view value) {
+        config.sixseven_words = split_names(value);
+        return true;
+    }},
+    Setting{"NORELECBOT_BLESSING_WORDS", [](AppConfig &config, std::string_view value) {
+        config.blessing_words = split_names(value);
+        return true;
+    }},
+    Setting{"NORELECBOT_HAPPENING_MIN_SECONDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.happening_min_seconds, value, AppConfig::default_happening_min_seconds, 0);
+    }},
+    Setting{"NORELECBOT_HAPPENING_MAX_SECONDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.happening_max_seconds, value, AppConfig::default_happening_max_seconds, 1);
     }},
     Setting{"NORELECBOT_MAGIC_MOST", [](AppConfig &config, std::string_view value) {
         return set_number(config.magic_most, value, AppConfig::default_magic_most, 2);

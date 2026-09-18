@@ -924,6 +924,48 @@ bool command_is_for_bot(std::string_view text) {
            (!message.empty() && find_command(parse_command(message).name) != nullptr);
 }
 
+std::string happening_reply(const HappeningResult &what) {
+    switch (what.what) {
+    case Happening::earthquake:
+        return std::format(
+            "🌍 TERREMOTO: la mappa si è rimescolata, tutti e {} i giocatori si svegliano da un'altra parte.",
+            what.players
+        );
+    case Happening::amnesty:
+        return std::format("🕊️ CONDONO: {} penalità cancellate, tutti liberi di riprovarci subito.", what.players);
+    case Happening::rain:
+        return std::format("🌧️ PIOGGIA DI PALLE: {} palle a testa per tutti e {}.", what.palle, what.players);
+    case Happening::inflation:
+        return std::format("📉 INFLAZIONE: un decimo delle palle di tutti e {} è andato in fumo.", what.players);
+    case Happening::black_market:
+        return std::format("🎈 MERCATO NERO: un palloncino è comparso in casa di {}, senza ricevuta.", what.player);
+    case Happening::pedlar:
+        return std::format(
+            "🐛 Un negoziante ha venduto a {} un bruco che non aveva chiesto: {} palle andate, conto in rosso.",
+            what.player,
+            what.palle
+        );
+    case Happening::ministry:
+        return what.players == 1
+            ? std::format(
+                  "🇮🇹 Il Ministero del Made in Italy ha certificato le palle di {}: valgono {} in più.",
+                  what.player,
+                  what.palle
+              )
+            : std::format(
+                  "🇮🇹 Il Ministero del Made in Italy ha sequestrato {} palle contraffatte a {}.",
+                  what.palle,
+                  what.player
+              );
+    case Happening::famine:
+        return std::format(
+            "🍽️ CARITATEVOLE CARESTIA per {}: palloncino e boost spariti, resta solo la buona volontà.",
+            what.player
+        );
+    }
+    return {};
+}
+
 std::string mishap_reply(const MishapResult &mishap) {
     return std::vformat(mishaps.at(mishap.which).text, std::make_format_args(mishap.player));
 }
@@ -1102,28 +1144,98 @@ std::optional<std::string> flipper_reply(
     return said;
 }
 
-/* The word the owner has set, which multiplies the palle of whoever lets it slip. */
-std::optional<std::string> magic_word_reply(const CommandContext &context, std::string_view message) {
+/* The words that work the small spells, in the order they are tried. */
+std::optional<std::string> spell_reply(const CommandContext &context, std::string_view lowered) {
     if (context.username.empty() || !context.claims_allowed) {
         return std::nullopt;
     }
-    const std::string lowered = text::to_lower_copy(message);
-    if (!says_the_word(lowered, text::to_lower_copy(context.config.magic_word))) {
-        return std::nullopt;
+    const AppConfig &config = context.config;
+    const std::array<std::pair<const std::vector<std::string> *, Spell>, 7> spells{{
+        {&config.magic_words, Spell::multiply},
+        {&config.bet_words, Spell::bet},
+        {&config.alms_words, Spell::alms},
+        {&config.charisma_words, Spell::charisma},
+        {&config.taunt_words, Spell::taunt},
+        {&config.sixseven_words, Spell::sixseven},
+        {&config.blessing_words, Spell::blessing},
+    }};
+    for (const auto &[words, spell] : spells) {
+        const auto said = std::ranges::find_if(*words, [lowered](const std::string &word) {
+            return says_the_word(lowered, text::to_lower_copy(word));
+        });
+        if (said == words->end()) {
+            continue;
+        }
+        const std::string username{context.username};
+        const std::optional<SpellResult> cast =
+            spell_cast(context.storage, username, spell, seconds_now());
+        if (!cast) {
+            return std::nullopt;
+        }
+        switch (spell) {
+        case Spell::multiply:
+            return std::format(
+                "🥤 {} ha detto \"{}\" · MOUNTAIN DEW: le palle si moltiplicano per {} e diventano {}.",
+                username,
+                *said,
+                cast->multiplier,
+                cast->score
+            );
+        case Spell::bet:
+            return cast->palle > 0
+                ? std::format(
+                      "💥 {} ha detto \"{}\" · 360 NOSCOPE: le palle raddoppiano a {}.",
+                      username,
+                      *said,
+                      cast->score
+                  )
+                : std::format(
+                      "🎯 {} ha detto \"{}\" · HITMARKER mancato: le palle si dimezzano a {}.",
+                      username,
+                      *said,
+                      cast->score
+                  );
+        case Spell::alms:
+            return std::format(
+                "📢 {} ha detto \"{}\" e ha passato {} palle a {}, che era l'ultimo di tutti.",
+                username,
+                *said,
+                cast->palle,
+                cast->other
+            );
+        case Spell::charisma:
+            return std::format(
+                "🔺 {} ha detto \"{}\" · ILLUMINATI CONFIRMED: simpatia {}.",
+                username,
+                *said,
+                cast->palle
+            );
+        case Spell::taunt:
+            return std::format(
+                "💀 {} ha detto \"{}\" · GET REKT: simpatia {}, e adesso è il bersaglio designato.",
+                username,
+                *said,
+                cast->palle
+            );
+        case Spell::sixseven:
+            return std::format(
+                "6️⃣7️⃣ {} ha detto \"{}\": le sue palle finiscono in 67. Adesso ne ha {}.",
+                username,
+                *said,
+                cast->score
+            );
+        case Spell::blessing:
+            return std::format(
+                "⛪ {} ha detto \"{}\" e arriva la benedizione: debiti cancellati, penalità rimessa, "
+                "simpatia di nuovo a {}. Ne ha {}.",
+                username,
+                *said,
+                cast->multiplier,
+                cast->score
+            );
+        }
     }
-    const std::string username{context.username};
-    const std::optional<MagicResult> magic =
-        magic_word_said(context.storage, username, context.config.magic_most);
-    if (!magic) {
-        return std::nullopt;
-    }
-    return std::format(
-        "✨ {} ha detto \"{}\": le sue palle si moltiplicano per {} e diventano {}.",
-        username,
-        context.config.magic_word,
-        magic->multiplier,
-        magic->score
-    );
+    return std::nullopt;
 }
 
 }
@@ -1155,8 +1267,8 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
         const CommandDefinition *definition = find_command(command.name);
         if (definition == nullptr) {
             const std::string lowered = text::to_lower_copy(message);
-            if (const std::optional<std::string> magic = magic_word_reply(context, message)) {
-                return magic;
+            if (const std::optional<std::string> spell = spell_reply(context, lowered)) {
+                return spell;
             }
             if (const std::optional<std::string> everything = cascade_reply(context, lowered)) {
                 return everything;

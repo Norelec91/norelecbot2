@@ -745,7 +745,7 @@ TEST_CASE("something small happens to somebody, and it is always small") {
 
     std::set<std::string> unlucky;
     std::set<std::size_t> seen;
-    for (int strike = 0; strike < 200; ++strike) {
+    for (int strike = 0; strike < 2000; ++strike) {
         const std::optional<MishapResult> mishap = mishap_strike(storage, 1000, 3);
         REQUIRE(mishap);
         unlucky.insert(mishap->player);
@@ -760,15 +760,17 @@ TEST_CASE("something small happens to somebody, and it is always small") {
     CHECK(unlucky.size() == 2);
     CHECK(seen.size() == mishaps.size());
 
-    /* The gifts are handed out for real: in two hundred strikes all of them have landed. */
-    const auto card = player_card(storage, "alice", "bob", 1000, 1000000);
-    REQUIRE(card);
-    CHECK(card->balloon_attempts >= 0);
-    CHECK(card->boost_multiplier == 3);
+    /* The gifts are handed out for real, to whoever each strike happened to pick. */
+    const auto one = player_card(storage, "alice", "bob", 1000, 1000000);
+    const auto other = player_card(storage, "bob", "alice", 1000, 1000000);
+    REQUIRE(one);
+    REQUIRE(other);
+    CHECK((one->balloon_attempts >= 0 || other->balloon_attempts >= 0));
+    CHECK((one->boost_multiplier == 3 || other->boost_multiplier == 3));
 
-    /* Two hundred of them and nobody has moved more than a few hundred palle. */
-    CHECK(conquister_user(storage, "alice")->score > 700);
-    CHECK(conquister_user(storage, "bob")->score > 700);
+    /* Two thousand of them and nobody has been ruined: they are nuisances, not blows. */
+    CHECK(conquister_user(storage, "alice")->score > -2000);
+    CHECK(conquister_user(storage, "bob")->score > -2000);
 }
 
 TEST_CASE("nothing happens while nobody is playing") {

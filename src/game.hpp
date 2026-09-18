@@ -253,6 +253,41 @@ struct TaxResult {
     std::int64_t left = 0;
 };
 
+enum class Happening { earthquake, amnesty, rain, inflation, black_market, pedlar, famine, ministry };
+
+struct HappeningResult {
+    Happening what = Happening::earthquake;
+    /* Whoever it landed on, when it lands on one player. */
+    std::string player;
+    std::int64_t palle = 0;
+    std::size_t players = 0;
+};
+
+/* One of the things that happen to the world, drawn at random. */
+[[nodiscard]] std::optional<HappeningResult> happening_strike(Storage &storage, std::int64_t now);
+
+/* Marks somebody as the one the next thing happens to. */
+void mark_target(Storage &storage, const std::string &username, std::int64_t now);
+
+enum class Spell { multiply, bet, alms, charisma, taunt, sixseven, blessing };
+
+struct SpellResult {
+    Spell spell = Spell::multiply;
+    std::int64_t palle = 0;
+    std::int64_t score = 0;
+    std::int64_t multiplier = 0;
+    /* Whoever the alms went to. */
+    std::string other;
+};
+
+/* Works one of the small spells a word sets off. */
+[[nodiscard]] std::optional<SpellResult> spell_cast(
+    Storage &storage,
+    const std::string &username,
+    Spell spell,
+    std::int64_t now
+);
+
 /* Comes down on somebody at random and takes a share of what he has, which is lost for good. */
 [[nodiscard]] std::optional<TaxResult> flegyas_strike(Storage &storage, int share);
 

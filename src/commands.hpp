@@ -33,6 +33,9 @@ struct CommandContext {
     Whisper whisper;
 };
 
+/* What the bot says when something happens to the world at large. */
+[[nodiscard]] std::string happening_reply(const HappeningResult &what);
+
 /* What the bot says when one of the mishaps happens to somebody. */
 [[nodiscard]] std::string mishap_reply(const MishapResult &mishap);
 
