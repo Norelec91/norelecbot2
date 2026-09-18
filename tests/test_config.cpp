@@ -104,3 +104,23 @@ TEST_CASE("the signs set by hand are read, and a wrong one is refused") {
     CHECK_FALSE(file.load("NORELECBOT_ZODIAC_SIGNS==vergine\n"));
 }
 
+TEST_CASE("the bot can have more than one owner") {
+    const ConfigFile file;
+
+    const auto config = file.load("NORELECBOT_OWNER_ID=12345, 998877\n");
+    REQUIRE(config);
+    REQUIRE(config->owner_ids.size() == 2);
+    CHECK(config->owner_ids[0] == 12345);
+    CHECK(config->owner_ids[1] == 998877);
+
+    const auto alone = file.load("NORELECBOT_OWNER_ID=12345\n");
+    REQUIRE(alone);
+    CHECK(alone->owner_ids.size() == 1);
+
+    const auto nobody = file.load("NORELECBOT_OWNER_ID=\n");
+    REQUIRE(nobody);
+    CHECK(nobody->owner_ids.empty());
+
+    CHECK_FALSE(file.load("NORELECBOT_OWNER_ID=12345, tizio\n"));
+}
+

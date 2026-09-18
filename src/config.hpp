@@ -31,7 +31,8 @@ struct AppConfig {
 
     std::string bot_token;
     bool conquister_enabled = false;
-    std::int64_t owner_id = 0;
+    /* Whoever may see and delete the quotes, on Telegram. */
+    std::vector<std::int64_t> owner_ids;
     int quote_cost = default_quote_cost;
     int balloon_cost = default_balloon_cost;
     int cooldown_seconds = default_cooldown_seconds;

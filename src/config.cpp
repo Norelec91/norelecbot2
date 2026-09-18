@@ -63,7 +63,16 @@ constexpr std::array settings{
         return true;
     }},
     Setting{"NORELECBOT_OWNER_ID", [](AppConfig &config, std::string_view value) {
-        return set_number(config.owner_id, value, std::int64_t{0});
+        std::vector<std::int64_t> owners;
+        for (const std::string &name : split_names(value)) {
+            const std::optional<std::int64_t> id = text::parse_int64(name);
+            if (!id) {
+                return false;
+            }
+            owners.push_back(*id);
+        }
+        config.owner_ids = std::move(owners);
+        return true;
     }},
     Setting{"NORELECBOT_QUOTE_COST", [](AppConfig &config, std::string_view value) {
         return set_number(config.quote_cost, value, AppConfig::default_quote_cost, 0);

@@ -7,6 +7,7 @@
 
 #include <httplib.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <format>
@@ -92,7 +93,7 @@ void process_message(Storage &storage, const AppConfig &config, const Json &mess
             ? std::string_view{username->get_ref<const std::string &>()}
             : std::string_view{},
         .claims_allowed = config.conquister_chat_id == 0 || chat == config.conquister_chat_id,
-        .owner = sender_id == config.owner_id,
+        .owner = std::ranges::find(config.owner_ids, sender_id) != config.owner_ids.end(),
     };
     const std::optional<std::string> reply = command_dispatch(context, text->get_ref<const std::string &>());
     if (!reply) {
