@@ -108,9 +108,9 @@ Json virus_to_json(const Virus &virus) {
     };
 }
 
-Authors parse_authors(const Json &state) {
+Authors parse_authors(const Json &state, const char *name = "quote_authors") {
     Authors authors;
-    const auto section = state.find("quote_authors");
+    const auto section = state.find(name);
     if (section == state.end() || !section->is_object()) {
         return authors;
     }
@@ -172,6 +172,11 @@ ConquisterState parse_state(const Json &json) {
         parse_counters(json, "simpatia"),
         parse_counters(json, "simpatia_seen"),
         parse_virus(json),
+        parse_authors(json, "loot_from"),
+        parse_counters(json, "loot_amount"),
+        parse_counters(json, "loot_when"),
+        parse_authors(json, "dispute_buyer"),
+        parse_counters(json, "dispute_amount"),
     };
 }
 
@@ -210,6 +215,11 @@ Json state_to_json(const ConquisterState &state) {
         {"simpatia", state.simpatia},
         {"simpatia_seen", state.simpatia_seen},
         {"virus", virus_to_json(state.virus)},
+        {"loot_from", state.loot_from},
+        {"loot_amount", state.loot_amount},
+        {"loot_when", state.loot_when},
+        {"dispute_buyer", state.dispute_buyer},
+        {"dispute_amount", state.dispute_amount},
     };
 }
 

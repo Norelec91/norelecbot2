@@ -97,6 +97,13 @@ struct ConquisterState {
     Counters simpatia;
     Counters simpatia_seen;
     Virus virus;
+    /* The last raid each player brought home: from whom, how much, and when. */
+    Authors loot_from;
+    Counters loot_amount;
+    Counters loot_when;
+    /* Open disputes, kept under the name of whoever took the palle. */
+    Authors dispute_buyer;
+    Counters dispute_amount;
 
     bool operator==(const ConquisterState &) const = default;
 };

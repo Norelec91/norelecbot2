@@ -289,6 +289,188 @@ ClaimResult conquister_claim(
     return result;
 }
 
+DisputeResult dispute_open(Storage &storage, const std::string &username, std::int64_t now) {
+    const DisputeResult result = storage.transaction([&](StorageSession &session) {
+        ConquisterState &state = session.state();
+        DisputeResult opened;
+        /* Whoever is holding palle taken from him is the one he has a case against. */
+        const auto took = std::ranges::find_if(state.loot_from, [&username](const auto &entry) {
+            return text::equals_ignore_case(entry.second, username);
+        });
+        if (took == state.loot_from.end()) {
+            opened.status = DisputeStatus::nothing_to_report;
+            return opened;
+        }
+        opened.seller = took->first;
+        opened.palle = counter(state.loot_amount, opened.seller);
+        if (state.dispute_buyer.find(opened.seller) != state.dispute_buyer.end()) {
+            opened.status = DisputeStatus::already_open;
+            return opened;
+        }
+        if (counter(state.loot_when, opened.seller) + dispute_window_seconds < now) {
+            opened.status = DisputeStatus::too_late;
+            return opened;
+        }
+        state.dispute_buyer[opened.seller] = username;
+        state.dispute_amount[opened.seller] = opened.palle;
+        return opened;
+    });
+
+    if (result.status == DisputeStatus::done) {
+        log_info("dispute opened by={} against={} palle={}", username, result.seller, result.palle);
+    }
+    return result;
+}
+
+ReturnResult loot_return(
+    Storage &storage,
+    const std::string &username,
+    std::int64_t now,
+    bool postage_on_seller
+) {
+    const ReturnResult result = storage.transaction([&](StorageSession &session) {
+        ConquisterState &state = session.state();
+        ReturnResult giving;
+        const auto from = state.loot_from.find(username);
+        const std::int64_t palle = counter(state.loot_amount, username);
+        if (from == state.loot_from.end() || palle <= 0) {
+            giving.status = ReturnStatus::nothing_to_return;
+            return giving;
+        }
+        giving.victim = from->second;
+        giving.palle = palle;
+        giving.disputed = state.dispute_buyer.find(username) != state.dispute_buyer.end();
+        if (counter(state.loot_when, username) + return_window_seconds < now) {
+            giving.status = ReturnStatus::too_late;
+            return giving;
+        }
+        /* One case in three the support refunds the buyer and lets the seller keep the palle. */
+        giving.overturned =
+            giving.disputed && session.random_index(support_overturns_one_in) == 0;
+        if (giving.overturned) {
+            state.scores[giving.victim] = counter(state.scores, giving.victim) + palle;
+        } else {
+            giving.postage = palle / return_postage_share;
+            const std::int64_t from_seller = palle + (postage_on_seller ? giving.postage : 0);
+            const std::int64_t to_buyer = palle - (postage_on_seller ? 0 : giving.postage);
+            state.scores[username] = counter(state.scores, username) - from_seller;
+            state.scores[giving.victim] = counter(state.scores, giving.victim) + to_buyer;
+        }
+        giving.score = counter(state.scores, username);
+        state.loot_from.erase(username);
+        state.loot_amount.erase(username);
+        state.loot_when.erase(username);
+        state.dispute_buyer.erase(username);
+        state.dispute_amount.erase(username);
+        return giving;
+    });
+
+    if (result.status == ReturnStatus::done) {
+        log_info(
+            "loot returned user={} to={} palle={} postage={}",
+            username,
+            result.victim,
+            result.palle,
+            result.postage
+        );
+    }
+    return result;
+}
+
+std::optional<FlipperResult> flipper_hit(
+    Storage &storage,
+    const std::string &username,
+    int odds,
+    std::int64_t now,
+    std::int64_t boost
+) {
+    const std::optional<FlipperResult> result =
+        storage.transaction([&](StorageSession &session) -> std::optional<FlipperResult> {
+            if (odds <= 0 || session.random_index(static_cast<std::size_t>(odds)) != 0) {
+                return std::nullopt;
+            }
+            ConquisterState &state = session.state();
+            FlipperResult hit;
+            hit.which = session.random_index(flippers.size());
+            const Mishap &what = flippers.at(hit.which);
+            const std::int64_t before = counter(state.scores, username);
+            hit.palle = what.palle;
+            hit.score = before + what.palle;
+            switch (what.boon) {
+            case Boon::doubled:
+                hit.score = before * 2;
+                hit.palle = hit.score - before;
+                break;
+            case Boon::halved:
+                hit.score = before / 2;
+                hit.palle = hit.score - before;
+                break;
+            case Boon::balloon:
+                if (find_entry(state.balloons, username) == state.balloons.end()) {
+                    state.balloons[username] = 0;
+                }
+                break;
+            case Boon::boost:
+                state.boosts[username] = boost;
+                break;
+            case Boon::teleport:
+                state.ids.erase(username);
+                static_cast<void>(player_id(session, state, username));
+                break;
+            case Boon::liked:
+                static_cast<void>(simpatia_change(state, username, 1, now));
+                break;
+            case Boon::disliked:
+                static_cast<void>(simpatia_change(state, username, -1, now));
+                break;
+            case Boon::forgiven:
+                state.cooldowns.erase(username);
+                break;
+            case Boon::none:
+                break;
+            }
+            state.scores[username] = hit.score;
+            return hit;
+        });
+
+    if (result) {
+        log_info("flipper user={} which={} palle={}", username, result->which, result->palle);
+    }
+    return result;
+}
+
+std::vector<FlipperResult> cascade(
+    Storage &storage,
+    const std::string &username,
+    int how_many,
+    std::int64_t now,
+    std::int64_t boost
+) {
+    std::vector<FlipperResult> chain;
+    for (int strike = 0; strike < how_many; ++strike) {
+        if (const std::optional<FlipperResult> hit = flipper_hit(storage, username, 1, now, boost)) {
+            chain.push_back(*hit);
+        }
+    }
+    log_info("cascade user={} events={}", username, chain.size());
+    return chain;
+}
+
+LuckyResult lucky_word_said(Storage &storage, const std::string &username, int swing) {
+    const LuckyResult result = storage.transaction([&](StorageSession &session) {
+        ConquisterState &state = session.state();
+        const auto range = static_cast<std::size_t>(std::max(swing, 1) * 2) + 1;
+        const std::int64_t change =
+            static_cast<std::int64_t>(session.random_index(range)) - std::max(swing, 1);
+        const std::int64_t score = counter(state.scores, username) + change;
+        state.scores[username] = score;
+        return LuckyResult{change, score};
+    });
+
+    log_info("lucky word user={} palle={} left={}", username, result.palle, result.score);
+    return result;
+}
+
 std::optional<MagicResult> magic_word_said(Storage &storage, const std::string &username, int most) {
     const std::optional<MagicResult> result =
         storage.transaction([&](StorageSession &session) -> std::optional<MagicResult> {
@@ -538,6 +720,8 @@ std::optional<MishapResult> mishap_strike(Storage &storage, std::int64_t now, st
             case Boon::forgiven:
                 state.cooldowns.erase(name);
                 break;
+            case Boon::doubled:
+            case Boon::halved:
             case Boon::none:
                 break;
             }
@@ -693,6 +877,11 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 const std::int64_t carried = counter(state.scores, raid.raider);
                 if (raid.loot > 0) {
                     state.scores[raid.raider] = carried + raid.loot;
+                }
+                if (raid.loot > 0) {
+                    state.loot_from[raid.raider] = raid.target;
+                    state.loot_amount[raid.raider] = raid.loot;
+                    state.loot_when[raid.raider] = now;
                 }
                 settled.push_back(RaidEvent{
                     .kind = RaidEvent::Kind::returned,

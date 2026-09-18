@@ -252,7 +252,7 @@ TEST_CASE("We @someone sends the player out to rob them") {
         return command_dispatch(context, text).value_or("<nessuna risposta>");
     };
 
-    CHECK(reply("We @alice") == "🚀 bob parti per alice: arrivi tra 5 secondi. bob resta scoperto.");
+    CHECK(reply("We @alice") == "🚚 bob ritira di persona da alice: è in zona, ci arriva in 5 secondi. bob resta scoperto.");
     CHECK(reply("We @alice") == "🚀 bob sei già in viaggio, torni tra 10 secondi.");
     /* Another player, who is at home and can therefore get an answer of his own. */
     context.username = "carol";
@@ -275,7 +275,7 @@ TEST_CASE("We @someone sends the player out to rob them") {
     /* A nick with no @ in front, the way it is written on IRC. */
     context.username = "dave";
     context.user_id = 5;
-    CHECK(reply("We alice") == "🚀 dave parti per alice: arrivi tra 5 secondi. dave resta scoperto.");
+    CHECK(reply("We alice") == "🚚 dave ritira di persona da alice: è in zona, ci arriva in 5 secondi. dave resta scoperto.");
     context.username = "bob";
     context.user_id = 2;
 
@@ -309,12 +309,12 @@ TEST_CASE("the raids tell what happened") {
     RaidEvent event{.kind = RaidEvent::Kind::stolen, .raider = "bob", .target = "alice"};
     event.loot = 250;
     event.seconds = 52;
-    CHECK(raid_event_reply(event, none) == "💰 bob hai rubato 250 palle a alice! Torni in bob tra 52 secondi.");
+    CHECK(raid_event_reply(event, none) == "💰 bob hai rubato 250 palle a alice! Consegna prevista in bob tra 52 secondi.");
 
     event.target_on_telegram = true;
     event.undefended = true;
     CHECK(raid_event_reply(event, none) ==
-          "💰 bob hai rubato 250 palle a @alice, che era in giro! Torni in bob tra 52 secondi.");
+          "💰 bob hai rubato 250 palle a @alice, che era in giro! Consegna prevista in bob tra 52 secondi.");
 
     event.undefended = false;
     event.balloon_popped = true;

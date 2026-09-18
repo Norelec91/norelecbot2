@@ -25,6 +25,9 @@ struct AppConfig {
     static constexpr int default_mishap_max_seconds = 1800;
     static constexpr int default_virus_cooldown_seconds = 600;
     static constexpr int default_magic_most = 5;
+    static constexpr int default_flipper_odds = 0;
+    static constexpr int default_lucky_swing = 500;
+    static constexpr int default_cascade_most = 5;
     static constexpr int default_shield_seconds = 3600;
     static constexpr int default_boost_cost = 1500;
     static constexpr int default_boost_multiplier = 3;
@@ -56,6 +59,14 @@ struct AppConfig {
     /* A word that multiplies the palle of whoever says it; empty and nothing happens. */
     std::string magic_word;
     int magic_most = default_magic_most;
+    /* One message in this many hits the pinball table; zero and there is no table. */
+    int flipper_odds = default_flipper_odds;
+    /* Words that win or lose palle for whoever says them, and how much is at stake. */
+    std::vector<std::string> lucky_words;
+    int lucky_swing = default_lucky_swing;
+    /* A word that sets off a run of things at once, and how many at most. */
+    std::string cascade_word;
+    int cascade_most = default_cascade_most;
     int balloon_cost = default_balloon_cost;
     int cooldown_seconds = default_cooldown_seconds;
     int attack_cost = default_attack_cost;

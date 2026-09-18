@@ -187,6 +187,80 @@ struct ClaimRules {
     const ClaimRules &rules = {}
 );
 /* limit 0 returns every entry. */
+/* eBay's own words: returns within fourteen days, return postage on the buyer. */
+inline constexpr std::int64_t return_window_seconds = 14 * 86400;
+inline constexpr std::int64_t return_postage_share = 10;
+
+/* Seven days to open a dispute, and one case in three the support overturns whatever was agreed. */
+inline constexpr std::int64_t dispute_window_seconds = 7 * 86400;
+inline constexpr int support_overturns_one_in = 3;
+
+enum class ReturnStatus { done, nothing_to_return, too_late };
+
+enum class DisputeStatus { done, nothing_to_report, too_late, already_open };
+
+struct DisputeResult {
+    DisputeStatus status = DisputeStatus::done;
+    /* Whoever took the palle, and how many. */
+    std::string seller;
+    std::int64_t palle = 0;
+};
+
+/* The one robbed opens a case against whoever robbed him. */
+[[nodiscard]] DisputeResult dispute_open(Storage &storage, const std::string &username, std::int64_t now);
+
+struct ReturnResult {
+    ReturnStatus status = ReturnStatus::done;
+    std::string victim;
+    std::int64_t palle = 0;
+    std::int64_t postage = 0;
+    std::int64_t score = 0;
+    /* Set when the case was an open dispute rather than a change of heart. */
+    bool disputed = false;
+    /* The support refunded the buyer and let the seller keep the palle anyway. */
+    bool overturned = false;
+};
+
+/* Gives back what the last raid took, at the buyer's expense. */
+[[nodiscard]] ReturnResult loot_return(
+    Storage &storage,
+    const std::string &username,
+    std::int64_t now,
+    bool postage_on_seller
+);
+
+struct FlipperResult {
+    std::size_t which = 0;
+    std::int64_t palle = 0;
+    std::int64_t score = 0;
+};
+
+/* One message in odds hits the pinball table under the chat; nothing the rest of the time. */
+[[nodiscard]] std::optional<FlipperResult> flipper_hit(
+    Storage &storage,
+    const std::string &username,
+    int odds,
+    std::int64_t now,
+    std::int64_t boost
+);
+
+struct LuckyResult {
+    std::int64_t palle = 0;
+    std::int64_t score = 0;
+};
+
+/* Wins or loses a player up to swing palle, either way, for a word he let slip. */
+[[nodiscard]] LuckyResult lucky_word_said(Storage &storage, const std::string &username, int swing);
+
+/* A word that sets off one thing after another, all of them at random. */
+[[nodiscard]] std::vector<FlipperResult> cascade(
+    Storage &storage,
+    const std::string &username,
+    int how_many,
+    std::int64_t now,
+    std::int64_t boost
+);
+
 struct MagicResult {
     std::int64_t multiplier = 0;
     std::int64_t score = 0;

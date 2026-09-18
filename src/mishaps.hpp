@@ -16,6 +16,8 @@ enum class Boon {
     liked,
     disliked,
     forgiven,
+    doubled,
+    halved,
 };
 
 /* Things that happen to a player for no reason at all. */
@@ -51,6 +53,20 @@ inline constexpr std::array mishaps{
     Mishap{"🗿 {} ha fissato un muro per otto minuti. Ha vinto il muro.", 0, Boon::none},
     Mishap{"⚡ {} ha toccato una presa con le mani bagnate e adesso brilla: il prossimo possesso vale il triplo.", 0, Boon::boost},
     Mishap{"🧊 {} ha messo l'acqua in freezer per raffreddarla e se n'è dimenticato.", 0, Boon::none},
+};
+
+/* The pinball table underneath the chat: now and then a message hits something. */
+inline constexpr std::array flippers{
+    Mishap{"🎯 {} ha centrato un bumper: +100 palle.", 100, Boon::none},
+    Mishap{"💥 {} ha fatto JACKPOT: le palle raddoppiano.", 0, Boon::doubled},
+    Mishap{"🚨 {} ha scosso troppo il tavolo. TILT: metà delle palle se ne vanno.", 0, Boon::halved},
+    Mishap{"🔵 EXTRA BALL per {}: un palloncino esce dalla buca.", 0, Boon::balloon},
+    Mishap{"🎰 MULTIBALL per {}: il prossimo possesso vale il triplo.", 0, Boon::boost},
+    Mishap{"🕳️ La palla di {} è finita in buca centrale: -500 palle.", -500, Boon::none},
+    Mishap{"🔁 REPLAY per {}: la penalità è cancellata.", 0, Boon::forgiven},
+    Mishap{"⚡ {} ha preso la rampa a tutta velocità ed è finito da un'altra parte della mappa.", 0, Boon::teleport},
+    Mishap{"🎪 {} ha colpito il kickback: +250 palle e un applauso.", 250, Boon::liked},
+    Mishap{"🏁 {} ha abbattuto tutti i target: +1000 palle.", 1000, Boon::none},
 };
 
 }

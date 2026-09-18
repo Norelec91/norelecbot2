@@ -2,6 +2,7 @@
 
 #include "game.hpp"
 #include "mishaps.hpp"
+#include "position.hpp"
 #include "text.hpp"
 #include "virus.hpp"
 #include "zodiac.hpp"
@@ -202,6 +203,15 @@ std::optional<std::string> handle_raid(const CommandContext &context, std::strin
         return std::format("🪐 {} sei già in {}!", username, home);
     case RaidStatus::started:
         break;
+    }
+    if (result.seconds <= position::shortest_travel) {
+        return std::format(
+            "🚚 {} ritira di persona da {}: è in zona, ci arriva in {}. {} resta scoperto.",
+            username,
+            result.target,
+            format_wait(result.seconds),
+            username
+        );
     }
     return raid_started_reply(username, result.target, result.seconds);
 }
@@ -512,6 +522,74 @@ std::string handle_virus(const CommandContext &context, std::string_view argumen
     return reply;
 }
 
+std::string handle_report(const CommandContext &context, std::string_view) {
+    if (context.username.empty()) {
+        return missing_username_reply();
+    }
+    const std::string username{context.username};
+    const DisputeResult opened = dispute_open(context.storage, username, seconds_now());
+    switch (opened.status) {
+    case DisputeStatus::nothing_to_report:
+        return std::format("🧾 {} non c'è niente da segnalare: nessuno ti ha preso niente.", username);
+    case DisputeStatus::too_late:
+        return std::format("🧾 {} sono passati più di 7 giorni: la segnalazione non si può più aprire.", username);
+    case DisputeStatus::already_open:
+        return std::format("🧾 {} la segnalazione è già aperta.", username);
+    case DisputeStatus::done:
+        break;
+    }
+    return std::format(
+        "🧾 {} ha aperto una segnalazione per le {} palle che {} gli ha preso.\n"
+        "{}: decidi tu con /reso mie oppure /reso tue, cioè a spese di chi torna la roba.",
+        username,
+        opened.palle,
+        opened.seller,
+        opened.seller
+    );
+}
+
+std::string handle_return(const CommandContext &context, std::string_view argument) {
+    if (context.username.empty()) {
+        return missing_username_reply();
+    }
+    const std::string username{context.username};
+    /* The seller decides who pays the postage; left to himself unless he says otherwise. */
+    const bool on_seller = !text::equals_ignore_case(text::trim(argument), "tue");
+    const ReturnResult giving = loot_return(context.storage, username, seconds_now(), on_seller);
+    switch (giving.status) {
+    case ReturnStatus::nothing_to_return:
+        return std::format("📦 {} non hai niente da restituire.", username);
+    case ReturnStatus::too_late:
+        return std::format(
+            "📦 {} sono passati più di 14 giorni da quando hai preso quelle {} palle a {}: niente reso.",
+            username,
+            giving.palle,
+            giving.victim
+        );
+    case ReturnStatus::done:
+        break;
+    }
+    if (giving.overturned) {
+        return std::format(
+            "🎧 Il supporto clienti ha riesaminato il caso: {} viene rimborsato di {} palle e {} tiene "
+            "comunque la roba. Nessuno paga la spedizione.",
+            giving.victim,
+            giving.palle,
+            username
+        );
+    }
+    return std::format(
+        "📦 {} ha restituito {} palle a {}. Spese di spedizione del reso a carico {}: {} palle. "
+        "Gliene restano {}.",
+        username,
+        giving.palle,
+        giving.victim,
+        on_seller ? "del venditore" : "dell'acquirente",
+        giving.postage,
+        giving.score
+    );
+}
+
 std::string handle_profile(const CommandContext &context, std::string_view argument) {
     if (context.username.empty()) {
         return missing_username_reply();
@@ -775,6 +853,8 @@ constexpr std::array commands{
     CommandDefinition{"/leaderboard", handle_leaderboard},
     CommandDefinition{"/zimbelli", handle_zimbelli},
     CommandDefinition{"/profilo", handle_profile},
+    CommandDefinition{"/reso", handle_return},
+    CommandDefinition{"/segnala", handle_report},
     CommandDefinition{"/virus", handle_virus},
     CommandDefinition{"/ruolo", handle_role},
     CommandDefinition{"/infetta", handle_infect},
@@ -860,7 +940,7 @@ std::string raid_event_reply(const RaidEvent &event, const zodiac::Overrides &si
             event.target_percent
         );
     }
-    reply += std::format("! Torni in {} tra {}.", home, format_wait(event.seconds));
+    reply += std::format("! Consegna prevista in {} tra {}.", home, format_wait(event.seconds));
     if (event.denounced) {
         reply += std::format(
             "\n🚨 {} la tua simpatia è scesa a {}: SEI ANTIPATICO. Ti denuncio alla Guardia di Finanza "
@@ -891,6 +971,82 @@ bool says_the_word(std::string_view message, std::string_view word) {
         at = after_at;
     }
     return false;
+}
+
+/* One word, and everything happens at once. */
+std::optional<std::string> cascade_reply(const CommandContext &context, std::string_view lowered) {
+    if (context.username.empty() || !context.claims_allowed) {
+        return std::nullopt;
+    }
+    if (!says_the_word(lowered, text::to_lower_copy(context.config.cascade_word))) {
+        return std::nullopt;
+    }
+    const std::string username{context.username};
+    const std::vector<FlipperResult> chain = cascade(
+        context.storage,
+        username,
+        context.config.cascade_most,
+        seconds_now(),
+        context.config.boost_multiplier
+    );
+    if (chain.empty()) {
+        return std::nullopt;
+    }
+    std::string reply = std::format("🌀 {} ha detto \"{}\" e si è messo in moto tutto:", username, context.config.cascade_word);
+    for (const FlipperResult &hit : chain) {
+        reply += "\n";
+        reply += std::vformat(flippers.at(hit.which).text, std::make_format_args(username));
+    }
+    reply += std::format("\n💰 Alla fine gliene restano {}.", chain.back().score);
+    return reply;
+}
+
+/* Words that carry luck, good or bad, for whoever says them. */
+std::optional<std::string> lucky_word_reply(const CommandContext &context, std::string_view lowered) {
+    if (context.username.empty() || !context.claims_allowed) {
+        return std::nullopt;
+    }
+    const auto said = std::ranges::find_if(context.config.lucky_words, [lowered](const std::string &word) {
+        return says_the_word(lowered, text::to_lower_copy(word));
+    });
+    if (said == context.config.lucky_words.end()) {
+        return std::nullopt;
+    }
+    const std::string username{context.username};
+    const LuckyResult luck = lucky_word_said(context.storage, username, context.config.lucky_swing);
+    if (luck.palle == 0) {
+        return std::format("🎲 {} ha detto \"{}\" e non è successo niente.", username, *said);
+    }
+    return std::format(
+        "🎲 {} ha detto \"{}\" e {} {} palle: ora ne ha {}.",
+        username,
+        *said,
+        luck.palle > 0 ? "ne guadagna" : "ne perde",
+        luck.palle > 0 ? luck.palle : -luck.palle,
+        luck.score
+    );
+}
+
+/* The pinball table under the chat: now and then a message hits a bumper. */
+std::optional<std::string> flipper_reply(const CommandContext &context, std::int64_t now) {
+    if (context.username.empty() || !context.claims_allowed) {
+        return std::nullopt;
+    }
+    const std::optional<FlipperResult> hit = flipper_hit(
+        context.storage,
+        std::string{context.username},
+        context.config.flipper_odds,
+        now,
+        context.config.boost_multiplier
+    );
+    if (!hit) {
+        return std::nullopt;
+    }
+    std::string said = std::vformat(flippers.at(hit->which).text, std::make_format_args(context.username));
+    if (hit->palle != 0) {
+        said += std::format(" Ora ne ha {}.", hit->score);
+    }
+    return said;
 }
 
 /* The word the owner has set, which multiplies the palle of whoever lets it slip. */
@@ -940,7 +1096,17 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
         const ParsedCommand command = parse_command(message);
         const CommandDefinition *definition = find_command(command.name);
         if (definition == nullptr) {
-            return magic_word_reply(context, message);
+            const std::string lowered = text::to_lower_copy(message);
+            if (const std::optional<std::string> magic = magic_word_reply(context, message)) {
+                return magic;
+            }
+            if (const std::optional<std::string> everything = cascade_reply(context, lowered)) {
+                return everything;
+            }
+            if (const std::optional<std::string> luck = lucky_word_reply(context, lowered)) {
+                return luck;
+            }
+            return flipper_reply(context, seconds_now());
         }
         /* A handler with nothing to say out loud has already said it in private. */
         std::string reply = definition->handler(context, command.argument);

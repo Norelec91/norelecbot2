@@ -777,3 +777,64 @@ TEST_CASE("nothing happens while nobody is playing") {
     CHECK_FALSE(mishap_strike(storage, 1000, 3));
 }
 
+TEST_CASE("a raid can be disputed, returned, or settled by the support") {
+    const TestPaths paths{"reso-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":1000,"bob":0},"quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+
+    static_cast<void>(raid_start(storage, 0, "bob", "alice", 0, quick_rides()));
+    static_cast<void>(raid_due(storage, 5, quick_rides()));
+    const std::vector<RaidEvent> home = raid_due(storage, 10, quick_rides());
+    REQUIRE(home.size() == 1);
+    const std::int64_t loot = home[0].loot;
+    REQUIRE(loot > 0);
+
+    /* Nobody else has anything to report, and the one robbed has seven days. */
+    CHECK(dispute_open(storage, "carol", 20).status == DisputeStatus::nothing_to_report);
+    const DisputeResult opened = dispute_open(storage, "alice", 20);
+    CHECK(opened.status == DisputeStatus::done);
+    CHECK(opened.seller == "bob");
+    CHECK(opened.palle == loot);
+    CHECK(dispute_open(storage, "alice", 21).status == DisputeStatus::already_open);
+
+    const std::int64_t bob_had = conquister_user(storage, "bob")->score;
+    const std::int64_t alice_had = conquister_user(storage, "alice")->score;
+    const ReturnResult giving = loot_return(storage, "bob", 30, true);
+    REQUIRE(giving.status == ReturnStatus::done);
+    CHECK(giving.disputed);
+    CHECK(giving.victim == "alice");
+    if (giving.overturned) {
+        /* The support refunded her out of thin air and left him the palle. */
+        CHECK(conquister_user(storage, "bob")->score == bob_had);
+        CHECK(conquister_user(storage, "alice")->score == alice_had + loot);
+    } else {
+        CHECK(giving.postage == loot / return_postage_share);
+        CHECK(conquister_user(storage, "bob")->score == bob_had - loot - giving.postage);
+        CHECK(conquister_user(storage, "alice")->score == alice_had + loot);
+    }
+
+    /* Settled once and for all. */
+    CHECK(loot_return(storage, "bob", 40, true).status == ReturnStatus::nothing_to_return);
+    CHECK(dispute_open(storage, "alice", 40).status == DisputeStatus::nothing_to_report);
+}
+
+TEST_CASE("nothing comes back after fourteen days") {
+    const TestPaths paths{"reso-late-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":1000,"bob":0},"quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+
+    static_cast<void>(raid_start(storage, 0, "bob", "alice", 0, quick_rides()));
+    static_cast<void>(raid_due(storage, 5, quick_rides()));
+    static_cast<void>(raid_due(storage, 10, quick_rides()));
+
+    const std::int64_t late = 10 + return_window_seconds + 1;
+    CHECK(dispute_open(storage, "alice", late).status == DisputeStatus::too_late);
+    CHECK(loot_return(storage, "bob", late, true).status == ReturnStatus::too_late);
+}
+

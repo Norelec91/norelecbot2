@@ -99,6 +99,22 @@ constexpr std::array settings{
     Setting{"NORELECBOT_VIRUS_COOLDOWN_SECONDS", [](AppConfig &config, std::string_view value) {
         return set_number(config.virus_cooldown_seconds, value, AppConfig::default_virus_cooldown_seconds, 0);
     }},
+    Setting{"NORELECBOT_FLIPPER_ODDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.flipper_odds, value, AppConfig::default_flipper_odds, 0);
+    }},
+    Setting{"NORELECBOT_CASCADE_WORD", [](AppConfig &config, std::string_view value) {
+        return set_text(config.cascade_word, value, {});
+    }},
+    Setting{"NORELECBOT_CASCADE_MOST", [](AppConfig &config, std::string_view value) {
+        return set_number(config.cascade_most, value, AppConfig::default_cascade_most, 1);
+    }},
+    Setting{"NORELECBOT_LUCKY_WORDS", [](AppConfig &config, std::string_view value) {
+        config.lucky_words = split_names(value);
+        return true;
+    }},
+    Setting{"NORELECBOT_LUCKY_SWING", [](AppConfig &config, std::string_view value) {
+        return set_number(config.lucky_swing, value, AppConfig::default_lucky_swing, 1);
+    }},
     Setting{"NORELECBOT_MAGIC_WORD", [](AppConfig &config, std::string_view value) {
         return set_text(config.magic_word, value, {});
     }},
