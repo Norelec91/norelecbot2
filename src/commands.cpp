@@ -194,7 +194,7 @@ std::string handle_raid(const CommandContext &context, std::string_view target) 
         username,
         result.target,
         format_wait(result.seconds),
-        home
+        username
     );
 }
 
@@ -239,19 +239,17 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
         const std::string toll = failed_attempt_toll(result);
         if (result.shield_seconds > 0) {
             return std::format(
-                "🎈 {} il palloncino di {}{} ha resistito{}. Resiste ancora per {}.",
+                "🎈 {} il palloncino di {} ha resistito{}. Resiste ancora per {}.",
                 username,
-                mention,
                 result.previous_username,
                 toll,
                 format_wait(result.shield_seconds)
             );
         }
         return std::format(
-            "🎈 {} il palloncino di {}{} ha resistito{}. "
+            "🎈 {} il palloncino di {} ha resistito{}. "
             "Ora il palloncino ha il {}% di probabilità di essere bucato.",
             username,
-            mention,
             result.previous_username,
             toll,
             result.next_chance
@@ -509,9 +507,8 @@ std::string raid_event_reply(const RaidEvent &event, const zodiac::Overrides &si
     }
     if (event.kind == RaidEvent::Kind::defended) {
         return std::format(
-            "🎈 {} il palloncino di {}{} ha resistito{}. Torni in {} a mani vuote tra {}.",
+            "🎈 {} il palloncino di {} ha resistito{}. Torni in {} a mani vuote tra {}.",
             event.raider,
-            mention,
             event.target,
             event.cost > 0 ? std::format(" e ti costa {} palle", event.cost) : "",
             home,

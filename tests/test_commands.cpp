@@ -249,7 +249,7 @@ TEST_CASE("We @someone sends the player out to rob them") {
         return command_dispatch(context, text).value_or("<nessuna risposta>");
     };
 
-    CHECK(reply("We @alice") == "🚀 bob parti per alice: arrivi tra 5 secondi. @bob resta scoperto.");
+    CHECK(reply("We @alice") == "🚀 bob parti per alice: arrivi tra 5 secondi. bob resta scoperto.");
     CHECK(reply("We @alice") == "🚀 bob sei già in viaggio, torni tra 10 secondi.");
     /* Another player, who is at home and can therefore get an answer of his own. */
     context.username = "carol";
@@ -308,7 +308,7 @@ TEST_CASE("the raids tell what happened") {
     CHECK(raid_event_reply(event, none).contains("bucandogli il palloncino ("));
     CHECK(raid_event_reply(event, none).contains(": 125/75)"));
 
-    const RaidEvent defended{
+    RaidEvent defended{
         .kind = RaidEvent::Kind::defended,
         .raider = "bob",
         .target = "alice",
@@ -319,9 +319,19 @@ TEST_CASE("the raids tell what happened") {
     CHECK(raid_event_reply(defended, none) ==
           "🎈 bob il palloncino di alice ha resistito e ti costa 100 palle. Torni in bob a mani vuote tra 52 secondi.");
 
+    /* Names of people stay bare; the mention belongs to the planet he is heading back to. */
+    defended.raider_on_telegram = true;
+    defended.target_on_telegram = true;
+    CHECK(raid_event_reply(defended, none) ==
+          "🎈 bob il palloncino di alice ha resistito e ti costa 100 palle. "
+          "Torni in @bob a mani vuote tra 52 secondi.");
+
     RaidEvent home{.kind = RaidEvent::Kind::returned, .raider = "bob", .target = "alice"};
     home.loot = 250;
     CHECK(raid_event_reply(home, none) == "🪐 bob sei tornato in bob con 250 palle.");
+    home.raider_on_telegram = true;
+    CHECK(raid_event_reply(home, none) == "🪐 bob sei tornato in @bob con 250 palle.");
+    home.raider_on_telegram = false;
     home.loot = 0;
     CHECK(raid_event_reply(home, none) == "🪐 bob sei tornato in bob a mani vuote.");
 }
