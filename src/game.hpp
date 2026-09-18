@@ -193,6 +193,9 @@ struct ClaimRules {
     std::int64_t now
 );
 
+/* Takes the palle and answers as if the quote had been added, without adding it. */
+[[nodiscard]] QuoteAddResult quote_pretend(Storage &storage, const std::string &username, int cost);
+
 [[nodiscard]] QuoteAddResult quote_add(
     Storage &storage,
     const std::string &username,

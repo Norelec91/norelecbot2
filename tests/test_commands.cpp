@@ -362,3 +362,40 @@ TEST_CASE("a quote about what the owner has banned is turned away") {
     CHECK(quote_page_load(storage, 1).total == 1);
 }
 
+TEST_CASE("a shadowed player is answered for and his quote is dropped") {
+    const TestPaths paths{"shadow-quote-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"giangiui":3000,"alice":3000},"quotes_added":{}})";
+    }
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    config.quote_cost = 1000;
+    config.quote_banned = {"frod"};
+    config.quote_shadowed = {"Giangiui"};
+    Storage storage{config.conquister_path, config.quotes_path};
+
+    CommandContext context{.storage = storage, .config = config, .user_id = 1, .username = "giangiui"};
+    const auto reply = [&](std::string_view text) {
+        return command_dispatch(context, text).value_or("<nessuna risposta>");
+    };
+
+    CHECK(reply("/addquote una citazione") ==
+          "giangiui hai aggiunto la citazione spendendo 1000 palle!\n\nuna citazione");
+    /* Even the same one twice, and even what everyone else is refused. */
+    CHECK(reply("/addquote una citazione").starts_with("giangiui hai aggiunto la citazione"));
+    CHECK(reply("/addquote LA FRODE").starts_with("giangiui hai aggiunto la citazione"));
+    CHECK(quote_page_load(storage, 1).total == 0);
+    /* The palle are spent all the same, and the count does not move. */
+    CHECK(conquister_user(storage, "giangiui")->score == 0);
+    CHECK(conquister_user(storage, "giangiui")->quotes_added == 0);
+    CHECK(reply("/addquote un'altra") == "giangiui ti servono 1000 palle per aggiungere una citazione (ne hai 0).");
+
+    /* Everyone else is treated as before. */
+    context.username = "alice";
+    CHECK(reply("/addquote la citazione di alice").starts_with("alice hai aggiunto la citazione"));
+    CHECK(reply("/addquote LA FRODE") == "alice questa citazione non si può aggiungere: nessun addebito.");
+    CHECK(quote_page_load(storage, 1).total == 1);
+}
+

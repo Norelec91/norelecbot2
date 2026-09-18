@@ -561,6 +561,23 @@ BoostResult boost_buy(
     return result;
 }
 
+QuoteAddResult quote_pretend(Storage &storage, const std::string &username, int cost) {
+    const QuoteAddResult result = storage.transaction([&](StorageSession &session) {
+        ConquisterState &state = session.state();
+        const std::int64_t score = counter(state.scores, username);
+        if (score < cost) {
+            return QuoteAddResult{QuoteAddStatus::insufficient_score, score};
+        }
+        state.scores[username] = score - cost;
+        return QuoteAddResult{QuoteAddStatus::added, score - cost};
+    });
+
+    if (result.status == QuoteAddStatus::added) {
+        log_info("quote dropped user={} cost={} left={}", username, cost, result.available_score);
+    }
+    return result;
+}
+
 QuoteAddResult quote_add(
     Storage &storage,
     const std::string &username,
