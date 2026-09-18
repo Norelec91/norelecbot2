@@ -211,6 +211,16 @@ struct ClaimRules {
     std::int64_t shield_seconds
 );
 
+struct MishapResult {
+    std::string player;
+    /* Which of the mishaps happened, and what it cost or gave him. */
+    std::size_t which = 0;
+    std::int64_t palle = 0;
+};
+
+/* Picks a player at random and lets one of the mishaps happen to him; nothing when nobody plays yet. */
+[[nodiscard]] std::optional<MishapResult> mishap_strike(Storage &storage);
+
 /* Sends a player to rob another one, if he is at home and the target is somebody the bot knows.
    Naming himself sends him home instead: at once from @TheConquister37, at the end of the ride if he
    is on the road. */

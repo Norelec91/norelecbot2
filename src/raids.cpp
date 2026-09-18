@@ -10,6 +10,7 @@
 #include <chrono>
 #include <exception>
 #include <random>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -25,28 +26,28 @@ std::int64_t seconds_now() {
     ).count();
 }
 
-/* A player of the bot's own, who leaves for the same house every so often. */
-class Ghost {
+/* Rings again after a wait drawn between the two bounds. */
+class Clock {
 public:
-    explicit Ghost(const AppConfig &config)
-        : shortest_{std::min(config.ghost_min_seconds, config.ghost_max_seconds)},
-          longest_{std::max(config.ghost_min_seconds, config.ghost_max_seconds)},
+    Clock(int shortest, int longest)
+        : shortest_{std::min(shortest, longest)},
+          longest_{std::max(shortest, longest)},
           engine_{std::random_device{}()} {
         rest();
     }
 
-    [[nodiscard]] bool due(std::int64_t now) const { return leaves_ != 0 && now >= leaves_; }
+    [[nodiscard]] bool due(std::int64_t now) const { return rings_ != 0 && now >= rings_; }
 
     void rest() {
         std::uniform_int_distribution<int> wait{shortest_, longest_};
-        leaves_ = seconds_now() + wait(engine_);
+        rings_ = seconds_now() + wait(engine_);
     }
 
 private:
     int shortest_;
     int longest_;
     std::mt19937_64 engine_;
-    std::int64_t leaves_ = 0;
+    std::int64_t rings_ = 0;
 };
 
 void announce(const AppConfig &config, const std::string &text) {
@@ -69,20 +70,33 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
         .signs = config.zodiac_signs,
         .shadowed = config.shadowed,
     };
-    const bool ghost_plays = !config.ghost_raider.empty() && !config.ghost_target.empty();
-    Ghost ghost{config};
+    const bool ghost_plays = !config.ghost_raider.empty();
+    Clock ghost{config.ghost_min_seconds, config.ghost_max_seconds};
+    const bool mishaps_happen = config.mishap_min_seconds > 0;
+    Clock mishaps{config.mishap_min_seconds, config.mishap_max_seconds};
     while (!stop.load(std::memory_order_relaxed)) {
         try {
             for (const RaidEvent &event : raid_due(storage, seconds_now(), rules)) {
                 announce(config, raid_event_reply(event, config.zodiac_signs));
             }
             if (ghost_plays && ghost.due(seconds_now())) {
-                const RaidResult left =
-                    raid_start(storage, 0, config.ghost_raider, config.ghost_target, seconds_now(), rules);
-                if (left.status == RaidStatus::started) {
-                    announce(config, raid_started_reply(config.ghost_raider, left.target, left.seconds));
+                /* He writes what everybody writes, and is answered the same way. */
+                const CommandContext context{
+                    .storage = storage,
+                    .config = config,
+                    .user_id = 0,
+                    .username = config.ghost_raider,
+                };
+                if (const std::optional<std::string> said = command_dispatch(context, conquister_trigger)) {
+                    announce(config, *said);
                 }
                 ghost.rest();
+            }
+            if (mishaps_happen && mishaps.due(seconds_now())) {
+                if (const std::optional<MishapResult> mishap = mishap_strike(storage)) {
+                    announce(config, mishap_reply(*mishap));
+                }
+                mishaps.rest();
             }
         } catch (const std::exception &error) {
             log_warning("A raid could not be settled: {}", error.what());

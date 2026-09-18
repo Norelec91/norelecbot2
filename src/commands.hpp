@@ -27,6 +27,9 @@ struct CommandContext {
     bool owner = false;
 };
 
+/* What the bot says when one of the mishaps happens to somebody. */
+[[nodiscard]] std::string mishap_reply(const MishapResult &mishap);
+
 /* What the bot says when somebody leaves on a raid. */
 [[nodiscard]] std::string raid_started_reply(
     const std::string &raider,

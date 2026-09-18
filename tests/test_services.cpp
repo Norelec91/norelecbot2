@@ -1,7 +1,9 @@
 #include "test_paths.hpp"
 
+#include "commands.hpp"
 #include "game.hpp"
 #include "storage.hpp"
+#include "mishaps.hpp"
 #include "position.hpp"
 #include "zodiac.hpp"
 
@@ -9,6 +11,7 @@
 #include <doctest/doctest.h>
 
 #include <fstream>
+#include <set>
 
 using namespace norelecbot;
 
@@ -730,5 +733,41 @@ TEST_CASE("robbing people costs the good name it takes to keep") {
         const std::int64_t next_week = 80 + (7 * 86400);
         CHECK(player_card(storage, "alice", "bob", next_week, 1000000)->simpatia == 20);
     }
+}
+
+TEST_CASE("something small happens to somebody, and it is always small") {
+    const TestPaths paths{"mishap-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":1000,"bob":1000},"quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+
+    std::set<std::string> unlucky;
+    std::set<std::size_t> seen;
+    for (int strike = 0; strike < 200; ++strike) {
+        const std::optional<MishapResult> mishap = mishap_strike(storage);
+        REQUIRE(mishap);
+        unlucky.insert(mishap->player);
+        seen.insert(mishap->which);
+        CHECK(mishap->which < mishaps.size());
+        /* A nuisance, never a blow. */
+        CHECK(mishap->palle >= -3);
+        CHECK(mishap->palle <= 2);
+        CHECK_FALSE(mishap_reply(*mishap).empty());
+        CHECK(mishap_reply(*mishap).contains(mishap->player));
+    }
+    CHECK(unlucky.size() == 2);
+    CHECK(seen.size() == mishaps.size());
+
+    /* Two hundred of them and nobody has moved more than a few hundred palle. */
+    CHECK(conquister_user(storage, "alice")->score > 700);
+    CHECK(conquister_user(storage, "bob")->score > 700);
+}
+
+TEST_CASE("nothing happens while nobody is playing") {
+    const TestPaths paths{"mishap-empty-test"};
+    Storage storage{paths.conquister, paths.quotes};
+    CHECK_FALSE(mishap_strike(storage));
 }
 

@@ -1,6 +1,7 @@
 #include "game.hpp"
 
 #include "logging.hpp"
+#include "mishaps.hpp"
 #include "position.hpp"
 #include "text.hpp"
 #include "zodiac.hpp"
@@ -461,6 +462,29 @@ BalloonResult balloon_buy(
             result.available_score,
             result.shield_seconds
         );
+    }
+    return result;
+}
+
+std::optional<MishapResult> mishap_strike(Storage &storage) {
+    const std::optional<MishapResult> result =
+        storage.transaction([](StorageSession &session) -> std::optional<MishapResult> {
+            ConquisterState &state = session.state();
+            if (state.scores.empty()) {
+                return std::nullopt;
+            }
+            const std::size_t who = session.random_index(state.scores.size());
+            const auto player = std::next(state.scores.begin(), static_cast<std::ptrdiff_t>(who));
+            MishapResult mishap;
+            mishap.player = player->first;
+            mishap.which = session.random_index(mishaps.size());
+            mishap.palle = mishaps.at(mishap.which).palle;
+            player->second += mishap.palle;
+            return mishap;
+        });
+
+    if (result) {
+        log_info("mishap user={} which={} palle={}", result->player, result->which, result->palle);
     }
     return result;
 }

@@ -1,6 +1,7 @@
 #include "commands.hpp"
 
 #include "game.hpp"
+#include "mishaps.hpp"
 #include "text.hpp"
 #include "zodiac.hpp"
 
@@ -607,6 +608,10 @@ bool command_is_for_bot(std::string_view text) {
     const std::string_view message = text::trim(text);
     return message == conquister_trigger || !raid_target(message).empty() ||
            (!message.empty() && find_command(parse_command(message).name) != nullptr);
+}
+
+std::string mishap_reply(const MishapResult &mishap) {
+    return std::vformat(mishaps.at(mishap.which).text, std::make_format_args(mishap.player));
 }
 
 std::string raid_started_reply(const std::string &raider, const std::string &target, std::int64_t seconds) {
