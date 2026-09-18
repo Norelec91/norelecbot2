@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <cmath>
 #include <limits>
 #include <ranges>
 #include <utility>
@@ -284,6 +285,32 @@ ClaimResult conquister_claim(
         break;
     case ClaimStatus::already_held:
         break;
+    }
+    return result;
+}
+
+std::optional<MagicResult> magic_word_said(Storage &storage, const std::string &username, int most) {
+    const std::optional<MagicResult> result =
+        storage.transaction([&](StorageSession &session) -> std::optional<MagicResult> {
+            ConquisterState &state = session.state();
+            const std::int64_t score = counter(state.scores, username);
+            if (score == 0) {
+                return std::nullopt;
+            }
+            MagicResult magic;
+            magic.multiplier = 2 + static_cast<std::int64_t>(session.random_index(
+                static_cast<std::size_t>(std::max(most, 2) - 1)
+            ));
+            if (std::abs(score) > std::numeric_limits<std::int64_t>::max() / magic.multiplier) {
+                return std::nullopt;
+            }
+            magic.score = score * magic.multiplier;
+            state.scores[username] = magic.score;
+            return magic;
+        });
+
+    if (result) {
+        log_info("magic word user={} multiplier={} left={}", username, result->multiplier, result->score);
     }
     return result;
 }

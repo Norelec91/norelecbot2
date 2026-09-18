@@ -872,6 +872,53 @@ std::string raid_event_reply(const RaidEvent &event, const zodiac::Overrides &si
     return reply;
 }
 
+namespace {
+
+/* Whether the message says that one word, on its own and not inside another. */
+bool says_the_word(std::string_view message, std::string_view word) {
+    if (word.empty()) {
+        return false;
+    }
+    std::size_t at = 0;
+    while ((at = message.find(word, at)) != std::string_view::npos) {
+        const bool before = at == 0 || std::isalpha(static_cast<unsigned char>(message[at - 1])) == 0;
+        const std::size_t after_at = at + word.size();
+        const bool after = after_at >= message.size() ||
+                           std::isalpha(static_cast<unsigned char>(message[after_at])) == 0;
+        if (before && after) {
+            return true;
+        }
+        at = after_at;
+    }
+    return false;
+}
+
+/* The word the owner has set, which multiplies the palle of whoever lets it slip. */
+std::optional<std::string> magic_word_reply(const CommandContext &context, std::string_view message) {
+    if (context.username.empty() || !context.claims_allowed) {
+        return std::nullopt;
+    }
+    const std::string lowered = text::to_lower_copy(message);
+    if (!says_the_word(lowered, text::to_lower_copy(context.config.magic_word))) {
+        return std::nullopt;
+    }
+    const std::string username{context.username};
+    const std::optional<MagicResult> magic =
+        magic_word_said(context.storage, username, context.config.magic_most);
+    if (!magic) {
+        return std::nullopt;
+    }
+    return std::format(
+        "✨ {} ha detto \"{}\": le sue palle si moltiplicano per {} e diventano {}.",
+        username,
+        context.config.magic_word,
+        magic->multiplier,
+        magic->score
+    );
+}
+
+}
+
 std::optional<std::string> command_dispatch(const CommandContext &context, std::string_view text) {
     try {
         const std::string_view message = text::trim(text);
@@ -893,7 +940,7 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
         const ParsedCommand command = parse_command(message);
         const CommandDefinition *definition = find_command(command.name);
         if (definition == nullptr) {
-            return std::nullopt;
+            return magic_word_reply(context, message);
         }
         /* A handler with nothing to say out loud has already said it in private. */
         std::string reply = definition->handler(context, command.argument);

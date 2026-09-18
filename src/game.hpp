@@ -187,6 +187,18 @@ struct ClaimRules {
     const ClaimRules &rules = {}
 );
 /* limit 0 returns every entry. */
+struct MagicResult {
+    std::int64_t multiplier = 0;
+    std::int64_t score = 0;
+};
+
+/* Multiplies what a player has by something drawn between two and most; nothing when he has nothing. */
+[[nodiscard]] std::optional<MagicResult> magic_word_said(
+    Storage &storage,
+    const std::string &username,
+    int most
+);
+
 /* The Telegram id of a player, zero when the bot has never seen him write from there. */
 [[nodiscard]] std::int64_t telegram_id_of(Storage &storage, const std::string &username);
 

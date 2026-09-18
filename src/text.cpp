@@ -65,6 +65,12 @@ bool contains_ignore_case(std::string_view text, std::string_view piece) {
     return !found.empty();
 }
 
+std::string to_lower_copy(std::string_view text) {
+    std::string lowered{text};
+    std::ranges::transform(lowered, lowered.begin(), to_lower);
+    return lowered;
+}
+
 std::string squeeze(std::string_view text) {
     std::string squeezed;
     squeezed.reserve(text.size());

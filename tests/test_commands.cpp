@@ -555,3 +555,50 @@ TEST_CASE("the virus is a game of who is what") {
     CHECK(over.dead == 1);
 }
 
+TEST_CASE("the word the owner picked multiplies whoever says it") {
+    const TestPaths paths{"magic-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":1000},"quotes_added":{}})";
+    }
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    config.magic_word = "la";
+    config.magic_most = 5;
+    Storage storage{config.conquister_path, config.quotes_path};
+
+    CommandContext context{
+        .storage = storage,
+        .config = config,
+        .user_id = 1,
+        .username = "alice",
+        .claims_allowed = true,
+        .owner = false,
+        .whisper = {},
+    };
+    const auto said = [&](std::string_view text) { return command_dispatch(context, text); };
+
+    const std::optional<std::string> reply = said("ho visto la luna");
+    REQUIRE(reply);
+    CHECK(reply->starts_with("✨ alice ha detto \"la\": le sue palle si moltiplicano per "));
+    const std::int64_t now = conquister_user(storage, "alice")->score;
+    CHECK(now >= 2000);
+    CHECK(now <= 5000);
+    CHECK(now % 1000 == 0);
+
+    /* Inside another word it does not count, and a command stays a command. */
+    CHECK_FALSE(said("parlare di scale").has_value());
+    CHECK(said("/leaderboard la").value_or("").contains("Classifica"));
+    CHECK(conquister_user(storage, "alice")->score == now);
+
+    /* Somebody with nothing has nothing to multiply. */
+    context.username = "bob";
+    CHECK_FALSE(said("la la la").has_value());
+
+    /* Off unless the owner sets it. */
+    config.magic_word.clear();
+    context.username = "alice";
+    CHECK_FALSE(said("ho visto la luna").has_value());
+}
+
