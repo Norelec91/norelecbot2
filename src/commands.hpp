@@ -27,6 +27,13 @@ struct CommandContext {
     bool owner = false;
 };
 
+/* What the bot says when somebody leaves on a raid. */
+[[nodiscard]] std::string raid_started_reply(
+    const std::string &raider,
+    const std::string &target,
+    std::int64_t seconds
+);
+
 /* What the bot says when a raid reaches its target or comes home. */
 [[nodiscard]] std::string raid_event_reply(const RaidEvent &event, const zodiac::Overrides &signs);
 

@@ -31,12 +31,19 @@ struct ParsedCommand {
     std::string_view argument;
 };
 
-/* The name in "We @someone", or nothing when the message is not a raid. */
+/* The name in "We @someone", or in "We someone" where nobody writes the @; nothing otherwise. */
 std::string_view raid_target(std::string_view message) {
-    if (!message.starts_with(raid_trigger) || message == conquister_trigger) {
+    if (message == conquister_trigger) {
         return {};
     }
-    const std::string_view target = message.substr(raid_trigger.size());
+    std::string_view target;
+    if (message.starts_with(raid_trigger)) {
+        target = message.substr(raid_trigger.size());
+    } else if (message.starts_with("We ")) {
+        target = message.substr(3);
+    } else {
+        return {};
+    }
     const bool one_name = !target.empty() && target.find_first_of(" \t\r\n@") == std::string_view::npos;
     return one_name ? target : std::string_view{};
 }
@@ -152,7 +159,8 @@ RaidRules raid_rules(const CommandContext &context) {
     };
 }
 
-std::string handle_raid(const CommandContext &context, std::string_view target) {
+/* Written without the @, a name nobody plays under is somebody talking, not a raid. */
+std::optional<std::string> handle_raid(const CommandContext &context, std::string_view target, bool tagged) {
     if (context.username.empty()) {
         return missing_username_reply();
     }
@@ -162,6 +170,9 @@ std::string handle_raid(const CommandContext &context, std::string_view target) 
         std::format("{}{}", context.user_id != 0 ? "@" : "", username);
     const RaidResult result =
         raid_start(context.storage, context.user_id, username, target, seconds_now(), raid_rules(context));
+    if (result.status == RaidStatus::unknown_target && !tagged) {
+        return std::nullopt;
+    }
     switch (result.status) {
     case RaidStatus::already_travelling:
         return std::format("🚀 {} sei già in viaggio, torni tra {}.", username, format_wait(result.seconds));
@@ -190,13 +201,7 @@ std::string handle_raid(const CommandContext &context, std::string_view target) 
     case RaidStatus::started:
         break;
     }
-    return std::format(
-        "🚀 {} parti per {}: arrivi tra {}. {} resta scoperto.",
-        username,
-        result.target,
-        format_wait(result.seconds),
-        username
-    );
+    return raid_started_reply(username, result.target, result.seconds);
 }
 
 std::string handle_claim(const CommandContext &context, std::string_view) {
@@ -518,6 +523,16 @@ bool command_is_for_bot(std::string_view text) {
            (!message.empty() && find_command(parse_command(message).name) != nullptr);
 }
 
+std::string raid_started_reply(const std::string &raider, const std::string &target, std::int64_t seconds) {
+    return std::format(
+        "🚀 {} parti per {}: arrivi tra {}. {} resta scoperto.",
+        raider,
+        target,
+        format_wait(seconds),
+        raider
+    );
+}
+
 std::string raid_event_reply(const RaidEvent &event, const zodiac::Overrides &signs) {
     const std::string_view mention = event.target_on_telegram ? "@" : "";
     const std::string home = std::format("{}{}", event.raider_on_telegram ? "@" : "", event.raider);
@@ -579,7 +594,7 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
             if (!context.claims_allowed) {
                 return std::nullopt;
             }
-            return handle_raid(context, target);
+            return handle_raid(context, target, message.starts_with(raid_trigger));
         }
         if (message.empty()) {
             return std::nullopt;

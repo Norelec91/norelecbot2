@@ -257,6 +257,9 @@ TEST_CASE("We @someone sends the player out to rob them") {
     CHECK(reply("We @carol") == "🪐 carol sei già in @carol!");
     CHECK(reply("We @CAROL") == "🪐 carol sei già in @carol!");
     CHECK(reply("We @nessuno") == "🚀 carol non conosco nessun giocatore di nome nessuno.");
+    /* Without the @ a name nobody plays under is just talk: the bot keeps quiet. */
+    CHECK_FALSE(command_dispatch(context, "We nessuno").has_value());
+    CHECK_FALSE(command_dispatch(context, "We ragazzi").has_value());
     context.username = "bob";
     context.user_id = 2;
 
@@ -266,6 +269,12 @@ TEST_CASE("We @someone sends the player out to rob them") {
     CHECK_FALSE(command_dispatch(context, "We @ alice").has_value());
     CHECK_FALSE(command_dispatch(context, "We @alice ora").has_value());
     CHECK_FALSE(command_dispatch(context, "we @alice").has_value());
+    /* A nick with no @ in front, the way it is written on IRC. */
+    context.username = "dave";
+    context.user_id = 5;
+    CHECK(reply("We alice") == "🚀 dave parti per alice: arrivi tra 5 secondi. dave resta scoperto.");
+    context.username = "bob";
+    context.user_id = 2;
 
     /* On the road, naming yourself turns you round. */
     CHECK(reply("We @bob") == "🚀 bob lasci perdere e torni in @bob: arrivi tra 10 secondi.");
@@ -283,7 +292,9 @@ TEST_CASE("We @someone sends the player out to rob them") {
     context.user_id = 2;
 
     CHECK(command_is_for_bot("We @alice"));
+    CHECK(command_is_for_bot("We alice"));
     CHECK_FALSE(command_is_for_bot("We @"));
+    CHECK_FALSE(command_is_for_bot("We due parole"));
 
     context.claims_allowed = false;
     CHECK_FALSE(command_dispatch(context, "We @alice").has_value());

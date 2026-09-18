@@ -81,6 +81,18 @@ constexpr std::array settings{
         config.quote_banned = split_names(value);
         return true;
     }},
+    Setting{"NORELECBOT_GHOST_RAIDER", [](AppConfig &config, std::string_view value) {
+        return set_text(config.ghost_raider, value, {});
+    }},
+    Setting{"NORELECBOT_GHOST_TARGET", [](AppConfig &config, std::string_view value) {
+        return set_text(config.ghost_target, value, {});
+    }},
+    Setting{"NORELECBOT_GHOST_MIN_SECONDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.ghost_min_seconds, value, AppConfig::default_ghost_min_seconds, 5);
+    }},
+    Setting{"NORELECBOT_GHOST_MAX_SECONDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.ghost_max_seconds, value, AppConfig::default_ghost_max_seconds, 5);
+    }},
     Setting{"NORELECBOT_SHADOWED", [](AppConfig &config, std::string_view value) {
         config.shadowed = split_names(value);
         return true;
