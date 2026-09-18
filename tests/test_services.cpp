@@ -593,12 +593,25 @@ TEST_CASE("a quote remembers who added it") {
     CHECK(page.authors[1] == "bob");
     CHECK(read_json(paths.conquister).at("quote_authors").at("una citazione") == "alice");
 
-    /* Deleting a quote forgets its author too. */
+    /* Deleting a quote forgets its author and takes it off his count. */
+    CHECK(conquister_user(storage, "alice")->quotes_added == 1);
     CHECK(quote_delete(storage, "1") == "una citazione");
+    CHECK(conquister_user(storage, "alice")->quotes_added == 0);
     page = quote_page_load(storage, 1);
     REQUIRE(page.authors.size() == 1);
     CHECK(page.authors[0] == "bob");
     CHECK(read_json(paths.conquister).at("quote_authors").size() == 1);
+
+    /* A quote nobody is known to have added takes nothing off anybody. */
+    {
+        std::ofstream file{paths.quotes, std::ios::binary};
+        file << R"(["senza autore","un'altra"])";
+    }
+    {
+        Storage orphan{paths.conquister, paths.quotes};
+        CHECK(quote_delete(orphan, "1") == "senza autore");
+        CHECK(conquister_user(orphan, "bob")->quotes_added == 1);
+    }
 
     /* A quote from before the bot wrote it down has no author, and that is not a hole. */
     {

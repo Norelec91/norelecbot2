@@ -639,7 +639,14 @@ std::optional<std::string> quote_delete(Storage &storage, std::string_view selec
         }
         std::string removed = std::move(*selected);
         quotes.erase(selected);
-        session.state().quote_authors.erase(removed);
+        ConquisterState &state = session.state();
+        /* A quote that is deleted no longer counts for whoever added it. */
+        if (const auto author = state.quote_authors.find(removed); author != state.quote_authors.end()) {
+            if (const std::int64_t added = counter(state.quotes_added, author->second); added > 0) {
+                state.quotes_added[author->second] = added - 1;
+            }
+            state.quote_authors.erase(removed);
+        }
         return removed;
     });
 }
