@@ -332,8 +332,10 @@ std::string handle_add_quote(const CommandContext &context, std::string_view arg
     const bool shadowed = std::ranges::any_of(context.config.quote_shadowed, [&username](const std::string &name) {
         return text::equals_ignore_case(name, username);
     });
-    const auto banned = std::ranges::find_if(context.config.quote_banned, [&quote](const std::string &piece) {
-        return text::contains_ignore_case(quote, piece);
+    /* Compared without punctuation, or "F.R.O.D.E." would walk straight past. */
+    const std::string squeezed = text::squeeze(quote);
+    const auto banned = std::ranges::find_if(context.config.quote_banned, [&squeezed](const std::string &piece) {
+        return text::contains_ignore_case(squeezed, text::squeeze(piece));
     });
     if (!shadowed && banned != context.config.quote_banned.end()) {
         return std::format("{} questa citazione non si può aggiungere: nessun addebito.", username);

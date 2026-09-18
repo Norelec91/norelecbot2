@@ -354,6 +354,10 @@ TEST_CASE("a quote about what the owner has banned is turned away") {
     CHECK(reply("/addquote LA FRODE LA FRODE LA FRODE") == refused);
     CHECK(reply("/addquote parliamo di frodi") == refused);
     CHECK(reply("/addquote chi frodava allora") == refused);
+    /* Spelled out to slip past the filter. */
+    CHECK(reply("/addquote F.R.O.D.E. F.R.O.D.E.") == refused);
+    CHECK(reply("/addquote L A   F R O D E") == refused);
+    CHECK(reply("/addquote f-r-o-d-e") == refused);
     CHECK(reply("/addquote una bella scommessa") == refused);
     /* Nothing was written down. */
     CHECK(quote_page_load(storage, 1).total == 0);

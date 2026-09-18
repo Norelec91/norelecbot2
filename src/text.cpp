@@ -65,6 +65,19 @@ bool contains_ignore_case(std::string_view text, std::string_view piece) {
     return !found.empty();
 }
 
+std::string squeeze(std::string_view text) {
+    std::string squeezed;
+    squeezed.reserve(text.size());
+    for (const char character : text) {
+        const auto byte = static_cast<unsigned char>(character);
+        /* Letters and digits stay, and so does anything outside ASCII: accents are part of a word. */
+        if (std::isalnum(byte) != 0 || byte >= 0x80U) {
+            squeezed += to_lower(character);
+        }
+    }
+    return squeezed;
+}
+
 std::string strip_mentions(std::string_view text) {
     std::string stripped;
     stripped.reserve(text.size());

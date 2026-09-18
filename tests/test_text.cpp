@@ -59,3 +59,13 @@ TEST_CASE("a piece of word is found whatever the spelling") {
     CHECK_FALSE(text::contains_ignore_case("", "frod"));
 }
 
+TEST_CASE("punctuation does not hide a word") {
+    CHECK(text::squeeze("F.R.O.D.E.") == "frode");
+    CHECK(text::squeeze("L A   F R O D E") == "lafrode");
+    CHECK(text::squeeze("f-r-o-d-e!") == "frode");
+    CHECK(text::squeeze("Perché no?") == "perchéno");
+    CHECK(text::squeeze("12 palle") == "12palle");
+    CHECK(text::squeeze("") == "");
+    CHECK(text::contains_ignore_case(text::squeeze("LA F.R.O.D.E. LA F.R.O.D.E."), "frod"));
+}
+
