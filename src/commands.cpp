@@ -324,6 +324,69 @@ std::string handle_leaderboard(const CommandContext &context, std::string_view) 
     return reply;
 }
 
+std::string handle_profile(const CommandContext &context, std::string_view argument) {
+    if (context.username.empty()) {
+        return missing_username_reply();
+    }
+    const std::string username{context.username};
+    const std::string_view asked = argument.empty() ? std::string_view{username} : argument;
+    const std::string_view name = asked.starts_with('@') ? asked.substr(1) : asked;
+    const std::int64_t now = seconds_now();
+    const std::optional<PlayerCard> card =
+        player_card(context.storage, username, name, now, context.config.travel_divisor);
+    if (!card) {
+        return std::format("{} non conosco nessun giocatore di nome {}.", username, name);
+    }
+    const bool mine = text::equals_ignore_case(card->username, username);
+    const zodiac::Sign sign = zodiac::sign_of(card->username, context.config.zodiac_signs);
+    const int percent = zodiac::percent_for(card->username, now, context.config.zodiac_signs);
+
+    std::string reply = std::format("🪐 {} {} {}", card->username, sign.symbol, sign.name);
+    reply += std::format(
+        "\n💰 {} palle{}{}",
+        card->score,
+        card->rank != 0 ? std::format(" — {}° posto", card->rank) : "",
+        card->quotes_added > 0 ? std::format(" — 📜 {}", card->quotes_added) : ""
+    );
+    reply += std::format(
+        "\n🔮 oggi è giorno di {}: {}",
+        zodiac::element_name(zodiac::element_of_day(now)),
+        percent == 100 ? "nessun effetto" : std::format("x{}.{:02}", percent / 100, percent % 100)
+    );
+    if (card->in_conquister) {
+        reply += std::format("\n🪐 in {} da {}", conquister_place, format_wait(card->held_seconds));
+    }
+    if (card->travelling) {
+        reply += card->carrying
+            ? std::format("\n🚀 sta tornando da {}, arriva tra {}", card->travel_target, format_wait(card->travel_seconds))
+            : std::format("\n🚀 in viaggio verso {}, arriva tra {}", card->travel_target, format_wait(card->travel_seconds));
+    }
+    if (!mine) {
+        reply += std::format("\n🗺️ dista {} di viaggio da te", format_wait(card->distance_seconds));
+        return reply;
+    }
+    /* Only to himself: what an attacker is supposed to find out the hard way. */
+    if (card->shield_seconds > 0) {
+        reply += std::format("\n🎈 palloncino blindato, resiste ancora per {}", format_wait(card->shield_seconds));
+    } else if (card->balloon_attempts >= 0) {
+        const int chance = (card->balloon_attempts + 1) * 25;
+        reply += std::format(
+            "\n🎈 palloncino: ha respinto {} attacchi, il prossimo lo buca al {}%",
+            card->balloon_attempts,
+            chance
+        );
+    } else {
+        reply += "\n🎈 nessun palloncino";
+    }
+    if (card->boost_multiplier > 0) {
+        reply += std::format("\n⚡ boost x{} pronto", card->boost_multiplier);
+    }
+    if (card->cooldown_seconds > 0) {
+        reply += std::format("\n⏳ penalità: ancora {}", format_wait(card->cooldown_seconds));
+    }
+    return reply;
+}
+
 std::string handle_zimbelli(const CommandContext &context, std::string_view) {
     const std::vector<LeaderboardEntry> zimbelli = conquister_negatives(context.storage, leaderboard_size);
     if (zimbelli.empty()) {
@@ -520,6 +583,7 @@ std::string handle_buy_boost(const CommandContext &context, std::string_view) {
 constexpr std::array commands{
     CommandDefinition{"/leaderboard", handle_leaderboard},
     CommandDefinition{"/zimbelli", handle_zimbelli},
+    CommandDefinition{"/profilo", handle_profile},
     CommandDefinition{"/addquote", handle_add_quote},
     CommandDefinition{"/buyballoon", handle_buy_balloon},
     CommandDefinition{"/buyboost", handle_buy_boost},

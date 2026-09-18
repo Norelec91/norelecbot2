@@ -330,6 +330,62 @@ std::optional<ConquisterUser> conquister_user(Storage &storage, std::string_view
     });
 }
 
+std::optional<PlayerCard> player_card(
+    Storage &storage,
+    const std::string &viewer,
+    std::string_view username,
+    std::int64_t now,
+    int travel_divisor
+) {
+    return storage.transaction([&](StorageSession &session) -> std::optional<PlayerCard> {
+        ConquisterState &state = session.state();
+        const std::optional<std::string> known = known_player(state, username);
+        if (!known) {
+            return std::nullopt;
+        }
+        PlayerCard card;
+        card.username = *known;
+        if (const Counters::value_type *score = find_ignore_case(state.scores, *known); score != nullptr) {
+            card.score = score->second;
+            const auto ahead = std::ranges::count_if(state.scores, [score](const Counters::value_type &other) {
+                return ranks_before(other, *score);
+            });
+            card.rank = static_cast<std::size_t>(ahead) + 1;
+        }
+        card.quotes_added = counter(state.quotes_added, *known);
+        if (state.current && state.current->username == *known) {
+            card.in_conquister = true;
+            card.held_seconds = now > state.current->since ? now - state.current->since : 0;
+        }
+        if (const auto balloon = find_entry(state.balloons, *known); balloon != state.balloons.end()) {
+            card.balloon_attempts = static_cast<int>(balloon->second);
+        }
+        if (const auto shield = find_entry(state.shields, *known);
+            shield != state.shields.end() && shield->second > now) {
+            card.shield_seconds = shield->second - now;
+        }
+        card.boost_multiplier = counter(state.boosts, *known);
+        if (const auto penalty = find_entry(state.cooldowns, *known);
+            penalty != state.cooldowns.end() && penalty->second > now) {
+            card.cooldown_seconds = penalty->second - now;
+        }
+        if (const Raid *raid = raid_of(state, *known); raid != nullptr) {
+            card.travelling = true;
+            card.carrying = raid->arrived;
+            card.travel_target = raid->target;
+            card.travel_seconds =
+                std::max<std::int64_t>((raid->arrived ? raid->back : raid->arrive) - now, 0);
+        }
+        if (!text::equals_ignore_case(viewer, *known)) {
+            const position::Point mine = position::coordinates_of(player_id(session, state, viewer));
+            const position::Point theirs = position::coordinates_of(player_id(session, state, *known));
+            card.distance_seconds =
+                position::travel_seconds(position::distance(mine, theirs), travel_divisor);
+        }
+        return card;
+    });
+}
+
 BalloonResult balloon_buy(
     Storage &storage,
     const std::string &username,

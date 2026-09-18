@@ -447,3 +447,42 @@ TEST_CASE("the zimbelli are the ones below zero") {
     CHECK(command_dispatch(theirs, "/zimbelli") == "Nessuno zimbello: nessuno è sotto zero in @TheConquister37.");
 }
 
+TEST_CASE("the profile card says what a player has") {
+    const TestPaths paths{"profile-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":1,"username":"alice","since":100},"scores":{"alice":500,"bob":900},)"
+             << R"("quotes_added":{"alice":2},"balloons":{"alice":1},"cooldowns":{},"shields":{},)"
+             << R"("boosts":{"alice":3}})";
+    }
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    config.travel_divisor = 1000000;
+    Storage storage{config.conquister_path, config.quotes_path};
+
+    CommandContext context{.storage = storage, .config = config, .user_id = 1, .username = "alice"};
+    const auto reply = [&](std::string_view text) {
+        return command_dispatch(context, text).value_or("<nessuna risposta>");
+    };
+
+    const std::string mine = reply("/profilo");
+    CHECK(mine.starts_with("🪐 alice "));
+    CHECK(mine.contains("\n💰 500 palle — 2° posto — 📜 2"));
+    CHECK(mine.contains("\n🔮 oggi è giorno di "));
+    CHECK(mine.contains("\n🪐 in @TheConquister37 da "));
+    CHECK(mine.contains("\n🎈 palloncino: ha respinto 1 attacchi, il prossimo lo buca al 50%"));
+    CHECK(mine.contains("\n⚡ boost x3 pronto"));
+
+    /* Somebody else's card says where he is, not what he is hiding. */
+    const std::string theirs = reply("/profilo @bob");
+    CHECK(theirs.starts_with("🪐 bob "));
+    CHECK(theirs.contains("\n💰 900 palle — 1° posto"));
+    CHECK(theirs.contains("\n🗺️ dista "));
+    CHECK_FALSE(theirs.contains("palloncino"));
+    CHECK_FALSE(theirs.contains("boost"));
+
+    CHECK(reply("/profilo bob").starts_with("🪐 bob "));
+    CHECK(reply("/profilo nessuno") == "alice non conosco nessun giocatore di nome nessuno.");
+}
+

@@ -101,6 +101,29 @@ struct RaidEvent {
     bool raider_on_telegram = false;
 };
 
+/* Everything the bot knows about a player, for the one asking about himself or about somebody else. */
+struct PlayerCard {
+    std::string username;
+    std::int64_t score = 0;
+    /* Zero when he has never scored. */
+    std::size_t rank = 0;
+    std::int64_t quotes_added = 0;
+    bool in_conquister = false;
+    std::int64_t held_seconds = 0;
+    /* Attempts his balloon has already turned back, or -1 when he has none. */
+    int balloon_attempts = -1;
+    std::int64_t shield_seconds = 0;
+    std::int64_t boost_multiplier = 0;
+    std::int64_t cooldown_seconds = 0;
+    /* The raid he is on, if any. */
+    bool travelling = false;
+    bool carrying = false;
+    std::string travel_target;
+    std::int64_t travel_seconds = 0;
+    /* How far the one asking would have to ride to get here. */
+    std::int64_t distance_seconds = 0;
+};
+
 struct LeaderboardEntry {
     std::string username;
     std::int64_t score = 0;
@@ -162,6 +185,14 @@ struct ClaimRules {
 [[nodiscard]] std::vector<LeaderboardEntry> conquister_negatives(Storage &storage, std::size_t limit);
 /* Case-insensitive lookup; rank is 0 when the user has no score yet. */
 [[nodiscard]] std::optional<ConquisterUser> conquister_user(Storage &storage, std::string_view username);
+/* The card of a player, as the one named in viewer would see it; nothing when nobody plays under that name. */
+[[nodiscard]] std::optional<PlayerCard> player_card(
+    Storage &storage,
+    const std::string &viewer,
+    std::string_view username,
+    std::int64_t now,
+    int travel_divisor
+);
 /* One balloon per user: it survives 4 attempts at most, then has to be bought again. */
 /* With shield_seconds the balloon cannot be popped until it deflates, instead of lasting until an
    attempt pops it. */
