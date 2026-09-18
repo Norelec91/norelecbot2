@@ -445,11 +445,19 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 event.seconds = std::max<std::int64_t>(raid.back - now, 0);
                 event.target_on_telegram = counter(state.telegram_ids, raid.target) != 0;
                 event.raider_on_telegram = counter(state.telegram_ids, raid.raider) != 0;
-                const bool guarded = !is_away(state, raid.target);
+                /* He is answered like everyone else and gets nowhere, as the owner asked. */
+                const bool shadowed = std::ranges::any_of(rules.shadowed, [&raid](const std::string &name) {
+                    return text::equals_ignore_case(name, raid.raider);
+                });
+                const bool guarded = shadowed || !is_away(state, raid.target);
                 event.undefended = !guarded;
                 const auto shield = find_entry(state.shields, raid.target);
                 const auto balloon = find_entry(state.balloons, raid.target);
-                if (guarded && shield != state.shields.end() && shield->second > now) {
+                if (shadowed) {
+                    event.kind = RaidEvent::Kind::defended;
+                    event.undefended = false;
+                    event.cost = charge_attacker(state, raid.raider, rules.attack_cost);
+                } else if (guarded && shield != state.shields.end() && shield->second > now) {
                     event.kind = RaidEvent::Kind::defended;
                     event.cost = charge_attacker(state, raid.raider, rules.attack_cost);
                 } else if (guarded && balloon != state.balloons.end()) {

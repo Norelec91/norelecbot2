@@ -360,7 +360,7 @@ namespace {
 
 /* Far enough apart that every ride is the shortest one, so the tests do not depend on where ids land. */
 RaidRules quick_rides() {
-    return RaidRules{.travel_divisor = 1000000, .loot_share = 4, .attack_cost = 100, .signs = {}};
+    return RaidRules{.travel_divisor = 1000000, .loot_share = 4, .attack_cost = 100, .signs = {}, .shadowed = {}};
 }
 
 }
@@ -623,5 +623,39 @@ TEST_CASE("a quote remembers who added it") {
     REQUIRE(page.authors.size() == 2);
     CHECK(page.authors[0].empty());
     CHECK(page.authors[1] == "bob");
+}
+
+TEST_CASE("a shadowed raider always comes home empty handed") {
+    const TestPaths paths{"shadow-raid-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":1000,"giangiui":500},"quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+
+    const std::vector<std::string> shadowed{"Giangiui"};
+    RaidRules rules = quick_rides();
+    rules.shadowed = shadowed;
+
+    static_cast<void>(raid_start(storage, 0, "giangiui", "alice", 0, rules));
+    const std::vector<RaidEvent> arrival = raid_due(storage, 5, rules);
+    REQUIRE(arrival.size() == 1);
+    CHECK(arrival[0].kind == RaidEvent::Kind::defended);
+    CHECK(arrival[0].loot == 0);
+    CHECK(arrival[0].cost == 100);
+    /* The target keeps everything, and no balloon of his was spent. */
+    CHECK(conquister_user(storage, "alice")->score == 1000);
+
+    const std::vector<RaidEvent> home = raid_due(storage, 10, rules);
+    REQUIRE(home.size() == 1);
+    CHECK(home[0].loot == 0);
+    CHECK(conquister_user(storage, "giangiui")->score == 400);
+
+    /* Everyone else robs him as usual. */
+    static_cast<void>(raid_start(storage, 0, "alice", "giangiui", 11, rules));
+    const std::vector<RaidEvent> theirs = raid_due(storage, 16, rules);
+    REQUIRE(theirs.size() == 1);
+    CHECK(theirs[0].kind == RaidEvent::Kind::stolen);
+    CHECK(theirs[0].loot > 0);
 }
 

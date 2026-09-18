@@ -36,8 +36,8 @@ struct AppConfig {
     int quote_cost = default_quote_cost;
     /* Pieces of word a quote may not contain, whatever the spelling. */
     std::vector<std::string> quote_banned;
-    /* Players whose quotes are answered for and quietly dropped. */
-    std::vector<std::string> quote_shadowed;
+    /* Players who are answered for and get nowhere: their quotes are dropped and their raids fail. */
+    std::vector<std::string> shadowed;
     int balloon_cost = default_balloon_cost;
     int cooldown_seconds = default_cooldown_seconds;
     int attack_cost = default_attack_cost;

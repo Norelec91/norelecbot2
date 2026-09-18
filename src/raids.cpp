@@ -41,6 +41,7 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
         .loot_share = config.raid_share,
         .attack_cost = config.attack_cost,
         .signs = config.zodiac_signs,
+        .shadowed = config.shadowed,
     };
     while (!stop.load(std::memory_order_relaxed)) {
         try {

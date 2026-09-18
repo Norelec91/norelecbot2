@@ -81,8 +81,8 @@ constexpr std::array settings{
         config.quote_banned = split_names(value);
         return true;
     }},
-    Setting{"NORELECBOT_QUOTE_SHADOWED", [](AppConfig &config, std::string_view value) {
-        config.quote_shadowed = split_names(value);
+    Setting{"NORELECBOT_SHADOWED", [](AppConfig &config, std::string_view value) {
+        config.shadowed = split_names(value);
         return true;
     }},
     Setting{"NORELECBOT_BALLOON_COST", [](AppConfig &config, std::string_view value) {

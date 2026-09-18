@@ -148,6 +148,7 @@ RaidRules raid_rules(const CommandContext &context) {
         .loot_share = context.config.raid_share,
         .attack_cost = context.config.attack_cost,
         .signs = context.config.zodiac_signs,
+        .shadowed = context.config.shadowed,
     };
 }
 
@@ -329,7 +330,7 @@ std::string handle_add_quote(const CommandContext &context, std::string_view arg
     const std::string username{context.username};
     /* Nobody gets tagged by a quote read out months later. */
     const std::string quote = text::strip_mentions(argument);
-    const bool shadowed = std::ranges::any_of(context.config.quote_shadowed, [&username](const std::string &name) {
+    const bool shadowed = std::ranges::any_of(context.config.shadowed, [&username](const std::string &name) {
         return text::equals_ignore_case(name, username);
     });
     /* Compared without punctuation, or "F.R.O.D.E." would walk straight past. */

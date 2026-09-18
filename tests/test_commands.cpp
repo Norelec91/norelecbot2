@@ -377,7 +377,7 @@ TEST_CASE("a shadowed player is answered for and his quote is dropped") {
     config.quotes_path = paths.quotes;
     config.quote_cost = 1000;
     config.quote_banned = {"frod"};
-    config.quote_shadowed = {"Giangiui"};
+    config.shadowed = {"Giangiui"};
     Storage storage{config.conquister_path, config.quotes_path};
 
     CommandContext context{.storage = storage, .config = config, .user_id = 1, .username = "giangiui"};

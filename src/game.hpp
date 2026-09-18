@@ -65,6 +65,8 @@ struct RaidRules {
     /* What a raid the balloon turns back costs the raider. */
     int attack_cost = 0;
     zodiac::Overrides signs;
+    /* Raiders who always come home empty handed, whatever they find. */
+    std::span<const std::string> shadowed;
 };
 
 struct RaidResult {
