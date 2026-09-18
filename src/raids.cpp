@@ -93,7 +93,8 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
                 ghost.rest();
             }
             if (mishaps_happen && mishaps.due(seconds_now())) {
-                if (const std::optional<MishapResult> mishap = mishap_strike(storage)) {
+                if (const std::optional<MishapResult> mishap =
+                        mishap_strike(storage, seconds_now(), config.boost_multiplier)) {
                     announce(config, mishap_reply(*mishap));
                 }
                 mishaps.rest();

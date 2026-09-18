@@ -219,7 +219,7 @@ struct MishapResult {
 };
 
 /* Picks a player at random and lets one of the mishaps happen to him; nothing when nobody plays yet. */
-[[nodiscard]] std::optional<MishapResult> mishap_strike(Storage &storage);
+[[nodiscard]] std::optional<MishapResult> mishap_strike(Storage &storage, std::int64_t now, std::int64_t boost);
 
 /* Sends a player to rob another one, if he is at home and the target is somebody the bot knows.
    Naming himself sends him home instead: at once from @TheConquister37, at the end of the ride if he

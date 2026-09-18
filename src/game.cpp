@@ -466,20 +466,47 @@ BalloonResult balloon_buy(
     return result;
 }
 
-std::optional<MishapResult> mishap_strike(Storage &storage) {
+std::optional<MishapResult> mishap_strike(Storage &storage, std::int64_t now, std::int64_t boost) {
     const std::optional<MishapResult> result =
-        storage.transaction([](StorageSession &session) -> std::optional<MishapResult> {
+        storage.transaction([&](StorageSession &session) -> std::optional<MishapResult> {
             ConquisterState &state = session.state();
             if (state.scores.empty()) {
                 return std::nullopt;
             }
             const std::size_t who = session.random_index(state.scores.size());
             const auto player = std::next(state.scores.begin(), static_cast<std::ptrdiff_t>(who));
+            const std::string name = player->first;
             MishapResult mishap;
-            mishap.player = player->first;
+            mishap.player = name;
             mishap.which = session.random_index(mishaps.size());
-            mishap.palle = mishaps.at(mishap.which).palle;
-            player->second += mishap.palle;
+            const Mishap &what = mishaps.at(mishap.which);
+            mishap.palle = what.palle;
+            player->second += what.palle;
+            switch (what.boon) {
+            case Boon::balloon:
+                if (find_entry(state.balloons, name) == state.balloons.end()) {
+                    state.balloons[name] = 0;
+                }
+                break;
+            case Boon::boost:
+                state.boosts[name] = boost;
+                break;
+            case Boon::teleport:
+                state.ids.erase(name);
+                static_cast<void>(player_id(session, state, name));
+                break;
+            case Boon::liked:
+                static_cast<void>(simpatia_change(state, name, 1, now));
+                break;
+            case Boon::disliked:
+                static_cast<void>(simpatia_change(state, name, -1, now));
+                break;
+            case Boon::forgiven:
+                state.cooldowns.erase(name);
+                break;
+            case Boon::none:
+                break;
+            }
             return mishap;
         });
 

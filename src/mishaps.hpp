@@ -7,38 +7,50 @@
 
 namespace norelecbot {
 
-/* Small things that happen to a player for no reason: a palla or two, most often nothing at all. */
+/* What a mishap leaves behind besides the palle. */
+enum class Boon {
+    none,
+    balloon,
+    boost,
+    teleport,
+    liked,
+    disliked,
+    forgiven,
+};
+
+/* Things that happen to a player for no reason at all. */
 struct Mishap {
     std::string_view text;
     std::int64_t palle;
+    Boon boon;
 };
 
 inline constexpr std::array mishaps{
-    Mishap{"🕳️ {} è inciampato in una buca e ha perso 1 palla.", -1},
-    Mishap{"🤧 {} ha starnutito e una palla è rotolata via.", -1},
-    Mishap{"🛋️ {} ha trovato 2 palle sotto il divano.", 2},
-    Mishap{"🤝 {} ha prestato una palla a un amico. Non la rivedrà.", -1},
-    Mishap{"☀️ {} ha lasciato le palle al sole: si sono un po' sgonfiate.", 0},
-    Mishap{"🥤 {} ha litigato con un distributore automatico. Ha vinto il distributore.", 0},
-    Mishap{"🃏 {} ha perso 3 palle a carte.", -3},
-    Mishap{"🕊️ Un gabbiano ha portato via una palla a {}.", -1},
-    Mishap{"🧥 {} ha trovato 1 palla nel cappotto dell'inverno scorso.", 1},
-    Mishap{"🌑 {} ha calpestato una palla al buio.", 0},
-    Mishap{"🅿️ {} ha pagato 2 palle di parcheggio.", -2},
-    Mishap{"🪙 {} ha vinto 1 palla a testa o croce.", 1},
-    Mishap{"🚆 {} ha dimenticato le palle sul treno. Gliele hanno restituite tutte.", 0},
-    Mishap{"☕ {} ha pagato 1 palla per un caffè che non ha nemmeno bevuto.", -1},
-    Mishap{"👮 {} è stato fermato per un controllo. Tutto in regola.", 0},
-    Mishap{"🔋 A {} si è scaricato il telefono sul più bello.", 0},
-    Mishap{"📬 {} ha ricevuto 1 palla di rimborso per un reclamo del 2019.", 1},
-    Mishap{"💩 {} ha camminato dove non doveva. Dicono che porti fortuna.", 0},
-    Mishap{"🧺 {} ha perso 2 palle in lavatrice.", -2},
-    Mishap{"🚗 {} ha trovato parcheggio al primo colpo.", 0},
-    Mishap{"🔨 Il vicino di {} ha trapanato il muro per due ore.", 0},
-    Mishap{"🍕 {} ha ordinato una pizza e gliene hanno portata un'altra.", 0},
-    Mishap{"💸 {} ha ricevuto 1 palla di resto sbagliato e ha fatto finta di niente.", 1},
-    Mishap{"🕳️ A {} è caduta una palla in un tombino.", -1},
-    Mishap{"📜 {} ha letto le condizioni d'uso fino in fondo. Non è successo niente.", 0},
+    Mishap{"🕳️ {} è inciampato in una buca che ieri non c'era e ha perso 1 palla.", -1, Boon::none},
+    Mishap{"🎈 A {} è arrivato un palloncino per posta. Il mittente è illeggibile.", 0, Boon::balloon},
+    Mishap{"🛸 {} è stato prelevato da una luce nel cielo e riconsegnato altrove.", 0, Boon::teleport},
+    Mishap{"⚡ {} ha bevuto una bibita energetica scaduta nel 2014: il prossimo possesso vale il triplo.", 0, Boon::boost},
+    Mishap{"🦆 Un'anatra ha guardato {} con evidente disprezzo.", 0, Boon::disliked},
+    Mishap{"👵 {} ha aiutato una signora ad attraversare e tutti l'hanno visto.", 0, Boon::liked},
+    Mishap{"🚔 La penalità di {} è stata annullata per vizio di forma.", 0, Boon::forgiven},
+    Mishap{"🧦 A {} è sparito un calzino con dentro 2 palle.", -2, Boon::none},
+    Mishap{"🪑 {} ha montato una sedia svedese e gli è avanzata una vite.", 0, Boon::none},
+    Mishap{"🧲 {} ha trovato 1 palla attaccata alla calamita del frigo.", 1, Boon::none},
+    Mishap{"🎺 Il vicino di {} ha iniziato a studiare tromba.", 0, Boon::disliked},
+    Mishap{"🗺️ {} ha seguito un navigatore aggiornato al 1987 ed è finito da un'altra parte.", 0, Boon::teleport},
+    Mishap{"🍝 {} ha spezzato gli spaghetti a metà. Il gruppo ha preso nota.", 0, Boon::disliked},
+    Mishap{"🎰 {} ha vinto 1 palla a una slot machine di un autogrill.", 1, Boon::none},
+    Mishap{"🐜 Una formica ha portato via 1 palla di {}. Piano piano.", -1, Boon::none},
+    Mishap{"🎁 {} ha aperto un uovo di Pasqua di marzo e dentro c'era un palloncino.", 0, Boon::balloon},
+    Mishap{"🦶 {} ha preso lo spigolo col mignolo: 3 palle di dolore.", -3, Boon::none},
+    Mishap{"☕ {} ha offerto il caffè a tutti quanti. Gli è costato 2 palle e ne è valsa la pena.", -2, Boon::liked},
+    Mishap{"🚪 {} ha spinto per dieci secondi una porta con scritto TIRARE.", 0, Boon::none},
+    Mishap{"🌀 {} ha girato in tondo in una rotonda per venti minuti e ne è uscito da un'altra uscita.", 0, Boon::teleport},
+    Mishap{"🧮 {} ha ricontato le palle tre volte e gliene sono tornate 2 in più.", 2, Boon::none},
+    Mishap{"🥖 {} ha lasciato il pane dal fornaio, con 1 palla nel sacchetto.", -1, Boon::none},
+    Mishap{"🗿 {} ha fissato un muro per otto minuti. Ha vinto il muro.", 0, Boon::none},
+    Mishap{"⚡ {} ha toccato una presa con le mani bagnate e adesso brilla: il prossimo possesso vale il triplo.", 0, Boon::boost},
+    Mishap{"🧊 {} ha messo l'acqua in freezer per raffreddarla e se n'è dimenticato.", 0, Boon::none},
 };
 
 }

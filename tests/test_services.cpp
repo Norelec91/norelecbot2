@@ -746,7 +746,7 @@ TEST_CASE("something small happens to somebody, and it is always small") {
     std::set<std::string> unlucky;
     std::set<std::size_t> seen;
     for (int strike = 0; strike < 200; ++strike) {
-        const std::optional<MishapResult> mishap = mishap_strike(storage);
+        const std::optional<MishapResult> mishap = mishap_strike(storage, 1000, 3);
         REQUIRE(mishap);
         unlucky.insert(mishap->player);
         seen.insert(mishap->which);
@@ -760,6 +760,12 @@ TEST_CASE("something small happens to somebody, and it is always small") {
     CHECK(unlucky.size() == 2);
     CHECK(seen.size() == mishaps.size());
 
+    /* The gifts are handed out for real: in two hundred strikes all of them have landed. */
+    const auto card = player_card(storage, "alice", "bob", 1000, 1000000);
+    REQUIRE(card);
+    CHECK(card->balloon_attempts >= 0);
+    CHECK(card->boost_multiplier == 3);
+
     /* Two hundred of them and nobody has moved more than a few hundred palle. */
     CHECK(conquister_user(storage, "alice")->score > 700);
     CHECK(conquister_user(storage, "bob")->score > 700);
@@ -768,6 +774,6 @@ TEST_CASE("something small happens to somebody, and it is always small") {
 TEST_CASE("nothing happens while nobody is playing") {
     const TestPaths paths{"mishap-empty-test"};
     Storage storage{paths.conquister, paths.quotes};
-    CHECK_FALSE(mishap_strike(storage));
+    CHECK_FALSE(mishap_strike(storage, 1000, 3));
 }
 
