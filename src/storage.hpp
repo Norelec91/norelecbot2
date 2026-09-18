@@ -71,6 +71,9 @@ struct ConquisterState {
     std::vector<Raid> raids;
     /* Who added each quote, for the ones added since the bot started writing it down. */
     Authors quote_authors;
+    /* How well liked each player is, and when that was last worked out. */
+    Counters simpatia;
+    Counters simpatia_seen;
 
     bool operator==(const ConquisterState &) const = default;
 };

@@ -64,14 +64,14 @@ TEST_CASE("claims, leaderboard, users and quotes") {
         CHECK_FALSE(conquister_user(storage, "carol"));
 
         const std::int64_t alice_score = earnings("alice", 1000, 1100);
-        QuoteAddResult addition = quote_add(storage, "alice", "quote di prova", 1000);
+        QuoteAddResult addition = quote_add(storage, "alice", "quote di prova", 1000, 0);
         CHECK(addition.status == QuoteAddStatus::added);
         CHECK(addition.available_score == alice_score - 1000);
         CHECK(quote_random(storage) == "quote di prova");
 
         static_cast<void>(conquister_claim(storage, 1, "alice", 1101));
         static_cast<void>(conquister_claim(storage, 2, "bob", 2101));
-        addition = quote_add(storage, "alice", "quote di prova", 1000);
+        addition = quote_add(storage, "alice", "quote di prova", 1000, 0);
         CHECK(addition.status == QuoteAddStatus::duplicate);
         const QuotePage page = quote_page_load(storage, 1);
         REQUIRE(page.items.size() == 1);
@@ -201,7 +201,7 @@ TEST_CASE("a quote saved before a failed state save is rolled back") {
         file << "[\"originale\"]";
     }
     Storage storage{"rollback-missing-directory/conquister.json", paths.quotes};
-    CHECK_THROWS_AS(static_cast<void>(quote_add(storage, "alice", "nuova", 0)), const StorageError &);
+    CHECK_THROWS_AS(static_cast<void>(quote_add(storage, "alice", "nuova", 0, 0)), const StorageError &);
 
     const QuotePage page = quote_page_load(storage, 1);
     CHECK(page.total == 1);
@@ -594,8 +594,8 @@ TEST_CASE("a quote remembers who added it") {
     const TestPaths paths{"quote-author-test"};
     Storage storage{paths.conquister, paths.quotes};
 
-    CHECK(quote_add(storage, "alice", "una citazione", 0).status == QuoteAddStatus::added);
-    CHECK(quote_add(storage, "bob", "un'altra", 0).status == QuoteAddStatus::added);
+    CHECK(quote_add(storage, "alice", "una citazione", 0, 0).status == QuoteAddStatus::added);
+    CHECK(quote_add(storage, "bob", "un'altra", 0, 0).status == QuoteAddStatus::added);
 
     QuotePage page = quote_page_load(storage, 1);
     REQUIRE(page.authors.size() == 2);
@@ -683,5 +683,52 @@ TEST_CASE("there is nothing to steal from somebody in the red") {
     CHECK(arrival[0].loot == 0);
     CHECK(conquister_user(storage, "alice")->score == -500);
     CHECK(conquister_user(storage, "bob")->score == 100);
+}
+
+TEST_CASE("robbing people costs the good name it takes to keep") {
+    const TestPaths paths{"simpatia-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":100000,"bob":0},"quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+
+    const auto rob = [&](std::int64_t at) {
+        static_cast<void>(raid_start(storage, 0, "bob", "alice", at, quick_rides()));
+        const std::vector<RaidEvent> arrival = raid_due(storage, at + 5, quick_rides());
+        static_cast<void>(raid_due(storage, at + 10, quick_rides()));
+        REQUIRE(arrival.size() == 1);
+        return arrival[0];
+    };
+
+    /* Everybody starts liked, and nobody is told anything until it slips under eighteen. */
+    RaidEvent first = rob(0);
+    CHECK(first.simpatia == 19);
+    CHECK_FALSE(first.denounced);
+    CHECK(rob(20).simpatia == 18);
+    const RaidEvent third = rob(40);
+    CHECK(third.simpatia == 17);
+    CHECK(third.denounced);
+    /* Said once, not at every raid from then on. */
+    CHECK_FALSE(rob(60).denounced);
+
+    /* The one being robbed gains what the robber loses. */
+    const auto victim = player_card(storage, "bob", "alice", 80, 1000000);
+    REQUIRE(victim);
+    CHECK(victim->simpatia == 20);
+
+    const auto robber = player_card(storage, "alice", "bob", 80, 1000000);
+    REQUIRE(robber);
+    CHECK(robber->simpatia == 16);
+
+    SUBCASE("a quote gives a point back, and so does a day of quiet") {
+        CHECK(quote_add(storage, "bob", "una citazione", 0, 80).status == QuoteAddStatus::added);
+        CHECK(player_card(storage, "alice", "bob", 80, 1000000)->simpatia == 17);
+
+        const std::int64_t tomorrow = 80 + 86400;
+        CHECK(player_card(storage, "alice", "bob", tomorrow, 1000000)->simpatia == 18);
+        const std::int64_t next_week = 80 + (7 * 86400);
+        CHECK(player_card(storage, "alice", "bob", next_week, 1000000)->simpatia == 20);
+    }
 }
 

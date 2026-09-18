@@ -348,6 +348,9 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
         card->rank != 0 ? std::format(" — {}° posto", card->rank) : "",
         card->quotes_added > 0 ? std::format(" — 📜 {}", card->quotes_added) : ""
     );
+    reply += card->simpatia < simpatia_threshold
+        ? std::format("\n🚨 simpatia {}: ANTIPATICO, denunciato alla GDF", card->simpatia)
+        : std::format("\n😀 simpatia {}", card->simpatia);
     reply += std::format(
         "\n🔮 oggi è giorno di {}: {}",
         zodiac::element_name(zodiac::element_of_day(now)),
@@ -429,7 +432,7 @@ std::string handle_add_quote(const CommandContext &context, std::string_view arg
     }
     const QuoteAddResult result = shadowed
         ? quote_pretend(context.storage, username, cost)
-        : quote_add(context.storage, username, quote, cost);
+        : quote_add(context.storage, username, quote, cost, seconds_now());
     if (result.status == QuoteAddStatus::insufficient_score) {
         return std::format(
             "{} ti servono {} palle per aggiungere una citazione (ne hai {}).",
@@ -661,6 +664,14 @@ std::string raid_event_reply(const RaidEvent &event, const zodiac::Overrides &si
         );
     }
     reply += std::format("! Torni in {} tra {}.", home, format_wait(event.seconds));
+    if (event.denounced) {
+        reply += std::format(
+            "\n🚨 {} la tua simpatia è scesa a {}: SEI ANTIPATICO. Ti denuncio alla Guardia di Finanza "
+            "per evasione fiscale.",
+            event.raider,
+            event.simpatia
+        );
+    }
     return reply;
 }
 

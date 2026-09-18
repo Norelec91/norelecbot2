@@ -93,6 +93,38 @@ Settlement settle_hold(
     return settled;
 }
 
+/* Everybody starts well liked; robbing people spends it, and a day of quiet gives a point back. */
+constexpr std::int64_t simpatia_full = 20;
+constexpr std::int64_t simpatia_day = 86400;
+
+std::int64_t simpatia_now(ConquisterState &state, const std::string &username, std::int64_t now) {
+    const auto found = find_entry(state.simpatia, username);
+    if (found == state.simpatia.end()) {
+        return simpatia_full;
+    }
+    const std::int64_t seen = counter(state.simpatia_seen, username);
+    const std::int64_t days = seen > 0 && now > seen ? (now - seen) / simpatia_day : 0;
+    const std::int64_t value = std::min(simpatia_full, found->second + days);
+    if (days > 0) {
+        found->second = value;
+        state.simpatia_seen[username] = seen + (days * simpatia_day);
+    }
+    return value;
+}
+
+/* Returns what it is worth afterwards. */
+std::int64_t simpatia_change(
+    ConquisterState &state,
+    const std::string &username,
+    std::int64_t by,
+    std::int64_t now
+) {
+    const std::int64_t value = std::min(simpatia_full, simpatia_now(state, username, now) + by);
+    state.simpatia[username] = value;
+    state.simpatia_seen[username] = now;
+    return value;
+}
+
 /* Whoever is on the road has left his base, and everything in it, unguarded. */
 bool is_away(const ConquisterState &state, const std::string &username) {
     return std::ranges::any_of(state.raids, [&username](const Raid &raid) {
@@ -353,6 +385,7 @@ std::optional<PlayerCard> player_card(
             card.rank = static_cast<std::size_t>(ahead) + 1;
         }
         card.quotes_added = counter(state.quotes_added, *known);
+        card.simpatia = simpatia_now(state, *known, now);
         if (state.current && state.current->username == *known) {
             card.in_conquister = true;
             card.held_seconds = now > state.current->since ? now - state.current->since : 0;
@@ -561,6 +594,11 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                     }
                     if (event.loot > 0) {
                         state.scores[raid.target] = theirs - event.loot;
+                        /* Robbing people is not the way to be liked; being robbed earns some. */
+                        event.simpatia = simpatia_change(state, raid.raider, -1, now);
+                        event.denounced = event.simpatia < simpatia_threshold &&
+                                          event.simpatia + 1 >= simpatia_threshold;
+                        static_cast<void>(simpatia_change(state, raid.target, 1, now));
                     }
                     raid.loot = event.loot;
                 }
@@ -672,7 +710,8 @@ QuoteAddResult quote_add(
     Storage &storage,
     const std::string &username,
     const std::string &quote,
-    int cost
+    int cost,
+    std::int64_t now
 ) {
     const QuoteAddResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
@@ -690,6 +729,7 @@ QuoteAddResult quote_add(
         }
         quotes.push_back(quote);
         state.quote_authors[quote] = username;
+        static_cast<void>(simpatia_change(state, username, 1, now));
         state.scores[username] = score - cost;
         state.quotes_added[username] = added + 1;
         return QuoteAddResult{QuoteAddStatus::added, score - cost};

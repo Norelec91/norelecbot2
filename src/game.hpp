@@ -96,12 +96,18 @@ struct RaidEvent {
     bool balloon_popped = false;
     /* The target was away, so there was nothing to get past. */
     bool undefended = false;
+    /* What the raider is liked after this, and whether this is the raid that made him unlikeable. */
+    std::int64_t simpatia = 0;
+    bool denounced = false;
     /* Whether each of them is known to be on Telegram, where a mention reaches them. */
     bool target_on_telegram = false;
     bool raider_on_telegram = false;
 };
 
 /* Everything the bot knows about a player, for the one asking about himself or about somebody else. */
+/* Below this, the bot says out loud what it thinks of you. */
+inline constexpr std::int64_t simpatia_threshold = 18;
+
 struct PlayerCard {
     std::string username;
     std::int64_t score = 0;
@@ -122,6 +128,7 @@ struct PlayerCard {
     std::int64_t travel_seconds = 0;
     /* How far the one asking would have to ride to get here. */
     std::int64_t distance_seconds = 0;
+    std::int64_t simpatia = simpatia_threshold;
 };
 
 struct LeaderboardEntry {
@@ -235,7 +242,8 @@ struct ClaimRules {
     Storage &storage,
     const std::string &username,
     const std::string &quote,
-    int cost
+    int cost,
+    std::int64_t now
 );
 [[nodiscard]] QuotePage quote_page_load(Storage &storage, int requested_page);
 [[nodiscard]] std::optional<std::string> quote_random(Storage &storage);

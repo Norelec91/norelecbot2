@@ -123,6 +123,8 @@ ConquisterState parse_state(const Json &json) {
         parse_counters(json, "telegram_ids"),
         parse_raids(json),
         parse_authors(json),
+        parse_counters(json, "simpatia"),
+        parse_counters(json, "simpatia_seen"),
     };
 }
 
@@ -158,6 +160,8 @@ Json state_to_json(const ConquisterState &state) {
         {"telegram_ids", state.telegram_ids},
         {"raids", std::move(raids)},
         {"quote_authors", state.quote_authors},
+        {"simpatia", state.simpatia},
+        {"simpatia_seen", state.simpatia_seen},
     };
 }
 
