@@ -1473,6 +1473,25 @@ std::string game_opened_reply(const GameOpened &opened) {
             "caso: i salvati si dividono {} palle, chi resta giù perde un quinto di tutto.",
             opened.pot
         );
+    case Game::whosaid:
+        return std::format(
+            "💬 CHI L'HA DETTO: «{}» — chi scrive il nome di chi l'ha aggiunta si prende {} palle.",
+            opened.target,
+            opened.pot
+        );
+    case Game::halfquote:
+        return std::format(
+            "✂️ MEZZA CITAZIONE: «{}...» — chi la completa fino all'ultima parola si prende {} palle.",
+            opened.target,
+            opened.pot
+        );
+    case Game::truequote:
+        return std::format(
+            "🎭 VERA O FALSA: «{}» l'ha aggiunta {}? Scrivete vera o falsa: chi ci prende si divide {} palle.",
+            opened.target,
+            opened.detail,
+            opened.pot
+        );
     }
     return {};
 }
@@ -1895,6 +1914,18 @@ std::string game_closed_reply(const GameClosed &closed) {
         return closed.secret == 0
             ? std::string{"☄️ Arca vuota: non si è salvato nessuno."}
             : std::format("☄️ {} salvati si dividono il piatto, chi è rimasto giù perde un quinto.", closed.secret);
+    case Game::whosaid:
+        return "💬 Tempo scaduto: resta un mistero chi l'aveva scritta.";
+    case Game::halfquote:
+        return "✂️ Tempo scaduto: la citazione resta a metà.";
+    case Game::truequote:
+        return closed.winner.empty()
+            ? std::string{"🎭 Nessun verdetto sulla citazione."}
+            : std::format(
+                  "🎭 L'aveva aggiunta {}, quindi era {}.",
+                  closed.winner,
+                  closed.secret == 1 ? "vera" : "falsa"
+              );
     }
     return {};
 }
@@ -2627,6 +2658,12 @@ std::optional<std::string> game_reply(const CommandContext &context, std::string
             : std::format("⛪ {} passi fatti.", played->number);
     case Game::apocalypse:
         return std::format("☄️ {} sale sull'arca. A bordo in {}.", played->player, played->number);
+    case Game::whosaid:
+        return std::format("💬 {} sa che è di {} e si prende {} palle.", played->player, played->detail, played->palle);
+    case Game::halfquote:
+        return std::format("✂️ {} la sapeva a memoria e si prende {} palle.", played->player, played->palle);
+    case Game::truequote:
+        return std::format("🎭 {} dice {}.", played->player, played->detail);
     }
     return std::nullopt;
 }

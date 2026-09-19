@@ -1325,3 +1325,69 @@ TEST_CASE("the big games, where more than one hand is on the table") {
         CHECK((closed->winner == "alice" || closed->winner.empty()));
     }
 }
+
+TEST_CASE("the games made of the group's own quotes") {
+    const TestPaths paths{"quotegames-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":10000,"bob":10000},"quotes_added":{},)"
+                R"("quote_authors":{"il tempo è galantuomo e non aspetta nessuno":"bob"}})";
+        std::ofstream quotes{paths.quotes, std::ios::binary};
+        quotes << R"(["il tempo è galantuomo e non aspetta nessuno"])";
+    }
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{config.conquister_path, config.quotes_path};
+
+    const CommandContext context{
+        .storage = storage,
+        .config = config,
+        .user_id = 1,
+        .username = "alice",
+        .claims_allowed = true,
+        .owner = false,
+        .whisper = {},
+    };
+    const auto said = [&](std::string_view text) { return command_dispatch(context, text); };
+
+    SUBCASE("who said it wants the name of whoever added it") {
+        static_cast<void>(game_close(storage, seconds_now_for_test() + 100000));
+        const std::optional<GameOpened> opened =
+            game_open(storage, seconds_now_for_test(), 600, 5000, Game::whosaid);
+        REQUIRE(opened);
+        CHECK(game_opened_reply(*opened).contains("galantuomo"));
+        CHECK_FALSE(said("boh, alice?").has_value());
+        const std::optional<std::string> right = said("secondo me bob");
+        REQUIRE(right);
+        CHECK(right->contains("sa che è di bob"));
+    }
+
+    SUBCASE("half a quote is given, the other half is asked") {
+        static_cast<void>(game_close(storage, seconds_now_for_test() + 100000));
+        const std::optional<GameOpened> opened =
+            game_open(storage, seconds_now_for_test(), 600, 5000, Game::halfquote);
+        REQUIRE(opened);
+        /* Si vede solo la prima metà. */
+        CHECK(game_opened_reply(*opened).contains("il tempo è"));
+        CHECK_FALSE(game_opened_reply(*opened).contains("nessuno"));
+        const std::optional<std::string> finished = said("...e non aspetta nessuno");
+        REQUIRE(finished);
+        CHECK(finished->contains("a memoria"));
+    }
+
+    SUBCASE("true or false pays whoever guessed right") {
+        static_cast<void>(game_close(storage, seconds_now_for_test() + 100000));
+        const std::optional<GameOpened> opened =
+            game_open(storage, seconds_now_for_test(), 600, 5000, Game::truequote);
+        REQUIRE(opened);
+        CHECK_FALSE(opened->detail.empty());
+        const bool honest = opened->secret == 1;
+        const std::int64_t before = conquister_user(storage, "alice")->score;
+        REQUIRE(said(honest ? "direi vera" : "per me falsa"));
+        const std::optional<GameClosed> closed = game_close(storage, seconds_now_for_test() + 100000);
+        REQUIRE(closed);
+        CHECK(closed->winner == "bob");
+        CHECK(conquister_user(storage, "alice")->score == before + 5000);
+    }
+}

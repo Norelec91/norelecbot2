@@ -356,12 +356,18 @@ enum class Game {
     cadastre,
     pilgrimage,
     apocalypse,
+    /* I giochi che pescano dalle citazioni del gruppo. */
+    whosaid,
+    halfquote,
+    truequote,
 };
 
 struct GameOpened {
     Game kind = Game::race;
     /* The player the group has to name, for the game that asks who. */
     std::string target;
+    /* Quello che l'annuncio deve mostrare accanto: un nome da smentire, per esempio. */
+    std::string detail;
     std::int64_t secret = 0;
     std::int64_t pot = 0;
     std::int64_t closes = 0;
