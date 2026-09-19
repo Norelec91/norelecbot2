@@ -929,7 +929,7 @@ bool command_is_for_bot(std::string_view text) {
 std::string game_opened_reply(const GameOpened &opened) {
     switch (opened.kind) {
     case Game::race:
-        return std::format("🏁 PRONTI? VIA! Il primo che scrive si prende {} palle.", opened.pot);
+        return std::format("🏁 CORSA: pronti, via! Il primo che scrive si prende {} palle.", opened.pot);
     case Game::guess:
         return std::format(
             "🔢 INDOVINA: penso un numero fra 1 e 100. Chi lo scrive per primo si prende {} palle.",
@@ -984,7 +984,7 @@ std::string game_opened_reply(const GameOpened &opened) {
         );
     case Game::whois:
         return std::format(
-            "🕵️ INDOVINA CHI: penso a un giocatore di questo gruppo. Chi scrive il suo nome si prende {} palle.",
+            "🕵️ IDENTIKIT: penso a un giocatore di questo gruppo. Chi scrive il suo nome si prende {} palle.",
             opened.pot
         );
     case Game::mirror:
@@ -1493,6 +1493,28 @@ std::optional<std::string> game_reply(const CommandContext &context, std::string
     return std::nullopt;
 }
 
+/* Il nome di un gioco, detto in mezzo a qualsiasi frase, apre quel gioco. Uno alla volta. */
+std::optional<std::string> game_called(const CommandContext &context, std::string_view message, std::int64_t now) {
+    if (context.username.empty() || !context.claims_allowed) {
+        return std::nullopt;
+    }
+    const std::optional<Game> wanted = game_named(message);
+    if (!wanted) {
+        return std::nullopt;
+    }
+    const std::optional<GameOpened> opened = game_open(
+        context.storage,
+        now,
+        context.config.game_open_seconds,
+        context.config.game_pot,
+        wanted
+    );
+    if (!opened) {
+        return std::nullopt;
+    }
+    return game_opened_reply(*opened);
+}
+
 /* Morra cinese e pari o dispari: si gioca dicendo la parola, e si chiude subito. */
 std::optional<std::string> hand_reply(const CommandContext &context, std::string_view lowered) {
     if (context.username.empty() || !context.claims_allowed) {
@@ -1708,6 +1730,9 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
             };
             if (const std::optional<std::string> played = game_reply(context, message, seconds_now())) {
                 return with_ticket(played);
+            }
+            if (const std::optional<std::string> called = game_called(context, message, seconds_now())) {
+                return with_ticket(called);
             }
             if (const std::optional<std::string> hand = hand_reply(context, lowered)) {
                 return with_ticket(hand);

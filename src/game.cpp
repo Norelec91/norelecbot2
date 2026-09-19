@@ -476,6 +476,9 @@ std::vector<std::string> words_in(std::string_view message) {
         while (!word.empty() && std::ispunct(static_cast<unsigned char>(word.back())) != 0) {
             word.pop_back();
         }
+        while (!word.empty() && std::ispunct(static_cast<unsigned char>(word.front())) != 0) {
+            word.erase(word.begin());
+        }
         if (!word.empty()) {
             words.push_back(text::to_lower_copy(word));
         }
@@ -484,9 +487,48 @@ std::vector<std::string> words_in(std::string_view message) {
     return words;
 }
 
+/* The word that calls each game, the one its announcement shouts. */
+constexpr std::array<std::pair<std::string_view, Game>, 17> game_names{{
+    {"corsa", Game::race},
+    {"indovina", Game::guess},
+    {"asta", Game::auction},
+    {"proibita", Game::forbidden},
+    {"memoria", Game::sequence},
+    {"lunga", Game::longest},
+    {"silenzio", Game::silence},
+    {"domanda", Game::quiz},
+    {"anagramma", Game::anagram},
+    {"catena", Game::chain},
+    {"conta", Game::counting},
+    {"identikit", Game::whois},
+    {"specchio", Game::mirror},
+    {"rima", Game::rhyme},
+    {"mirino", Game::target},
+    {"occhio", Game::closest},
+    {"carta", Game::cards},
+}};
+
 }
 
-std::optional<GameOpened> game_open(Storage &storage, std::int64_t now, std::int64_t open_for, std::int64_t pot) {
+
+std::optional<Game> game_named(std::string_view message) {
+    /* A whole word, not a piece of one: chi scrive corsaro non ha chiamato la corsa. */
+    for (const std::string &word : words_in(message)) {
+        const auto named = std::ranges::find(game_names, word, &std::pair<std::string_view, Game>::first);
+        if (named != game_names.end()) {
+            return named->second;
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<GameOpened> game_open(
+    Storage &storage,
+    std::int64_t now,
+    std::int64_t open_for,
+    std::int64_t pot,
+    std::optional<Game> wanted
+) {
     const std::optional<GameOpened> result =
         storage.transaction([&](StorageSession &session) -> std::optional<GameOpened> {
             ConquisterState &state = session.state();
@@ -494,7 +536,7 @@ std::optional<GameOpened> game_open(Storage &storage, std::int64_t now, std::int
                 return std::nullopt;
             }
             GameOpened opened;
-            opened.kind = static_cast<Game>(session.random_index(17));
+            opened.kind = wanted ? *wanted : static_cast<Game>(session.random_index(17));
             opened.closes = now + open_for;
             opened.pot = pot;
             switch (opened.kind) {

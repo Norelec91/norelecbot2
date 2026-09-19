@@ -319,9 +319,11 @@ struct DuelResult {
     std::int64_t palle = 0;
 };
 
-/* Opens one of the four at random, if none is open. */
+/* Opens one at random, or the one asked for, if none is open. */
 [[nodiscard]] std::optional<GameOpened> game_open(Storage &storage, std::int64_t now, std::int64_t open_for,
-                                                  std::int64_t pot);
+                                                  std::int64_t pot, std::optional<Game> wanted = std::nullopt);
+/* The game somebody has called by name, whatever else the message says. */
+[[nodiscard]] std::optional<Game> game_named(std::string_view message);
 /* What a message does to the game under way, if anything. */
 [[nodiscard]] std::optional<GamePlayed> game_play(
     Storage &storage,

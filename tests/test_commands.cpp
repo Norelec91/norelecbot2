@@ -711,7 +711,7 @@ TEST_CASE("the five games answer to whatever gets written") {
         }
         REQUIRE(opened);
         REQUIRE(opened->kind == Game::race);
-        CHECK(game_opened_reply(*opened).contains("PRONTI? VIA!"));
+        CHECK(game_opened_reply(*opened).contains("CORSA: pronti, via!"));
 
         const std::optional<std::string> won = said("io!");
         REQUIRE(won);
@@ -946,6 +946,22 @@ TEST_CASE("the games that need a head, not a fast finger") {
         REQUIRE(closed);
         CHECK(closed->winner == "alice");
         CHECK(game_closed_reply(*closed).contains("ci è andato più vicino alice"));
+    }
+
+    SUBCASE("a game comes when it is called by name") {
+        /* Nothing open: the name of a game in the middle of a sentence opens that one. */
+        static_cast<void>(game_close(storage, seconds_now_for_test() + 100000));
+        const std::optional<std::string> called = said("ragazzi ma facciamo un anagramma dai");
+        REQUIRE(called);
+        CHECK(called->starts_with("🔤 ANAGRAMMA"));
+        /* One at a time: with that one open, another name is just a word. */
+        CHECK_FALSE(said("e invece una bella corsa?").has_value());
+        /* Part of a longer word is not the name. */
+        static_cast<void>(game_close(storage, seconds_now_for_test() + 100000));
+        CHECK_FALSE(said("che corsaro").has_value());
+        const std::optional<std::string> mirror = said("dai, specchio!");
+        REQUIRE(mirror);
+        CHECK(mirror->starts_with("🪞 SPECCHIO"));
     }
 
     SUBCASE("everybody draws one card and one only") {

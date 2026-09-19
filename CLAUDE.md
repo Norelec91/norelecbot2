@@ -10,7 +10,8 @@ deployment notes are in `DEPLOY.md`, which is not tracked.
 a message can hit.
 
 **Every change to the code rewrites the whole table, and each set is more absurd than the one before
-it.** Half of them are nuisances worth a palla or two; the rest hand out something absurd — a balloon
+it.** The table holds at most 100 mishaps: a new one takes the place of an old one, it is not added to
+them. Half of them are nuisances worth a palla or two; the rest hand out something absurd — a balloon
 arriving in the post, a triple on the next hold, a nick teleported elsewhere on the map, a penalty
 quashed on a technicality, a point of simpatia won or lost. The cast of `Boon` says what a mishap can
 leave behind; a new kind of gift means a new one there and in `mishap_strike`.
