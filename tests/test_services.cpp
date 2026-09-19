@@ -11,6 +11,7 @@
 #include <doctest/doctest.h>
 
 #include <fstream>
+#include <limits>
 #include <set>
 
 using namespace norelecbot;
@@ -791,6 +792,9 @@ TEST_CASE("the jackpot brings the famous grandfather and his three palle") {
     CHECK(jackpot->text.contains("JACKPOT"));
     CHECK(jackpot->text.contains("NONNO"));
     CHECK(flipper_score_after(10, *jackpot) == 23);
+    /* And on a pile near the ceiling it stops there instead of wrapping round to nothing. */
+    CHECK(flipper_score_after(std::numeric_limits<std::int64_t>::max() / 2 + 1, *jackpot) ==
+          std::numeric_limits<std::int64_t>::max());
 }
 
 TEST_CASE("nothing happens while nobody is playing") {

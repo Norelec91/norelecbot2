@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cstdint>
+#include <limits>
 #include <string_view>
 
 namespace norelecbot {
@@ -157,14 +158,24 @@ inline constexpr std::array flippers{
 };
 
 /* Numeric part of a target hit. The jackpot doubles first, then the grandfather adds his gift. */
+/* Nothing here may run off the end of the number: a jackpot on a huge pile would wrap it negative. */
 [[nodiscard]] constexpr std::int64_t flipper_score_after(std::int64_t before, const Mishap &what) {
-    if (what.boon == Boon::grandfather) {
-        return before * 2 + what.palle;
-    }
+    constexpr std::int64_t ceiling = std::numeric_limits<std::int64_t>::max();
+    constexpr std::int64_t floor = std::numeric_limits<std::int64_t>::min();
     if (what.boon == Boon::halved) {
         return before / 2;
     }
-    return before + what.palle;
+    std::int64_t after = before;
+    if (what.boon == Boon::grandfather) {
+        after = before > ceiling / 2 ? ceiling : (before < floor / 2 ? floor : before * 2);
+    }
+    if (what.palle > 0 && after > ceiling - what.palle) {
+        return ceiling;
+    }
+    if (what.palle < 0 && after < floor - what.palle) {
+        return floor;
+    }
+    return after + what.palle;
 }
 
 }
