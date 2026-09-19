@@ -145,7 +145,6 @@ std::string failed_attempt_toll(const ClaimResult &result) {
 RaidRules raid_rules(const CommandContext &context) {
     return {
         .travel_divisor = context.config.travel_divisor,
-        .loot_share = context.config.raid_share,
         .attack_cost = context.config.attack_cost,
         .signs = context.config.zodiac_signs,
     };
@@ -536,6 +535,9 @@ std::string raid_event_reply(const RaidEvent &event, const zodiac::Overrides &si
         mention,
         event.target
     );
+    if (event.distance > 0) {
+        reply += std::format(", una per ogni unità delle {} di strada", event.distance);
+    }
     if (event.undefended) {
         reply += ", che era in giro";
     } else if (event.balloon_popped) {

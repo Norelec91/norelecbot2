@@ -465,10 +465,15 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 }
                 if (event.kind == RaidEvent::Kind::stolen) {
                     const std::int64_t theirs = counter(state.scores, raid.target);
-                    const std::int64_t share = rules.loot_share > 0 ? theirs / rules.loot_share : 0;
+                    /* Si porta via una palla per ogni unità di strada fatta per arrivare fin lì:
+                       i vicini rubano poco, chi viene da lontano si ripaga il viaggio. */
+                    const position::Point from = position::coordinates_of(player_id(session, state, raid.raider));
+                    const position::Point to = position::coordinates_of(player_id(session, state, raid.target));
+                    event.distance = position::distance(from, to);
                     event.raider_percent = zodiac::percent_for(raid.raider, now, rules.signs);
                     event.target_percent = zodiac::percent_for(raid.target, now, rules.signs);
-                    event.loot = std::min(theirs, share * event.raider_percent / event.target_percent);
+                    event.loot =
+                        std::min(theirs, event.distance * event.raider_percent / event.target_percent);
                     if (event.loot > 0) {
                         state.scores[raid.target] = theirs - event.loot;
                     }

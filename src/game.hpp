@@ -61,7 +61,6 @@ enum class RaidStatus { started, already_travelling, holding_place, unknown_targ
 struct RaidRules {
     /* Seconds of travel per unit of distance, and the share of the loot: a quarter by default. */
     int travel_divisor = 1000;
-    int loot_share = 4;
     /* What a raid the balloon turns back costs the raider. */
     int attack_cost = 0;
     zodiac::Overrides signs;
@@ -87,6 +86,8 @@ struct RaidEvent {
     std::string target;
     std::int64_t loot = 0;
     std::int64_t cost = 0;
+    /* Quanta strada c'era fra i due: è anche quanto si può portare via. */
+    std::int64_t distance = 0;
     /* The ride home. */
     std::int64_t seconds = 0;
     int raider_percent = 100;

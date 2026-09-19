@@ -93,9 +93,6 @@ constexpr std::array settings{
     Setting{"NORELECBOT_TRAVEL_DIVISOR", [](AppConfig &config, std::string_view value) {
         return set_number(config.travel_divisor, value, AppConfig::default_travel_divisor, 1);
     }},
-    Setting{"NORELECBOT_RAID_SHARE", [](AppConfig &config, std::string_view value) {
-        return set_number(config.raid_share, value, AppConfig::default_raid_share, 1);
-    }},
     Setting{"NORELECBOT_ZODIAC_SIGNS", [](AppConfig &config, std::string_view value) {
         std::vector<zodiac::Override> chosen;
         for (const std::string &pair : split_names(value)) {

@@ -360,7 +360,7 @@ namespace {
 
 /* Far enough apart that every ride is the shortest one, so the tests do not depend on where ids land. */
 RaidRules quick_rides() {
-    return RaidRules{.travel_divisor = 1000000, .loot_share = 4, .attack_cost = 100, .signs = {}};
+    return RaidRules{.travel_divisor = 1000000, .attack_cost = 100, .signs = {}};
 }
 
 }
@@ -388,8 +388,12 @@ TEST_CASE("a raid takes a quarter of what the target has, and carries it home") 
     CHECK(arrival[0].kind == RaidEvent::Kind::stolen);
     CHECK(arrival[0].raider == "bob");
     CHECK(arrival[0].target == "alice");
-    const std::int64_t loot =
-        250 * zodiac::percent_for("bob", 5) / zodiac::percent_for("alice", 5);
+    /* Si porta via una palla per ogni unità di strada, al più quello che il derubato ha. */
+    CHECK(arrival[0].distance > 0);
+    const std::int64_t loot = std::min(
+        std::int64_t{1000},
+        arrival[0].distance * zodiac::percent_for("bob", 5) / zodiac::percent_for("alice", 5)
+    );
     CHECK(arrival[0].loot == loot);
     /* alice has never written to the bot from Telegram, so her name carries no mention. */
     CHECK_FALSE(arrival[0].target_on_telegram);

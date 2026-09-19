@@ -18,7 +18,6 @@ struct AppConfig {
     static constexpr int default_cooldown_seconds = 300;
     static constexpr int default_attack_cost = 100;
     static constexpr int default_travel_divisor = 350;
-    static constexpr int default_raid_share = 4;
     static constexpr int default_shield_seconds = 3600;
     static constexpr int default_boost_cost = 1500;
     static constexpr int default_boost_multiplier = 3;
@@ -41,7 +40,6 @@ struct AppConfig {
     int attack_cost = default_attack_cost;
     /* Seconds of travel per unit of distance, and the share of a raid's loot. */
     int travel_divisor = default_travel_divisor;
-    int raid_share = default_raid_share;
     int boost_cost = default_boost_cost;
     int boost_multiplier = default_boost_multiplier;
     /* Players whose real sign the owner knows, instead of the one their name gives. */

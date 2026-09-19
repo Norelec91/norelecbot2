@@ -38,7 +38,6 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
     log_info("Raid keeper started");
     const RaidRules rules{
         .travel_divisor = config.travel_divisor,
-        .loot_share = config.raid_share,
         .attack_cost = config.attack_cost,
         .signs = config.zodiac_signs,
     };
