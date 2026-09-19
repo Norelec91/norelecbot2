@@ -1013,6 +1013,17 @@ void grant_boon(StorageSession &session, ConquisterState &state, const std::stri
     case Boon::restored:
         static_cast<void>(simpatia_change(state, name, simpatia_full, now));
         break;
+    case Boon::windfall:
+        state.scores[name] = counter(state.scores, name) + (counter(state.scores, name) / 10);
+        break;
+    case Boon::tithe:
+        state.scores[name] = counter(state.scores, name) - (counter(state.scores, name) / 10);
+        break;
+    case Boon::ticket:
+        if (counter(state.lottery_clock, "closes") > now) {
+            state.lottery[name] = counter(state.lottery, name) + 1;
+        }
+        break;
     case Boon::grandfather:
     case Boon::halved:
     case Boon::none:
