@@ -43,6 +43,10 @@ struct AppConfig {
     static constexpr int default_lottery_max_seconds = 5400;
     static constexpr int default_lottery_open_seconds = 600;
     static constexpr int default_lottery_ticket = 200;
+    static constexpr int default_game_min_seconds = 0;
+    static constexpr int default_game_max_seconds = 5400;
+    static constexpr int default_game_open_seconds = 180;
+    static constexpr int default_game_pot = 5000;
     static constexpr int default_shield_seconds = 3600;
     static constexpr int default_boost_cost = 1500;
     static constexpr int default_boost_multiplier = 3;
@@ -89,6 +93,11 @@ struct AppConfig {
     int lottery_max_seconds = default_lottery_max_seconds;
     int lottery_open_seconds = default_lottery_open_seconds;
     int lottery_ticket = default_lottery_ticket;
+    /* The games: how often one opens, how long it lasts, what is on the table. */
+    int game_min_seconds = default_game_min_seconds;
+    int game_max_seconds = default_game_max_seconds;
+    int game_open_seconds = default_game_open_seconds;
+    int game_pot = default_game_pot;
     /* One message in this many hits the pinball table; zero and there is no table. */
     int flipper_odds = default_flipper_odds;
     /* Words that hit the table for certain, whatever the odds say. */

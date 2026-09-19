@@ -33,6 +33,10 @@ struct CommandContext {
     Whisper whisper;
 };
 
+/* What the bot says when it opens one of the games, and when it settles it. */
+[[nodiscard]] std::string game_opened_reply(const GameOpened &opened);
+[[nodiscard]] std::string game_closed_reply(const GameClosed &closed);
+
 /* What the bot says when something happens to the world at large. */
 [[nodiscard]] std::string happening_reply(const HappeningResult &what);
 

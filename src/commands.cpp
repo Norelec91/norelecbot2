@@ -925,6 +925,43 @@ bool command_is_for_bot(std::string_view text) {
            (!message.empty() && find_command(parse_command(message).name) != nullptr);
 }
 
+std::string game_opened_reply(const GameOpened &opened) {
+    switch (opened.kind) {
+    case Game::race:
+        return std::format("🏁 PRONTI? VIA! Il primo che scrive si prende {} palle.", opened.pot);
+    case Game::guess:
+        return std::format(
+            "🔢 INDOVINA: penso un numero fra 1 e 100. Chi lo scrive per primo si prende {} palle.",
+            opened.pot
+        );
+    case Game::auction:
+        return "🔨 ASTA: si batte un palloncino. Si offre scrivendo un numero, vince l'offerta più alta.";
+    case Game::forbidden:
+        return "🤐 PAROLA PROIBITA: ne ho scelta una e non ve la dico. Chi la scrive paga un decimo di quello che ha.";
+    }
+    return {};
+}
+
+std::string game_closed_reply(const GameClosed &closed) {
+    switch (closed.kind) {
+    case Game::race:
+        return "🏁 Nessuno si è mosso in tempo: la corsa si chiude senza vincitore.";
+    case Game::guess:
+        return std::format("🔢 Tempo scaduto: il numero era {}. Nessuno l'ha preso.", closed.secret);
+    case Game::auction:
+        return closed.winner.empty()
+            ? std::string{"🔨 Asta deserta: il palloncino resta invenduto."}
+            : std::format(
+                  "🔨 Aggiudicato a {} per {} palle: il palloncino è suo.",
+                  closed.winner,
+                  closed.pot
+              );
+    case Game::forbidden:
+        return "🤐 Nessuno ha detto la parola proibita. Stavolta.";
+    }
+    return {};
+}
+
 std::string happening_reply(const HappeningResult &what) {
     switch (what.what) {
     case Happening::earthquake:
@@ -1226,6 +1263,66 @@ std::optional<std::string> flipper_reply(
     return said;
 }
 
+/* The game under way, which answers to whatever gets written. */
+std::optional<std::string> game_reply(const CommandContext &context, std::string_view message, std::int64_t now) {
+    if (context.username.empty() || !context.claims_allowed) {
+        return std::nullopt;
+    }
+    const std::string username{context.username};
+    const std::optional<GamePlayed> played = game_play(context.storage, username, message, now);
+    if (!played) {
+        return std::nullopt;
+    }
+    switch (played->kind) {
+    case Game::race:
+        return std::format("🏁 {} è arrivato primo e si prende {} palle.", played->player, played->palle);
+    case Game::guess:
+        return std::format(
+            "🔢 {} ha indovinato: era {}. Si prende {} palle.",
+            played->player,
+            played->number,
+            played->palle
+        );
+    case Game::auction:
+        return std::format("🔨 {} offre {}. Qualcuno dà di più?", played->player, played->number);
+    case Game::forbidden:
+        return std::format(
+            "🤐 {} ha detto la parola proibita e paga {} palle.",
+            played->player,
+            played->palle
+        );
+    }
+    return std::nullopt;
+}
+
+/* Whoever asks for a duel gets one, against whoever the bot picks. */
+std::optional<std::string> duel_reply(const CommandContext &context, std::string_view lowered) {
+    if (context.username.empty() || !context.claims_allowed) {
+        return std::nullopt;
+    }
+    if (!says_the_word(lowered, "duello")) {
+        return std::nullopt;
+    }
+    const std::string username{context.username};
+    const DuelResult fight = duel(context.storage, username, seconds_now());
+    if (!fight.fought) {
+        return std::nullopt;
+    }
+    return fight.won
+        ? std::format(
+              "⚔️ {} ha sfidato a duello {} e ha vinto: {} palle passano di mano.",
+              username,
+              fight.other,
+              fight.palle
+          )
+        : std::format(
+              "⚔️ {} ha sfidato a duello {} e ha perso: {} palle passano di mano.",
+              username,
+              fight.other,
+              fight.palle
+          );
+}
+
 /* While the draw is open, talking is buying. */
 std::optional<std::string> lottery_reply(const CommandContext &context, std::int64_t now) {
     if (context.username.empty() || !context.claims_allowed || context.config.lottery_min_seconds <= 0) {
@@ -1374,6 +1471,12 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
                 }
                 return said ? said : ticket;
             };
+            if (const std::optional<std::string> played = game_reply(context, message, seconds_now())) {
+                return with_ticket(played);
+            }
+            if (const std::optional<std::string> fight = duel_reply(context, lowered)) {
+                return with_ticket(fight);
+            }
             if (const std::optional<std::string> spell = spell_reply(context, lowered)) {
                 return with_ticket(spell);
             }

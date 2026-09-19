@@ -671,3 +671,71 @@ TEST_CASE("the taxman calls on the leader once a day") {
     CHECK_FALSE(tax_the_leader(storage, 0, 1000 + (3 * 86400)));
 }
 
+TEST_CASE("the five games answer to whatever gets written") {
+    const TestPaths paths{"games-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":10000,"bob":10000},"quotes_added":{}})";
+    }
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{config.conquister_path, config.quotes_path};
+
+    const CommandContext context{
+        .storage = storage,
+        .config = config,
+        .user_id = 1,
+        .username = "alice",
+        .claims_allowed = true,
+        .owner = false,
+        .whisper = {},
+    };
+    const auto said = [&](std::string_view text) { return command_dispatch(context, text); };
+
+    /* Nothing is open, so a plain message is a plain message. */
+    CHECK_FALSE(said("ciao a tutti").has_value());
+
+    /* A duel is fought the moment somebody asks for one. */
+    const std::optional<std::string> fight = said("facciamo un duello");
+    REQUIRE(fight);
+    CHECK(fight->starts_with("⚔️ alice ha sfidato a duello bob e ha "));
+    CHECK(fight->contains("palle passano di mano"));
+
+    SUBCASE("the race goes to whoever speaks first") {
+        std::optional<GameOpened> opened;
+        for (int tries = 0; tries < 40 && (!opened || opened->kind != Game::race); ++tries) {
+            static_cast<void>(game_close(storage, seconds_now_for_test() + 100000));
+            opened = game_open(storage, seconds_now_for_test(), 600, 5000);
+        }
+        REQUIRE(opened);
+        REQUIRE(opened->kind == Game::race);
+        CHECK(game_opened_reply(*opened).contains("PRONTI? VIA!"));
+
+        const std::optional<std::string> won = said("io!");
+        REQUIRE(won);
+        CHECK(*won == "🏁 alice è arrivato primo e si prende 5000 palle.");
+        CHECK(conquister_user(storage, "alice")->score > 10000);
+        /* Over: the next message is nobody's business. */
+        CHECK_FALSE(said("e io?").has_value());
+    }
+
+    SUBCASE("the number has to be the right one") {
+        std::optional<GameOpened> opened;
+        for (int tries = 0; tries < 40 && (!opened || opened->kind != Game::guess); ++tries) {
+            static_cast<void>(game_close(storage, seconds_now_for_test() + 100000));
+            opened = game_open(storage, seconds_now_for_test(), 600, 5000);
+        }
+        REQUIRE(opened);
+        REQUIRE(opened->kind == Game::guess);
+        CHECK(opened->secret >= 1);
+        CHECK(opened->secret <= 100);
+
+        const std::int64_t wrong = opened->secret == 1 ? 2 : 1;
+        CHECK_FALSE(said(std::format("dico {}", wrong)).has_value());
+        const std::optional<std::string> hit = said(std::format("allora {}", opened->secret));
+        REQUIRE(hit);
+        CHECK(hit->contains("ha indovinato"));
+    }
+}
+

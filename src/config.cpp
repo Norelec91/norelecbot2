@@ -175,6 +175,18 @@ constexpr std::array settings{
         config.blessing_words = split_names(value);
         return true;
     }},
+    Setting{"NORELECBOT_GAME_MIN_SECONDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.game_min_seconds, value, AppConfig::default_game_min_seconds, 0);
+    }},
+    Setting{"NORELECBOT_GAME_MAX_SECONDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.game_max_seconds, value, AppConfig::default_game_max_seconds, 1);
+    }},
+    Setting{"NORELECBOT_GAME_OPEN_SECONDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.game_open_seconds, value, AppConfig::default_game_open_seconds, 10);
+    }},
+    Setting{"NORELECBOT_GAME_POT", [](AppConfig &config, std::string_view value) {
+        return set_number(config.game_pot, value, AppConfig::default_game_pot, 0);
+    }},
     Setting{"NORELECBOT_LOTTERY_MIN_SECONDS", [](AppConfig &config, std::string_view value) {
         return set_number(config.lottery_min_seconds, value, AppConfig::default_lottery_min_seconds, 0);
     }},

@@ -79,6 +79,8 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
     Clock reprogramming{config.reprogram_min_seconds, config.reprogram_max_seconds};
     const bool rules_shuffle = config.chaos_min_seconds > 0;
     Clock chaos{config.chaos_min_seconds, config.chaos_max_seconds};
+    const bool games_run = config.game_min_seconds > 0;
+    Clock games{config.game_min_seconds, config.game_max_seconds};
     const bool lottery_runs = config.lottery_min_seconds > 0;
     Clock lottery{config.lottery_min_seconds, config.lottery_max_seconds};
     const bool world_happens = config.happening_min_seconds > 0;
@@ -154,6 +156,22 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
                     )
                 );
                 chaos.rest();
+            }
+            if (games_run) {
+                if (const std::optional<GameClosed> closed = game_close(storage, seconds_now())) {
+                    announce(config, game_closed_reply(*closed));
+                }
+                if (games.due(seconds_now())) {
+                    if (const std::optional<GameOpened> opened = game_open(
+                            storage,
+                            seconds_now(),
+                            config.game_open_seconds,
+                            config.game_pot
+                        )) {
+                        announce(config, game_opened_reply(*opened));
+                    }
+                    games.rest();
+                }
             }
             if (lottery_runs) {
                 if (const std::optional<LotteryDraw> drawn = lottery_draw(storage, seconds_now())) {

@@ -115,6 +115,9 @@ struct ConquisterState {
     /* Tickets bought in the lottery under way, and when the draw is. */
     Counters lottery;
     Counters lottery_clock;
+    /* The challenge under way: what kind, when it closes, what the secret is, what is at stake. */
+    Counters challenge;
+    Authors challenge_who;
 
     bool operator==(const ConquisterState &) const = default;
 };

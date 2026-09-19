@@ -253,6 +253,53 @@ struct TaxResult {
     std::int64_t left = 0;
 };
 
+/* The four games the bot opens by itself, and the duel a player starts by asking for it. */
+enum class Game { race, guess, auction, forbidden };
+
+struct GameOpened {
+    Game kind = Game::race;
+    std::int64_t secret = 0;
+    std::int64_t pot = 0;
+    std::int64_t closes = 0;
+};
+
+struct GamePlayed {
+    Game kind = Game::race;
+    bool decided = false;
+    std::string player;
+    std::int64_t number = 0;
+    std::int64_t palle = 0;
+};
+
+struct GameClosed {
+    Game kind = Game::race;
+    std::string winner;
+    std::int64_t pot = 0;
+    std::int64_t secret = 0;
+};
+
+struct DuelResult {
+    bool fought = false;
+    std::string other;
+    bool won = false;
+    std::int64_t palle = 0;
+};
+
+/* Opens one of the four at random, if none is open. */
+[[nodiscard]] std::optional<GameOpened> game_open(Storage &storage, std::int64_t now, std::int64_t open_for,
+                                                  std::int64_t pot);
+/* What a message does to the game under way, if anything. */
+[[nodiscard]] std::optional<GamePlayed> game_play(
+    Storage &storage,
+    const std::string &username,
+    std::string_view message,
+    std::int64_t now
+);
+/* Settles it once the time is up. */
+[[nodiscard]] std::optional<GameClosed> game_close(Storage &storage, std::int64_t now);
+/* Two players, a coin, and a tenth of what the loser has. */
+[[nodiscard]] DuelResult duel(Storage &storage, const std::string &username, std::int64_t now);
+
 struct LotteryDraw {
     std::string winner;
     std::int64_t pot = 0;
