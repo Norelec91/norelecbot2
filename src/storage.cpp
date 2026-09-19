@@ -181,6 +181,8 @@ ConquisterState parse_state(const Json &json) {
         parse_counters(json, "taxed"),
         parse_counters(json, "rules"),
         parse_counters(json, "marked"),
+        parse_counters(json, "lottery"),
+        parse_counters(json, "lottery_clock"),
     };
 }
 
@@ -228,6 +230,8 @@ Json state_to_json(const ConquisterState &state) {
         {"taxed", state.taxed},
         {"rules", state.rules},
         {"marked", state.marked},
+        {"lottery", state.lottery},
+        {"lottery_clock", state.lottery_clock},
     };
 }
 

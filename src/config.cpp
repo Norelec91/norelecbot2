@@ -103,6 +103,9 @@ constexpr std::array settings{
         config.flipper_words = split_names(value);
         return true;
     }},
+    Setting{"NORELECBOT_FLIPPER_CHAIN", [](AppConfig &config, std::string_view value) {
+        return set_number(config.flipper_chain, value, AppConfig::default_flipper_chain, 1, 20);
+    }},
     Setting{"NORELECBOT_FLIPPER_ODDS", [](AppConfig &config, std::string_view value) {
         return set_number(config.flipper_odds, value, AppConfig::default_flipper_odds, 0);
     }},
@@ -171,6 +174,18 @@ constexpr std::array settings{
     Setting{"NORELECBOT_BLESSING_WORDS", [](AppConfig &config, std::string_view value) {
         config.blessing_words = split_names(value);
         return true;
+    }},
+    Setting{"NORELECBOT_LOTTERY_MIN_SECONDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.lottery_min_seconds, value, AppConfig::default_lottery_min_seconds, 0);
+    }},
+    Setting{"NORELECBOT_LOTTERY_MAX_SECONDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.lottery_max_seconds, value, AppConfig::default_lottery_max_seconds, 1);
+    }},
+    Setting{"NORELECBOT_LOTTERY_OPEN_SECONDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.lottery_open_seconds, value, AppConfig::default_lottery_open_seconds, 10);
+    }},
+    Setting{"NORELECBOT_LOTTERY_TICKET", [](AppConfig &config, std::string_view value) {
+        return set_number(config.lottery_ticket, value, AppConfig::default_lottery_ticket, 0);
     }},
     Setting{"NORELECBOT_HAPPENING_MIN_SECONDS", [](AppConfig &config, std::string_view value) {
         return set_number(config.happening_min_seconds, value, AppConfig::default_happening_min_seconds, 0);

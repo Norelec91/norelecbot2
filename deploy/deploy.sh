@@ -142,9 +142,9 @@ if [ "$ACTION" = deploy ]; then
     git archive --format=tar HEAD | "$DEPLOY_ENGINE" run -i --rm "$IMAGE" sh -c '
         set -e
         mkdir /work && tar -x -C /work && cd /work
-        cmake -S . -B build -DCMAKE_BUILD_TYPE=Release >&2
+        # The tests run in tools/check.sh before the commit; building them here costs eight seconds.
+        cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF >&2
         cmake --build build -j"$(nproc)" >&2
-        ctest --test-dir build --output-on-failure >&2
         cat bin/norelecbot' > "$staging/norelecbot"
     [ -s "$staging/norelecbot" ] || { echo "!! the build produced no binary" >&2; exit 1; }
     git show HEAD:deploy/norelecbot.service > "$staging/norelecbot.service"

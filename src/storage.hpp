@@ -112,6 +112,9 @@ struct ConquisterState {
     Counters rules;
     /* Whoever asked for trouble, and when: the next thing that happens happens to him. */
     Counters marked;
+    /* Tickets bought in the lottery under way, and when the draw is. */
+    Counters lottery;
+    Counters lottery_clock;
 
     bool operator==(const ConquisterState &) const = default;
 };

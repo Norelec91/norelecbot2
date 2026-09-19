@@ -79,6 +79,8 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
     Clock reprogramming{config.reprogram_min_seconds, config.reprogram_max_seconds};
     const bool rules_shuffle = config.chaos_min_seconds > 0;
     Clock chaos{config.chaos_min_seconds, config.chaos_max_seconds};
+    const bool lottery_runs = config.lottery_min_seconds > 0;
+    Clock lottery{config.lottery_min_seconds, config.lottery_max_seconds};
     const bool world_happens = config.happening_min_seconds > 0;
     Clock happenings{config.happening_min_seconds, config.happening_max_seconds};
     const bool flegyas_comes = config.flegyas_min_seconds > 0;
@@ -152,6 +154,35 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
                     )
                 );
                 chaos.rest();
+            }
+            if (lottery_runs) {
+                if (const std::optional<LotteryDraw> drawn = lottery_draw(storage, seconds_now())) {
+                    announce(
+                        config,
+                        drawn->winner.empty()
+                            ? std::string{"🎟️ Lotteria chiusa senza un biglietto venduto. Peggio per voi."}
+                            : std::format(
+                                  "🎉 LOTTERIA: ha vinto {} con {} biglietti su {}, e si porta a casa {} palle.",
+                                  drawn->winner,
+                                  drawn->tickets,
+                                  drawn->players,
+                                  drawn->pot
+                              )
+                    );
+                }
+                if (lottery.due(seconds_now()) &&
+                    lottery_open(storage, seconds_now(), config.lottery_open_seconds)) {
+                    announce(
+                        config,
+                        std::format(
+                            "🎟️ È APERTA LA LOTTERIA! Chi scrive nel gruppo compra un biglietto da {} palle. "
+                            "Si estrae fra {} minuti.",
+                            config.lottery_ticket,
+                            config.lottery_open_seconds / 60
+                        )
+                    );
+                    lottery.rest();
+                }
             }
             if (world_happens && happenings.due(seconds_now())) {
                 if (const std::optional<HappeningResult> what = happening_strike(storage, seconds_now())) {

@@ -253,6 +253,25 @@ struct TaxResult {
     std::int64_t left = 0;
 };
 
+struct LotteryDraw {
+    std::string winner;
+    std::int64_t pot = 0;
+    std::size_t players = 0;
+    std::size_t tickets = 0;
+};
+
+/* Opens one if none is open, and says when the draw is. */
+[[nodiscard]] bool lottery_open(Storage &storage, std::int64_t now, std::int64_t open_for);
+/* Sells a ticket to whoever spoke, while it is open; the count he is up to, or nothing. */
+[[nodiscard]] std::optional<std::int64_t> lottery_buy(
+    Storage &storage,
+    const std::string &username,
+    std::int64_t cost,
+    std::int64_t now
+);
+/* Draws the winner once the time is up. */
+[[nodiscard]] std::optional<LotteryDraw> lottery_draw(Storage &storage, std::int64_t now);
+
 enum class Happening { earthquake, amnesty, rain, inflation, black_market, pedlar, famine, ministry };
 
 struct HappeningResult {

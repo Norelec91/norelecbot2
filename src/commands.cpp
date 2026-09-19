@@ -1127,21 +1127,53 @@ std::optional<std::string> flipper_reply(
     const bool said_one = std::ranges::any_of(context.config.flipper_words, [lowered](const std::string &word) {
         return says_the_word(lowered, text::to_lower_copy(word));
     });
-    const std::optional<FlipperResult> hit = flipper_hit(
+    const std::string username{context.username};
+    const std::optional<FlipperResult> first = flipper_hit(
         context.storage,
-        std::string{context.username},
+        username,
         said_one ? 1 : context.config.flipper_odds,
         now,
         context.config.boost_multiplier
     );
-    if (!hit) {
+    if (!first) {
         return std::nullopt;
     }
-    std::string said = std::vformat(flippers.at(hit->which).text, std::make_format_args(context.username));
-    if (hit->palle != 0) {
-        said += std::format(" Ora ne ha {}.", hit->score);
+    /* The ball does not stop at the first target. */
+    std::vector<FlipperResult> chain{*first};
+    const std::vector<FlipperResult> rest = cascade(
+        context.storage,
+        username,
+        context.config.flipper_chain - 1,
+        now,
+        context.config.boost_multiplier
+    );
+    chain.insert(chain.end(), rest.begin(), rest.end());
+
+    std::string said;
+    for (const FlipperResult &hit : chain) {
+        said += said.empty() ? "" : "\n";
+        said += std::vformat(flippers.at(hit.which).text, std::make_format_args(username));
     }
+    said += std::format("\n💰 Totale: {} palle.", chain.back().score);
     return said;
+}
+
+/* While the draw is open, talking is buying. */
+std::optional<std::string> lottery_reply(const CommandContext &context, std::int64_t now) {
+    if (context.username.empty() || !context.claims_allowed || context.config.lottery_min_seconds <= 0) {
+        return std::nullopt;
+    }
+    const std::string username{context.username};
+    const std::optional<std::int64_t> tickets =
+        lottery_buy(context.storage, username, context.config.lottery_ticket, now);
+    if (!tickets || *tickets != 1) {
+        return std::nullopt;
+    }
+    return std::format(
+        "🎟️ {} ha comprato un biglietto della lotteria per {} palle.",
+        username,
+        context.config.lottery_ticket
+    );
 }
 
 /* The words that work the small spells, in the order they are tried. */
@@ -1267,16 +1299,23 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
         const CommandDefinition *definition = find_command(command.name);
         if (definition == nullptr) {
             const std::string lowered = text::to_lower_copy(message);
+            const std::optional<std::string> ticket = lottery_reply(context, seconds_now());
+            const auto with_ticket = [&ticket](std::optional<std::string> said) {
+                if (ticket && said) {
+                    return std::optional<std::string>{*ticket + "\n" + *said};
+                }
+                return said ? said : ticket;
+            };
             if (const std::optional<std::string> spell = spell_reply(context, lowered)) {
-                return spell;
+                return with_ticket(spell);
             }
             if (const std::optional<std::string> everything = cascade_reply(context, lowered)) {
-                return everything;
+                return with_ticket(everything);
             }
             if (const std::optional<std::string> luck = lucky_word_reply(context, lowered)) {
-                return luck;
+                return with_ticket(luck);
             }
-            return flipper_reply(context, lowered, seconds_now());
+            return with_ticket(flipper_reply(context, lowered, seconds_now()));
         }
         /* A handler with nothing to say out loud has already said it in private. */
         std::string reply = definition->handler(context, command.argument);

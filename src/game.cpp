@@ -432,6 +432,79 @@ FreeingResult set_free(Storage &storage, std::string_view username) {
     return result;
 }
 
+bool lottery_open(Storage &storage, std::int64_t now, std::int64_t open_for) {
+    const bool opened = storage.transaction([now, open_for](StorageSession &session) {
+        ConquisterState &state = session.state();
+        if (counter(state.lottery_clock, "closes") > now) {
+            return false;
+        }
+        state.lottery.clear();
+        state.lottery_clock["closes"] = now + open_for;
+        return true;
+    });
+
+    if (opened) {
+        log_info("lottery opened for={}", open_for);
+    }
+    return opened;
+}
+
+std::optional<std::int64_t> lottery_buy(
+    Storage &storage,
+    const std::string &username,
+    std::int64_t cost,
+    std::int64_t now
+) {
+    return storage.transaction([&](StorageSession &session) -> std::optional<std::int64_t> {
+        ConquisterState &state = session.state();
+        if (counter(state.lottery_clock, "closes") <= now) {
+            return std::nullopt;
+        }
+        const std::int64_t tickets = counter(state.lottery, username) + 1;
+        state.lottery[username] = tickets;
+        state.scores[username] = counter(state.scores, username) - cost;
+        state.lottery_clock["pot"] = counter(state.lottery_clock, "pot") + cost;
+        return tickets;
+    });
+}
+
+std::optional<LotteryDraw> lottery_draw(Storage &storage, std::int64_t now) {
+    const std::optional<LotteryDraw> result =
+        storage.transaction([now](StorageSession &session) -> std::optional<LotteryDraw> {
+            ConquisterState &state = session.state();
+            const std::int64_t closes = counter(state.lottery_clock, "closes");
+            if (closes == 0 || closes > now) {
+                return std::nullopt;
+            }
+            LotteryDraw drawn;
+            drawn.pot = counter(state.lottery_clock, "pot");
+            state.lottery_clock.erase("closes");
+            state.lottery_clock.erase("pot");
+            if (state.lottery.empty()) {
+                state.lottery.clear();
+                return drawn;
+            }
+            /* One ticket, one chance. */
+            std::vector<std::string> bowl;
+            for (const Counters::value_type &entry : state.lottery) {
+                for (std::int64_t ticket = 0; ticket < entry.second; ++ticket) {
+                    bowl.push_back(entry.first);
+                }
+            }
+            drawn.players = state.lottery.size();
+            drawn.tickets = bowl.size();
+            drawn.winner = bowl[session.random_index(bowl.size())];
+            state.scores[drawn.winner] = counter(state.scores, drawn.winner) + drawn.pot;
+            state.lottery.clear();
+            return drawn;
+        });
+
+    if (result && !result->winner.empty()) {
+        log_info("lottery won by={} pot={} tickets={}", result->winner, result->pot, result->tickets);
+    }
+    return result;
+}
+
 void mark_target(Storage &storage, const std::string &username, std::int64_t now) {
     storage.transaction([&username, now](StorageSession &session) {
         session.state().marked[username] = now;

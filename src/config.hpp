@@ -26,6 +26,7 @@ struct AppConfig {
     static constexpr int default_virus_cooldown_seconds = 600;
     static constexpr int default_magic_most = 5;
     static constexpr int default_flipper_odds = 0;
+    static constexpr int default_flipper_chain = 1;
     static constexpr int default_lucky_swing = 500;
     static constexpr int default_cascade_most = 5;
     static constexpr int default_tax_percent = 0;
@@ -38,6 +39,10 @@ struct AppConfig {
     static constexpr int default_chaos_max_seconds = 7200;
     static constexpr int default_happening_min_seconds = 0;
     static constexpr int default_happening_max_seconds = 5400;
+    static constexpr int default_lottery_min_seconds = 0;
+    static constexpr int default_lottery_max_seconds = 5400;
+    static constexpr int default_lottery_open_seconds = 600;
+    static constexpr int default_lottery_ticket = 200;
     static constexpr int default_shield_seconds = 3600;
     static constexpr int default_boost_cost = 1500;
     static constexpr int default_boost_multiplier = 3;
@@ -79,10 +84,17 @@ struct AppConfig {
     /* How often something happens to the world at large; zero and nothing does. */
     int happening_min_seconds = default_happening_min_seconds;
     int happening_max_seconds = default_happening_max_seconds;
+    /* The lottery: how often it opens, how long it stays open, what a ticket costs. */
+    int lottery_min_seconds = default_lottery_min_seconds;
+    int lottery_max_seconds = default_lottery_max_seconds;
+    int lottery_open_seconds = default_lottery_open_seconds;
+    int lottery_ticket = default_lottery_ticket;
     /* One message in this many hits the pinball table; zero and there is no table. */
     int flipper_odds = default_flipper_odds;
     /* Words that hit the table for certain, whatever the odds say. */
     std::vector<std::string> flipper_words;
+    /* How many targets one hit sets off: the ball bounces on. */
+    int flipper_chain = default_flipper_chain;
     /* Words that win or lose palle for whoever says them, and how much is at stake. */
     std::vector<std::string> lucky_words;
     int lucky_swing = default_lucky_swing;
