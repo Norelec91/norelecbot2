@@ -3,6 +3,7 @@
 #include "game.hpp"
 #include "commands.hpp"
 #include "game.hpp"
+#include "quiz.hpp"
 #include "virus.hpp"
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
@@ -704,7 +705,7 @@ TEST_CASE("the five games answer to whatever gets written") {
 
     SUBCASE("the race goes to whoever speaks first") {
         std::optional<GameOpened> opened;
-        for (int tries = 0; tries < 40 && (!opened || opened->kind != Game::race); ++tries) {
+        for (int tries = 0; tries < 400 && (!opened || opened->kind != Game::race); ++tries) {
             static_cast<void>(game_close(storage, seconds_now_for_test() + 100000));
             opened = game_open(storage, seconds_now_for_test(), 600, 5000);
         }
@@ -722,7 +723,7 @@ TEST_CASE("the five games answer to whatever gets written") {
 
     SUBCASE("the number has to be the right one") {
         std::optional<GameOpened> opened;
-        for (int tries = 0; tries < 40 && (!opened || opened->kind != Game::guess); ++tries) {
+        for (int tries = 0; tries < 400 && (!opened || opened->kind != Game::guess); ++tries) {
             static_cast<void>(game_close(storage, seconds_now_for_test() + 100000));
             opened = game_open(storage, seconds_now_for_test(), 600, 5000);
         }
@@ -791,7 +792,7 @@ TEST_CASE("the quiet pays everybody, and whoever breaks it pays") {
 
     const auto open_silence = [&] {
         std::optional<GameOpened> opened;
-        for (int tries = 0; tries < 60 && (!opened || opened->kind != Game::silence); ++tries) {
+        for (int tries = 0; tries < 400 && (!opened || opened->kind != Game::silence); ++tries) {
             static_cast<void>(game_close(storage, seconds_now_for_test() + 100000));
             opened = game_open(storage, seconds_now_for_test(), 600, 1000);
         }
@@ -824,5 +825,80 @@ TEST_CASE("the quiet pays everybody, and whoever breaks it pays") {
     CHECK(broken->secret == 0);
     /* And nobody was paid for a silence that was not kept. */
     CHECK(conquister_user(storage, "bob")->score == 11000);
+}
+
+TEST_CASE("the games that need a head, not a fast finger") {
+    const TestPaths paths{"quiz-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":10000,"bob":10000},"quotes_added":{}})";
+    }
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{config.conquister_path, config.quotes_path};
+
+    const CommandContext context{
+        .storage = storage,
+        .config = config,
+        .user_id = 1,
+        .username = "alice",
+        .claims_allowed = true,
+        .owner = false,
+        .whisper = {},
+    };
+    const auto said = [&](std::string_view text) { return command_dispatch(context, text); };
+    const auto open_kind = [&](Game wanted) {
+        std::optional<GameOpened> opened;
+        for (int tries = 0; tries < 400 && (!opened || opened->kind != wanted); ++tries) {
+            static_cast<void>(game_close(storage, seconds_now_for_test() + 100000));
+            opened = game_open(storage, seconds_now_for_test(), 600, 5000);
+        }
+        REQUIRE(opened);
+        REQUIRE(opened->kind == wanted);
+        return *opened;
+    };
+
+    SUBCASE("a question has one right answer") {
+        const GameOpened opened = open_kind(Game::quiz);
+        const Question &question = questions.at(static_cast<std::size_t>(opened.secret));
+        CHECK(game_opened_reply(opened).contains(question.asked));
+        CHECK_FALSE(said("boh").has_value());
+        const std::optional<std::string> right = said(std::format("direi {}", question.answer));
+        REQUIRE(right);
+        CHECK(right->contains("ha risposto giusto"));
+    }
+
+    SUBCASE("an anagram is given away by its own letters") {
+        const GameOpened opened = open_kind(Game::anagram);
+        const std::string_view word = anagrams.at(static_cast<std::size_t>(opened.secret));
+        std::string scrambled{word};
+        std::ranges::sort(scrambled);
+        CHECK(game_opened_reply(opened).contains(scrambled));
+        const std::optional<std::string> solved = said(std::format("è {}", word));
+        REQUIRE(solved);
+        CHECK(solved->contains("ha sciolto l'anagramma"));
+    }
+
+    SUBCASE("counting to twenty is harder than it looks") {
+        static_cast<void>(open_kind(Game::counting));
+        const std::optional<std::string> first = said("1");
+        REQUIRE(first);
+        CHECK(first->contains("Avanti il prossimo"));
+        /* The games opened while looking for this one may have paid her, so compare with just before. */
+        const std::int64_t before = conquister_user(storage, "alice")->score;
+        const std::optional<std::string> wrong = said("7");
+        REQUIRE(wrong);
+        CHECK(wrong->contains("ha sbagliato numero"));
+        CHECK(conquister_user(storage, "alice")->score < before);
+    }
+
+    SUBCASE("the one being thought of is one of the players") {
+        const GameOpened opened = open_kind(Game::whois);
+        CHECK_FALSE(opened.target.empty());
+        const std::optional<std::string> named = said(std::format("dico {}", opened.target));
+        REQUIRE(named);
+        CHECK(named->contains("l'ha indovinato"));
+    }
 }
 

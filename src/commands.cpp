@@ -3,6 +3,7 @@
 #include "game.hpp"
 #include "mishaps.hpp"
 #include "position.hpp"
+#include "quiz.hpp"
 #include "text.hpp"
 #include "virus.hpp"
 #include "zodiac.hpp"
@@ -954,6 +955,38 @@ std::string game_opened_reply(const GameOpened &opened) {
             "🤫 SILENZIO: se nessuno scrive fino alla chiusura, {} palle a testa per tutti. Il primo che parla paga.",
             opened.pot
         );
+    case Game::quiz:
+        return std::format(
+            "❓ DOMANDA: {} Chi risponde per primo si prende {} palle.",
+            questions.at(static_cast<std::size_t>(opened.secret)).asked,
+            opened.pot
+        );
+    case Game::anagram: {
+        std::string scrambled{anagrams.at(static_cast<std::size_t>(opened.secret))};
+        std::ranges::sort(scrambled);
+        return std::format(
+            "🔤 ANAGRAMMA: {} — chi trova la parola si prende {} palle.",
+            scrambled,
+            opened.pot
+        );
+    }
+    case Game::chain:
+        return std::format(
+            "🔗 CATENA: si scrive a turno, ogni messaggio comincia con la lettera con cui finisce il "
+            "precedente. Si parte dalla {}. Chi sbaglia paga un decimo.",
+            static_cast<char>(opened.secret)
+        );
+    case Game::counting:
+        return std::format(
+            "🔢 CONTA: arriviamo a 20 uno alla volta. Chi sbaglia numero paga un decimo, chi dice 20 "
+            "si prende {} palle.",
+            opened.pot
+        );
+    case Game::whois:
+        return std::format(
+            "🕵️ INDOVINA CHI: penso a un giocatore di questo gruppo. Chi scrive il suo nome si prende {} palle.",
+            opened.pot
+        );
     }
     return {};
 }
@@ -989,6 +1022,22 @@ std::string game_closed_reply(const GameClosed &closed) {
         return closed.secret > 0
             ? std::format("🤫 Silenzio rispettato: {} palle a testa per tutti e {}.", closed.pot, closed.secret)
             : std::string{"🤫 Silenzio rotto, niente per nessuno."};
+    case Game::quiz:
+        return std::format(
+            "❓ Tempo scaduto, la risposta era: {}.",
+            questions.at(static_cast<std::size_t>(closed.secret)).answer
+        );
+    case Game::anagram:
+        return std::format(
+            "🔤 Tempo scaduto, la parola era: {}.",
+            anagrams.at(static_cast<std::size_t>(closed.secret))
+        );
+    case Game::chain:
+        return "🔗 La catena si è fermata da sola.";
+    case Game::counting:
+        return "🔢 Non siamo arrivati a 20. Come al solito.";
+    case Game::whois:
+        return closed.winner.empty() ? std::string{"🕵️ Nessuno l'ha indovinato."} : std::string{};
     }
     return {};
 }
@@ -1346,6 +1395,27 @@ std::optional<std::string> game_reply(const CommandContext &context, std::string
         return std::format("📏 {} passa in testa con {} lettere.", played->player, played->number);
     case Game::silence:
         return std::format("🤫 {} ha parlato per primo e paga {} palle.", played->player, played->palle);
+    case Game::quiz:
+        return std::format("❓ {} ha risposto giusto e si prende {} palle.", played->player, played->palle);
+    case Game::anagram:
+        return std::format("🔤 {} ha sciolto l'anagramma e si prende {} palle.", played->player, played->palle);
+    case Game::chain:
+        return played->palle > 0
+            ? std::format(
+                  "🔗 {} ha sbagliato lettera e paga {} palle. Catena rotta.",
+                  played->player,
+                  played->palle
+              )
+            : std::format("🔗 {} tiene la catena: la prossima comincia per {}.", played->player,
+                          static_cast<char>(played->number));
+    case Game::counting:
+        return played->palle > 0 && played->number >= 20
+            ? std::format("🔢 {} ha detto 20 e si prende {} palle.", played->player, played->palle)
+            : (played->palle > 0
+                   ? std::format("🔢 {} ha sbagliato numero e paga {} palle.", played->player, played->palle)
+                   : std::format("🔢 {}. Avanti il prossimo.", played->number));
+    case Game::whois:
+        return std::format("🕵️ {} l'ha indovinato e si prende {} palle.", played->player, played->palle);
     }
     return std::nullopt;
 }

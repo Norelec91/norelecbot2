@@ -2,6 +2,7 @@
 
 #include "logging.hpp"
 #include "mishaps.hpp"
+#include "quiz.hpp"
 #include "position.hpp"
 #include "text.hpp"
 #include "zodiac.hpp"
@@ -468,7 +469,7 @@ std::optional<GameOpened> game_open(Storage &storage, std::int64_t now, std::int
                 return std::nullopt;
             }
             GameOpened opened;
-            opened.kind = static_cast<Game>(session.random_index(7));
+            opened.kind = static_cast<Game>(session.random_index(12));
             opened.closes = now + open_for;
             opened.pot = pot;
             switch (opened.kind) {
@@ -481,6 +482,33 @@ std::optional<GameOpened> game_open(Storage &storage, std::int64_t now, std::int
             case Game::sequence:
                 opened.secret = 100 + static_cast<std::int64_t>(session.random_index(900));
                 break;
+            case Game::quiz:
+                opened.secret = static_cast<std::int64_t>(session.random_index(questions.size()));
+                break;
+            case Game::anagram:
+                opened.secret = static_cast<std::int64_t>(session.random_index(anagrams.size()));
+                break;
+            case Game::chain:
+                /* The letter everybody has to start from, drawn among the easy ones. */
+                opened.secret = static_cast<std::int64_t>(static_cast<unsigned char>(
+                    std::string_view{"abcdelmnoprst"}.at(session.random_index(13))
+                ));
+                state.challenge["letter"] = opened.secret;
+                break;
+            case Game::counting:
+                opened.secret = 1;
+                state.challenge["count"] = 0;
+                break;
+            case Game::whois: {
+                if (state.scores.empty()) {
+                    return std::nullopt;
+                }
+                const std::size_t which = session.random_index(state.scores.size());
+                opened.target =
+                    std::next(state.scores.begin(), static_cast<std::ptrdiff_t>(which))->first;
+                state.challenge_who["target"] = opened.target;
+                break;
+            }
             case Game::race:
             case Game::auction:
             case Game::longest:
@@ -587,6 +615,82 @@ std::optional<GamePlayed> game_play(
             state.scores[username] = counter(state.scores, username) - played.palle;
             state.challenge_who["leader"] = username;
             break;
+        case Game::quiz: {
+            if (!text::contains_ignore_case(message, questions.at(static_cast<std::size_t>(secret)).answer)) {
+                return std::nullopt;
+            }
+            played.decided = true;
+            played.player = username;
+            played.palle = counter(state.challenge, "pot");
+            state.scores[username] = counter(state.scores, username) + played.palle;
+            break;
+        }
+        case Game::anagram: {
+            if (!text::contains_ignore_case(message, anagrams.at(static_cast<std::size_t>(secret)))) {
+                return std::nullopt;
+            }
+            played.decided = true;
+            played.player = username;
+            played.palle = counter(state.challenge, "pot");
+            state.scores[username] = counter(state.scores, username) + played.palle;
+            break;
+        }
+        case Game::chain: {
+            const std::string_view trimmed = text::trim(message);
+            if (trimmed.empty()) {
+                return std::nullopt;
+            }
+            const std::int64_t wanted = counter(state.challenge, "letter");
+            const std::int64_t first = std::tolower(static_cast<unsigned char>(trimmed.front()));
+            played.player = username;
+            played.number = wanted;
+            if (first != wanted) {
+                played.decided = true;
+                played.palle = counter(state.scores, username) / 10;
+                state.scores[username] = counter(state.scores, username) - played.palle;
+                break;
+            }
+            /* The next word has to start where this one ended. */
+            const std::size_t end = std::min(trimmed.find(' '), trimmed.size());
+            state.challenge["letter"] =
+                std::tolower(static_cast<unsigned char>(trimmed.at(end - 1)));
+            state.challenge["bid"] = counter(state.challenge, "bid") + 1;
+            played.number = counter(state.challenge, "letter");
+            break;
+        }
+        case Game::counting: {
+            const std::int64_t said = number_in(message);
+            if (said < 0) {
+                return std::nullopt;
+            }
+            const std::int64_t wanted = counter(state.challenge, "count") + 1;
+            played.player = username;
+            played.number = wanted;
+            if (said != wanted) {
+                played.decided = true;
+                played.palle = counter(state.scores, username) / 10;
+                state.scores[username] = counter(state.scores, username) - played.palle;
+                break;
+            }
+            state.challenge["count"] = wanted;
+            if (wanted >= 20) {
+                played.decided = true;
+                played.palle = counter(state.challenge, "pot");
+                state.scores[username] = counter(state.scores, username) + played.palle;
+            }
+            break;
+        }
+        case Game::whois: {
+            const auto target = state.challenge_who.find("target");
+            if (target == state.challenge_who.end() || !text::contains_ignore_case(message, target->second)) {
+                return std::nullopt;
+            }
+            played.decided = true;
+            played.player = username;
+            played.palle = counter(state.challenge, "pot");
+            state.scores[username] = counter(state.scores, username) + played.palle;
+            break;
+        }
         case Game::forbidden: {
             const std::string_view word = forbidden_words.at(static_cast<std::size_t>(secret));
             if (!text::contains_ignore_case(message, word)) {

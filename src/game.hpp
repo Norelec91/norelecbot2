@@ -254,10 +254,12 @@ struct TaxResult {
 };
 
 /* The four games the bot opens by itself, and the duel a player starts by asking for it. */
-enum class Game { race, guess, auction, forbidden, sequence, longest, silence };
+enum class Game { race, guess, auction, forbidden, sequence, longest, silence, quiz, anagram, chain, counting, whois };
 
 struct GameOpened {
     Game kind = Game::race;
+    /* The player the group has to name, for the game that asks who. */
+    std::string target;
     std::int64_t secret = 0;
     std::int64_t pot = 0;
     std::int64_t closes = 0;
