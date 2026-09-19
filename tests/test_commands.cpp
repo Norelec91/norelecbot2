@@ -10,9 +10,11 @@
 #include <doctest/doctest.h>
 
 #include <filesystem>
+#include <cctype>
 #include <chrono>
 #include <fstream>
 #include <map>
+#include <vector>
 
 using namespace norelecbot;
 
@@ -850,7 +852,7 @@ TEST_CASE("the games that need a head, not a fast finger") {
     const auto said = [&](std::string_view text) { return command_dispatch(context, text); };
     const auto open_kind = [&](Game wanted) {
         std::optional<GameOpened> opened;
-        for (int tries = 0; tries < 400 && (!opened || opened->kind != wanted); ++tries) {
+        for (int tries = 0; tries < 800 && (!opened || opened->kind != wanted); ++tries) {
             static_cast<void>(game_close(storage, seconds_now_for_test() + 100000));
             opened = game_open(storage, seconds_now_for_test(), 600, 5000);
         }
@@ -979,3 +981,130 @@ TEST_CASE("the games that need a head, not a fast finger") {
     }
 }
 
+
+TEST_CASE("the twenty that came after") {
+    const TestPaths paths{"more-games-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":10000,"bob":10000},"quotes_added":{}})";
+    }
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{config.conquister_path, config.quotes_path};
+
+    const CommandContext context{
+        .storage = storage,
+        .config = config,
+        .user_id = 1,
+        .username = "alice",
+        .claims_allowed = true,
+        .owner = false,
+        .whisper = {},
+    };
+    const auto said = [&](std::string_view text) { return command_dispatch(context, text); };
+    /* Each game answers to its own name, so there is no need to keep drawing until it turns up. */
+    const auto open_named = [&](std::string_view name, std::string_view word) {
+        static_cast<void>(game_close(storage, seconds_now_for_test() + 100000));
+        const std::optional<std::string> opened = said(word);
+        REQUIRE(opened);
+        CHECK(opened->contains(name));
+        return *opened;
+    };
+
+    SUBCASE("a name is a name wherever it sits in the sentence") {
+        CHECK(game_named("facciamo un calcolo") == std::optional<Game>{Game::maths});
+        CHECK(game_named("niente di che") == std::nullopt);
+        /* L'articolo attaccato alla parola non la nasconde. */
+        CHECK(game_named("vai con l'impiccato") == std::optional<Game>{Game::hangman});
+        const std::optional<GameOpened> opened =
+            game_open(storage, seconds_now_for_test(), 600, 5000, Game::maths);
+        REQUIRE(opened);
+        CHECK(opened->kind == Game::maths);
+    }
+
+    SUBCASE("the sum is a number said out loud") {
+        const std::string opened = open_named("CALCOLO", "facciamo un calcolo");
+        /* The announcement carries the two numbers, so the answer can be worked out from it. */
+        const std::size_t at = opened.find("quanto fa ");
+        REQUIRE(at != std::string::npos);
+        std::vector<std::int64_t> numbers;
+        std::int64_t current = 0;
+        bool reading = false;
+        for (const char character : std::string_view{opened}.substr(at)) {
+            if (std::isdigit(static_cast<unsigned char>(character)) != 0) {
+                current = current * 10 + (character - '0');
+                reading = true;
+            } else if (reading) {
+                numbers.push_back(current);
+                current = 0;
+                reading = false;
+            }
+        }
+        REQUIRE(numbers.size() >= 2);
+        const std::int64_t first = numbers.at(0);
+        const std::int64_t second = numbers.at(1);
+        CHECK_FALSE(said(std::format("dico {}", first + second + 1)).has_value());
+        const std::optional<std::string> right = said(std::format("fa {}", first + second));
+        REQUIRE(right);
+        CHECK(right->contains("ha fatto il conto"));
+    }
+
+    SUBCASE("a palindrome reads the same both ways") {
+        open_named("PALINDROMO", "dai, palindromo");
+        CHECK_FALSE(said("buonasera a tutti").has_value());
+        const std::optional<std::string> found = said("i topi non avevano nipoti");
+        REQUIRE(found);
+        CHECK(found->contains("si legge uguale"));
+    }
+
+    SUBCASE("going over the sum costs a tenth") {
+        open_named("SOMMA", "proviamo la somma");
+        const std::optional<std::string> over = said("1000");
+        REQUIRE(over);
+        CHECK(over->contains("sfora"));
+    }
+
+    SUBCASE("the hanged word gives up one letter at a time") {
+        const std::string opened = open_named("IMPICCATO", "vai con l'impiccato");
+        CHECK(opened.contains("-----"));
+        /* A letter that is in the word uncovers it; one that is not says nothing. */
+        std::optional<std::string> uncovered;
+        for (const char letter : std::string_view{"abcdefghilmnopqrstuvz"}) {
+            uncovered = said(std::string{letter});
+            if (uncovered) {
+                break;
+            }
+        }
+        REQUIRE(uncovered);
+        CHECK(uncovered->contains("alice"));
+    }
+
+    SUBCASE("warm and cold, until the number turns up") {
+        open_named("CALDO", "giochiamo a caldo");
+        const std::optional<std::string> guess = said("50");
+        REQUIRE(guess);
+        const bool told =
+            guess->contains("fuochissimo") || guess->contains("caldo") ||
+            guess->contains("tiepido") || guess->contains("gelo") || guess->contains("si prende");
+        CHECK(told);
+    }
+
+    SUBCASE("three letters have to be in the same word") {
+        const std::string opened = open_named("LETTERE", "facciamo lettere");
+        const std::size_t at = opened.find("lettere ");
+        REQUIRE(at != std::string::npos);
+        CHECK_FALSE(said("no").has_value());
+    }
+
+    SUBCASE("the copied string has to be identical") {
+        const std::string opened = open_named("COPIA", "dai, copia");
+        const std::size_t at = opened.find("⌨️ COPIA: ");
+        REQUIRE(at != std::string::npos);
+        const std::string code = opened.substr(at + std::string_view{"⌨️ COPIA: "}.size(), 6);
+        CHECK_FALSE(said("questo non è il codice").has_value());
+        const std::optional<std::string> copied = said(std::format("ecco: {}", code));
+        REQUIRE(copied);
+        CHECK(copied->contains("ha copiato"));
+    }
+}

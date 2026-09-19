@@ -1015,6 +1015,120 @@ std::string game_opened_reply(const GameOpened &opened) {
             "🃏 CARTA ALTA: si pesca scrivendo, una carta a testa. La più alta alla chiusura vale {} palle.",
             opened.pot
         );
+    case Game::maths:
+        return std::format(
+            "🧮 CALCOLO: quanto fa {}? Il primo che lo dice si prende {} palle.",
+            opened.target,
+            opened.pot
+        );
+    case Game::countdown:
+        return std::format(
+            "⏳ ROVESCIO: da 20 a 1, uno alla volta. Chi sbaglia numero paga un decimo, chi dice 1 si "
+            "prende {} palle.",
+            opened.pot
+        );
+    case Game::capital:
+        return std::format(
+            "🌍 CAPITALE: qual è la capitale del {}? Vale {} palle.",
+            capitals.at(static_cast<std::size_t>(opened.secret)).asked,
+            opened.pot
+        );
+    case Game::emoji:
+        return std::format(
+            "😀 EMOJI: {} — chi scrive la parola si prende {} palle.",
+            emojis.at(static_cast<std::size_t>(opened.secret)).asked,
+            opened.pot
+        );
+    case Game::acrostic:
+        return std::format(
+            "🅰️ ACROSTICO: una frase di almeno quattro parole che cominciano tutte per {}. Vale {} palle.",
+            static_cast<char>(opened.secret),
+            opened.pot
+        );
+    case Game::novowels:
+        return std::format(
+            "🚫 VOCALI: scrivete almeno dieci lettere senza usarne una sola. {} palle a chi ci riesce.",
+            opened.pot
+        );
+    case Game::palindrome:
+        return std::format(
+            "🔄 PALINDROMO: una frase che si legge uguale da destra, almeno cinque lettere. {} palle.",
+            opened.pot
+        );
+    case Game::shortest:
+        return std::format(
+            "🐜 CORTA: vince la parola più corta scritta entro la chiusura, minimo due lettere: {} palle.",
+            opened.pot
+        );
+    case Game::river:
+        return std::format(
+            "📜 FIUME: vince il messaggio con più parole alla chiusura. In palio {} palle.",
+            opened.pot
+        );
+    case Game::sum:
+        return std::format(
+            "➕ SOMMA: si aggiungono numeri fino ad arrivare esattamente a {}. Chi sfora paga un decimo, "
+            "chi centra si prende {} palle.",
+            opened.secret,
+            opened.pot
+        );
+    case Game::year:
+        return std::format(
+            "📅 ANNO: in che anno è successo {}? Vale {} palle.",
+            years.at(static_cast<std::size_t>(opened.secret)).asked,
+            opened.pot
+        );
+    case Game::proverb:
+        return std::format(
+            "📖 PROVERBIO: «{}...» — chi lo finisce si prende {} palle.",
+            proverbs.at(static_cast<std::size_t>(opened.secret)).asked,
+            opened.pot
+        );
+    case Game::roulette:
+        return std::format(
+            "🎡 ROULETTE: scrivete un numero da 1 a 10, la ruota gira subito. Se esce il vostro, {} palle.",
+            opened.pot
+        );
+    case Game::hangman:
+        return std::format(
+            "🪢 IMPICCATO: {} — una lettera alla volta, e chi indovina la parola si prende {} palle.",
+            std::string(std::string_view{mirrors.at(static_cast<std::size_t>(opened.secret))}.size(), '-'),
+            opened.pot
+        );
+    case Game::colour:
+        return std::format(
+            "🎨 COLORE: sto pensando a un colore. Chi lo indovina si prende {} palle.",
+            opened.pot
+        );
+    case Game::animal:
+        return std::format(
+            "🐘 ANIMALE: {}. Chi è? Vale {} palle.",
+            animals.at(static_cast<std::size_t>(opened.secret)).asked,
+            opened.pot
+        );
+    case Game::copy:
+        return std::format(
+            "⌨️ COPIA: {} — il primo che lo riscrive identico si prende {} palle.",
+            opened.target,
+            opened.pot
+        );
+    case Game::alphabet:
+        return std::format(
+            "🔠 ALFABETO: da A a J, ogni messaggio comincia con la lettera dopo. Chi sbaglia paga un "
+            "decimo, chi chiude si prende {} palle.",
+            opened.pot
+        );
+    case Game::hotcold:
+        return std::format(
+            "🌡️ CALDO: numero fra 1 e 100, vi dico solo se scotta. {} palle a chi lo trova.",
+            opened.pot
+        );
+    case Game::letters:
+        return std::format(
+            "🔡 LETTERE: una parola che contenga tutte e tre le lettere {}. Vale {} palle.",
+            triples.at(static_cast<std::size_t>(opened.secret)),
+            opened.pot
+        );
     }
     return {};
 }
@@ -1096,6 +1210,84 @@ std::string game_closed_reply(const GameClosed &closed) {
                   closed.secret,
                   closed.pot
               );
+    case Game::maths:
+        return std::format("🧮 Tempo scaduto: faceva {}.", closed.secret);
+    case Game::countdown:
+        return "⏳ Non siamo arrivati a 1. Il conto alla rovescia si è perso per strada.";
+    case Game::capital:
+        return std::format(
+            "🌍 Tempo scaduto, la capitale era {}.",
+            capitals.at(static_cast<std::size_t>(closed.secret)).answer
+        );
+    case Game::emoji:
+        return std::format(
+            "😀 Tempo scaduto, la parola era {}.",
+            emojis.at(static_cast<std::size_t>(closed.secret)).answer
+        );
+    case Game::acrostic:
+        return "🅰️ Nessuno ha messo in fila quattro parole con la stessa lettera.";
+    case Game::novowels:
+        return "🚫 Le vocali hanno resistito: nessuno è riuscito a farne a meno.";
+    case Game::palindrome:
+        return "🔄 Nessun palindromo. Il tempo scorre in una direzione sola.";
+    case Game::shortest:
+        return closed.winner.empty()
+            ? std::string{"🐜 Nessuna parola abbastanza corta."}
+            : std::format(
+                  "🐜 Ha vinto {} con una parola di {} lettere: {} palle.",
+                  closed.winner,
+                  closed.secret,
+                  closed.pot
+              );
+    case Game::river:
+        return closed.winner.empty()
+            ? std::string{"📜 Nessuno ha avuto niente da dire."}
+            : std::format(
+                  "📜 Ha vinto {} con {} parole in un fiato: {} palle.",
+                  closed.winner,
+                  closed.secret,
+                  closed.pot
+              );
+    case Game::sum:
+        return std::format("➕ Tempo scaduto: a {} non ci è arrivato nessuno.", closed.secret);
+    case Game::year:
+        return std::format(
+            "📅 Tempo scaduto, era il {}.",
+            years.at(static_cast<std::size_t>(closed.secret)).answer
+        );
+    case Game::proverb:
+        return std::format(
+            "📖 Tempo scaduto: «{}».",
+            proverbs.at(static_cast<std::size_t>(closed.secret)).answer
+        );
+    case Game::roulette:
+        return "🎡 La ruota si ferma da sola: nessuno ha puntato.";
+    case Game::hangman:
+        return std::format(
+            "🪢 Tempo scaduto, la parola era {}.",
+            mirrors.at(static_cast<std::size_t>(closed.secret))
+        );
+    case Game::colour:
+        return std::format(
+            "🎨 Tempo scaduto: pensavo al {}.",
+            colours.at(static_cast<std::size_t>(closed.secret))
+        );
+    case Game::animal:
+        return std::format(
+            "🐘 Tempo scaduto, era {}.",
+            animals.at(static_cast<std::size_t>(closed.secret)).answer
+        );
+    case Game::copy:
+        return "⌨️ Nessuno ha ricopiato niente. Comprensibile.";
+    case Game::alphabet:
+        return "🔠 L'alfabeto si è fermato prima della J.";
+    case Game::hotcold:
+        return std::format("🌡️ Tempo scaduto: il numero era {} e si è raffreddato.", closed.secret);
+    case Game::letters:
+        return std::format(
+            "🔡 Tempo scaduto: nessuna parola con {} dentro.",
+            triples.at(static_cast<std::size_t>(closed.secret))
+        );
     }
     return {};
 }
@@ -1489,6 +1681,76 @@ std::optional<std::string> game_reply(const CommandContext &context, std::string
         return std::format("👁️ {} dice {} ed è il più vicino per ora.", played->player, played->number);
     case Game::cards:
         return std::format("🃏 {} pesca un {}.", played->player, played->number);
+    case Game::maths:
+        return std::format("🧮 {} ha fatto il conto: {}. Si prende {} palle.", played->player, played->number, played->palle);
+    case Game::countdown:
+        return played->palle > 0 && played->number <= 1
+            ? std::format("⏳ {} ha detto 1 e si prende {} palle.", played->player, played->palle)
+            : (played->palle > 0
+                   ? std::format("⏳ {} ha sbagliato numero e paga {} palle.", played->player, played->palle)
+                   : std::format("⏳ {}. Si scende.", played->number));
+    case Game::capital:
+        return std::format("🌍 {} conosce la geografia e si prende {} palle.", played->player, played->palle);
+    case Game::emoji:
+        return std::format("😀 {} ha letto le faccine e si prende {} palle.", played->player, played->palle);
+    case Game::acrostic:
+        return std::format(
+            "🅰️ {} ne ha allineate {} di fila e si prende {} palle.",
+            played->player,
+            played->number,
+            played->palle
+        );
+    case Game::novowels:
+        return std::format("🚫 {} ha scritto {} lettere senza vocali: {} palle.", played->player, played->number, played->palle);
+    case Game::palindrome:
+        return std::format("🔄 {} ha scritto {} e si legge uguale: {} palle.", played->player, played->detail, played->palle);
+    case Game::shortest:
+        return std::format("🐜 {} scende a {} lettere.", played->player, played->number);
+    case Game::river:
+        return std::format("📜 {} passa in testa con {} parole.", played->player, played->number);
+    case Game::sum:
+        if (played->detail == "sforato") {
+            return std::format(
+                "➕ {} sfora con {} e paga {} palle.",
+                played->player,
+                played->number,
+                played->palle
+            );
+        }
+        if (played->detail == "centrato") {
+            return std::format("➕ {} centra la somma e si prende {} palle.", played->player, played->palle);
+        }
+        return std::format("➕ Siamo a {}.", played->number);
+    case Game::year:
+        return std::format("📅 {} si ricordava l'anno e si prende {} palle.", played->player, played->palle);
+    case Game::proverb:
+        return std::format("📖 {} l'ha finito come la nonna e si prende {} palle.", played->player, played->palle);
+    case Game::roulette:
+        return played->palle > 0
+            ? std::format("🎡 Esce il {}! {} si prende {} palle.", played->number, played->player, played->palle)
+            : std::format("🎡 Esce il {}: {} guarda la ruota fermarsi altrove.", played->number, played->player);
+    case Game::hangman:
+        return played->palle > 0
+            ? std::format("🪢 {} ha detto {} e si prende {} palle.", played->player, played->detail, played->palle)
+            : std::format("🪢 {}: {}", played->player, played->detail);
+    case Game::colour:
+        return std::format("🎨 {} ha indovinato il colore e si prende {} palle.", played->player, played->palle);
+    case Game::animal:
+        return std::format("🐘 {} ha riconosciuto la bestia e si prende {} palle.", played->player, played->palle);
+    case Game::copy:
+        return std::format("⌨️ {} ha copiato {} senza sbagliare: {} palle.", played->player, played->detail, played->palle);
+    case Game::alphabet:
+        return played->palle > 0 && played->number >= static_cast<std::int64_t>('j')
+            ? std::format("🔠 {} ha chiuso l'alfabeto e si prende {} palle.", played->player, played->palle)
+            : (played->palle > 0
+                   ? std::format("🔠 {} ha sbagliato lettera e paga {} palle.", played->player, played->palle)
+                   : std::format("🔠 {} passa alla {}.", played->player, static_cast<char>(played->number)));
+    case Game::hotcold:
+        return played->palle > 0
+            ? std::format("🌡️ {} ha trovato il {} e si prende {} palle.", played->player, played->number, played->palle)
+            : std::format("🌡️ {} dice {}: {}.", played->player, played->number, played->detail);
+    case Game::letters:
+        return std::format("🔡 {} ha trovato {} e si prende {} palle.", played->player, played->detail, played->palle);
     }
     return std::nullopt;
 }

@@ -272,6 +272,26 @@ enum class Game {
     target,
     closest,
     cards,
+    maths,
+    countdown,
+    capital,
+    emoji,
+    acrostic,
+    novowels,
+    palindrome,
+    shortest,
+    river,
+    sum,
+    year,
+    proverb,
+    roulette,
+    hangman,
+    colour,
+    animal,
+    copy,
+    alphabet,
+    hotcold,
+    letters,
 };
 
 struct GameOpened {
@@ -287,6 +307,8 @@ struct GamePlayed {
     Game kind = Game::race;
     bool decided = false;
     std::string player;
+    /* What the move left on the table: a word half uncovered, how warm the guess was. */
+    std::string detail;
     std::int64_t number = 0;
     std::int64_t palle = 0;
 };
