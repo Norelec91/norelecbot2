@@ -254,7 +254,7 @@ struct TaxResult {
 };
 
 /* The four games the bot opens by itself, and the duel a player starts by asking for it. */
-enum class Game { race, guess, auction, forbidden };
+enum class Game { race, guess, auction, forbidden, sequence, longest, silence };
 
 struct GameOpened {
     Game kind = Game::race;
@@ -277,6 +277,20 @@ struct GameClosed {
     std::int64_t pot = 0;
     std::int64_t secret = 0;
 };
+
+enum class Hand { rock, paper, scissors };
+
+struct HandResult {
+    bool played = false;
+    Hand mine = Hand::rock;
+    Hand theirs = Hand::rock;
+    int outcome = 0;
+    std::int64_t palle = 0;
+};
+
+/* Morra cinese against the bot, and odds and evens: both settle on the spot. */
+[[nodiscard]] HandResult play_hand(Storage &storage, const std::string &username, Hand hand);
+[[nodiscard]] HandResult play_parity(Storage &storage, const std::string &username, bool even, std::int64_t said);
 
 struct DuelResult {
     bool fought = false;

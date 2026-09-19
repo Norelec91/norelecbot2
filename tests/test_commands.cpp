@@ -739,3 +739,90 @@ TEST_CASE("the five games answer to whatever gets written") {
     }
 }
 
+TEST_CASE("morra and odds and evens settle on the spot") {
+    const TestPaths paths{"hands-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":20000},"quotes_added":{}})";
+    }
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{config.conquister_path, config.quotes_path};
+
+    const CommandContext context{
+        .storage = storage,
+        .config = config,
+        .user_id = 1,
+        .username = "alice",
+        .claims_allowed = true,
+        .owner = false,
+        .whisper = {},
+    };
+    const auto said = [&](std::string_view text) { return command_dispatch(context, text); };
+
+    const std::optional<std::string> morra = said("gioco sasso");
+    REQUIRE(morra);
+    CHECK(morra->starts_with("✊ "));
+    /* A fifth of a twentieth either way: nobody is ruined by a hand. */
+    const std::int64_t after_morra = conquister_user(storage, "alice")->score;
+    CHECK(after_morra >= 19000);
+    CHECK(after_morra <= 21000);
+
+    const std::optional<std::string> odds = said("dico pari 4");
+    REQUIRE(odds);
+    CHECK(odds->contains("ha detto pari e ha "));
+
+    const std::optional<std::string> evens = said("facciamo dispari 7");
+    REQUIRE(evens);
+    CHECK(evens->contains("ha detto dispari e ha "));
+}
+
+TEST_CASE("the quiet pays everybody, and whoever breaks it pays") {
+    const TestPaths paths{"silence-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":10000,"bob":10000},"quotes_added":{}})";
+    }
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{config.conquister_path, config.quotes_path};
+
+    const auto open_silence = [&] {
+        std::optional<GameOpened> opened;
+        for (int tries = 0; tries < 60 && (!opened || opened->kind != Game::silence); ++tries) {
+            static_cast<void>(game_close(storage, seconds_now_for_test() + 100000));
+            opened = game_open(storage, seconds_now_for_test(), 600, 1000);
+        }
+        return opened;
+    };
+
+    REQUIRE(open_silence());
+    const GameClosed kept = *game_close(storage, seconds_now_for_test() + 100000);
+    CHECK(kept.kind == Game::silence);
+    CHECK(kept.secret == 2);
+    CHECK(conquister_user(storage, "alice")->score == 11000);
+    CHECK(conquister_user(storage, "bob")->score == 11000);
+
+    REQUIRE(open_silence());
+    const CommandContext context{
+        .storage = storage,
+        .config = config,
+        .user_id = 1,
+        .username = "alice",
+        .claims_allowed = true,
+        .owner = false,
+        .whisper = {},
+    };
+    const std::optional<std::string> broke = command_dispatch(context, "ops");
+    REQUIRE(broke);
+    CHECK(broke->contains("ha parlato per primo e paga"));
+    CHECK(conquister_user(storage, "alice")->score < 11000);
+    const std::optional<GameClosed> broken = game_close(storage, seconds_now_for_test() + 100000);
+    REQUIRE(broken);
+    CHECK(broken->secret == 0);
+    /* And nobody was paid for a silence that was not kept. */
+    CHECK(conquister_user(storage, "bob")->score == 11000);
+}
+

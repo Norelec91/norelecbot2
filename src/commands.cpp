@@ -938,6 +938,22 @@ std::string game_opened_reply(const GameOpened &opened) {
         return "🔨 ASTA: si batte un palloncino. Si offre scrivendo un numero, vince l'offerta più alta.";
     case Game::forbidden:
         return "🤐 PAROLA PROIBITA: ne ho scelta una e non ve la dico. Chi la scrive paga un decimo di quello che ha.";
+    case Game::sequence:
+        return std::format(
+            "🧠 MEMORIA: il numero è {}. Il primo che me lo ripete si prende {} palle.",
+            opened.secret,
+            opened.pot
+        );
+    case Game::longest:
+        return std::format(
+            "📏 PAROLA PIÙ LUNGA: chi scrive la parola più lunga entro la chiusura si prende {} palle.",
+            opened.pot
+        );
+    case Game::silence:
+        return std::format(
+            "🤫 SILENZIO: se nessuno scrive fino alla chiusura, {} palle a testa per tutti. Il primo che parla paga.",
+            opened.pot
+        );
     }
     return {};
 }
@@ -958,6 +974,21 @@ std::string game_closed_reply(const GameClosed &closed) {
               );
     case Game::forbidden:
         return "🤐 Nessuno ha detto la parola proibita. Stavolta.";
+    case Game::sequence:
+        return std::format("🧠 Tempo scaduto: nessuno si ricordava che fosse {}.", closed.secret);
+    case Game::longest:
+        return closed.winner.empty()
+            ? std::string{"📏 Nessuna parola degna di nota."}
+            : std::format(
+                  "📏 Ha vinto {} con una parola di {} lettere: {} palle.",
+                  closed.winner,
+                  closed.secret,
+                  closed.pot
+              );
+    case Game::silence:
+        return closed.secret > 0
+            ? std::format("🤫 Silenzio rispettato: {} palle a testa per tutti e {}.", closed.pot, closed.secret)
+            : std::string{"🤫 Silenzio rotto, niente per nessuno."};
     }
     return {};
 }
@@ -1190,6 +1221,24 @@ bool repeated_word(std::string_view message) {
     return std::ranges::adjacent_find(words) != words.end();
 }
 
+/* The largest number written in a message, or -1 when there is none. */
+std::int64_t number_said(std::string_view message) {
+    std::int64_t found = -1;
+    std::int64_t current = 0;
+    bool reading = false;
+    for (const char character : message) {
+        if (std::isdigit(static_cast<unsigned char>(character)) != 0) {
+            current = std::min<std::int64_t>(current * 10 + (character - '0'), 1000000000);
+            reading = true;
+        } else if (reading) {
+            found = std::max(found, current);
+            current = 0;
+            reading = false;
+        }
+    }
+    return reading ? std::max(found, current) : found;
+}
+
 /* The seventeenth of the month, which around here is nobody's friend. */
 bool is_the_seventeenth(std::int64_t now) {
     const std::chrono::sys_seconds instant{std::chrono::seconds{now}};
@@ -1291,6 +1340,49 @@ std::optional<std::string> game_reply(const CommandContext &context, std::string
             played->player,
             played->palle
         );
+    case Game::sequence:
+        return std::format("🧠 {} se l'è ricordato: {} palle.", played->player, played->palle);
+    case Game::longest:
+        return std::format("📏 {} passa in testa con {} lettere.", played->player, played->number);
+    case Game::silence:
+        return std::format("🤫 {} ha parlato per primo e paga {} palle.", played->player, played->palle);
+    }
+    return std::nullopt;
+}
+
+/* Morra cinese e pari o dispari: si gioca dicendo la parola, e si chiude subito. */
+std::optional<std::string> hand_reply(const CommandContext &context, std::string_view lowered) {
+    if (context.username.empty() || !context.claims_allowed) {
+        return std::nullopt;
+    }
+    const std::string username{context.username};
+    const std::array<std::pair<std::string_view, Hand>, 3> hands{{
+        {"sasso", Hand::rock},
+        {"carta", Hand::paper},
+        {"forbice", Hand::scissors},
+    }};
+    for (const auto &[word, hand] : hands) {
+        if (!says_the_word(lowered, word)) {
+            continue;
+        }
+        const HandResult played = play_hand(context.storage, username, hand);
+        static constexpr std::array names{"sasso", "carta", "forbice"};
+        const std::string_view mine = names.at(static_cast<std::size_t>(played.theirs));
+        if (played.outcome == 0) {
+            return std::format("✊ {} contro {}: pareggio, tutto fermo.", word, mine);
+        }
+        return played.outcome > 0
+            ? std::format("✊ {} batte {}: {} vince {} palle.", word, mine, username, played.palle)
+            : std::format("✊ {} batte {}: {} perde {} palle.", mine, word, username, played.palle);
+    }
+
+    const bool even = says_the_word(lowered, "pari");
+    if (even || says_the_word(lowered, "dispari")) {
+        const std::int64_t said = std::max<std::int64_t>(number_said(lowered), 0);
+        const HandResult played = play_parity(context.storage, username, even, said);
+        return played.outcome > 0
+            ? std::format("🤞 {} ha detto {} e ha vinto {} palle.", username, even ? "pari" : "dispari", played.palle)
+            : std::format("🤞 {} ha detto {} e ha perso {} palle.", username, even ? "pari" : "dispari", played.palle);
     }
     return std::nullopt;
 }
@@ -1473,6 +1565,9 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
             };
             if (const std::optional<std::string> played = game_reply(context, message, seconds_now())) {
                 return with_ticket(played);
+            }
+            if (const std::optional<std::string> hand = hand_reply(context, lowered)) {
+                return with_ticket(hand);
             }
             if (const std::optional<std::string> fight = duel_reply(context, lowered)) {
                 return with_ticket(fight);

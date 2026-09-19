@@ -468,7 +468,7 @@ std::optional<GameOpened> game_open(Storage &storage, std::int64_t now, std::int
                 return std::nullopt;
             }
             GameOpened opened;
-            opened.kind = static_cast<Game>(session.random_index(4));
+            opened.kind = static_cast<Game>(session.random_index(7));
             opened.closes = now + open_for;
             opened.pot = pot;
             switch (opened.kind) {
@@ -478,8 +478,13 @@ std::optional<GameOpened> game_open(Storage &storage, std::int64_t now, std::int
             case Game::forbidden:
                 opened.secret = static_cast<std::int64_t>(session.random_index(forbidden_words.size()));
                 break;
+            case Game::sequence:
+                opened.secret = 100 + static_cast<std::int64_t>(session.random_index(900));
+                break;
             case Game::race:
             case Game::auction:
+            case Game::longest:
+            case Game::silence:
                 break;
             }
             state.challenge["kind"] = static_cast<std::int64_t>(opened.kind);
@@ -518,7 +523,6 @@ std::optional<GamePlayed> game_play(
             played.player = username;
             played.palle = counter(state.challenge, "pot");
             state.scores[username] = counter(state.scores, username) + played.palle;
-            state.challenge["closes"] = 0;
             break;
         case Game::guess: {
             const std::int64_t said = number_in(message);
@@ -533,7 +537,6 @@ std::optional<GamePlayed> game_play(
             played.player = username;
             played.palle = counter(state.challenge, "pot");
             state.scores[username] = counter(state.scores, username) + played.palle;
-            state.challenge["closes"] = 0;
             break;
         }
         case Game::auction: {
@@ -547,6 +550,43 @@ std::optional<GamePlayed> game_play(
             state.challenge_who["leader"] = username;
             break;
         }
+        case Game::sequence: {
+            if (number_in(message) != secret) {
+                return std::nullopt;
+            }
+            played.decided = true;
+            played.player = username;
+            played.number = secret;
+            played.palle = counter(state.challenge, "pot");
+            state.scores[username] = counter(state.scores, username) + played.palle;
+            state.challenge["closes"] = 0;
+            break;
+        }
+        case Game::longest: {
+            std::size_t longest = 0;
+            std::size_t at = 0;
+            while (at < message.size()) {
+                const std::size_t end = std::min(message.find(' ', at), message.size());
+                longest = std::max(longest, end - at);
+                at = end + 1;
+            }
+            if (static_cast<std::int64_t>(longest) <= counter(state.challenge, "bid")) {
+                return std::nullopt;
+            }
+            played.player = username;
+            played.number = static_cast<std::int64_t>(longest);
+            state.challenge["bid"] = played.number;
+            state.challenge_who["leader"] = username;
+            break;
+        }
+        case Game::silence:
+            /* Broken, but the closing round still has to say so. */
+            played.decided = false;
+            played.player = username;
+            played.palle = counter(state.scores, username) / 10;
+            state.scores[username] = counter(state.scores, username) - played.palle;
+            state.challenge_who["leader"] = username;
+            break;
         case Game::forbidden: {
             const std::string_view word = forbidden_words.at(static_cast<std::size_t>(secret));
             if (!text::contains_ignore_case(message, word)) {
@@ -556,9 +596,13 @@ std::optional<GamePlayed> game_play(
             played.player = username;
             played.palle = counter(state.scores, username) / 10;
             state.scores[username] = counter(state.scores, username) - played.palle;
-            state.challenge["closes"] = 0;
             break;
         }
+        }
+        if (played.decided) {
+            /* Settled there and then: nothing is left for the closing round to find. */
+            state.challenge.clear();
+            state.challenge_who.clear();
         }
         return played;
     });
@@ -576,6 +620,21 @@ std::optional<GameClosed> game_close(Storage &storage, std::int64_t now) {
             closed.kind = static_cast<Game>(counter(state.challenge, "kind"));
             closed.pot = counter(state.challenge, "pot");
             closed.secret = counter(state.challenge, "secret");
+            if (closed.kind == Game::longest) {
+                const auto leader = state.challenge_who.find("leader");
+                if (leader != state.challenge_who.end()) {
+                    closed.winner = leader->second;
+                    closed.secret = counter(state.challenge, "bid");
+                    state.scores[closed.winner] = counter(state.scores, closed.winner) + closed.pot;
+                }
+            }
+            if (closed.kind == Game::silence && state.challenge_who.find("leader") == state.challenge_who.end()) {
+                /* Nobody spoke: everybody is paid for the quiet. */
+                for (Counters::value_type &entry : state.scores) {
+                    entry.second += closed.pot;
+                }
+                closed.secret = static_cast<std::int64_t>(state.scores.size());
+            }
             if (closed.kind == Game::auction) {
                 const auto leader = state.challenge_who.find("leader");
                 if (leader != state.challenge_who.end()) {
@@ -596,6 +655,50 @@ std::optional<GameClosed> game_close(Storage &storage, std::int64_t now) {
     if (result) {
         log_info("game closed kind={} winner={}", static_cast<int>(result->kind), result->winner);
     }
+    return result;
+}
+
+HandResult play_hand(Storage &storage, const std::string &username, Hand hand) {
+    const HandResult result = storage.transaction([&](StorageSession &session) {
+        ConquisterState &state = session.state();
+        HandResult played;
+        played.played = true;
+        played.mine = hand;
+        played.theirs = static_cast<Hand>(session.random_index(3));
+        const int mine = static_cast<int>(hand);
+        const int theirs = static_cast<int>(played.theirs);
+        played.outcome = mine == theirs ? 0 : ((mine + 1) % 3 == theirs ? -1 : 1);
+        played.palle = counter(state.scores, username) / 20;
+        if (played.palle < 0) {
+            played.palle = 0;
+        }
+        state.scores[username] = counter(state.scores, username) + (played.outcome * played.palle);
+        return played;
+    });
+
+    log_info("hand user={} outcome={} palle={}", username, result.outcome, result.palle);
+    return result;
+}
+
+HandResult play_parity(Storage &storage, const std::string &username, bool even, std::int64_t said) {
+    const HandResult result = storage.transaction([&](StorageSession &session) {
+        ConquisterState &state = session.state();
+        HandResult played;
+        played.played = true;
+        const auto mine = static_cast<std::int64_t>(session.random_index(6)) + 1;
+        played.theirs = static_cast<Hand>(mine % 3);
+        const bool total_even = (said + mine) % 2 == 0;
+        played.outcome = total_even == even ? 1 : -1;
+        played.palle = counter(state.scores, username) / 20;
+        if (played.palle < 0) {
+            played.palle = 0;
+        }
+        played.mine = static_cast<Hand>(mine % 3);
+        state.scores[username] = counter(state.scores, username) + (played.outcome * played.palle);
+        return played;
+    });
+
+    log_info("parity user={} outcome={} palle={}", username, result.outcome, result.palle);
     return result;
 }
 
