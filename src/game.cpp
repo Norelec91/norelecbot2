@@ -10,6 +10,7 @@
 #include <iterator>
 #include <cmath>
 #include <limits>
+#include <numeric>
 #include <ranges>
 #include <utility>
 
@@ -505,6 +506,36 @@ std::optional<LotteryDraw> lottery_draw(Storage &storage, std::int64_t now) {
     return result;
 }
 
+std::string domino(Storage &storage, const std::string &username, std::int64_t palle) {
+    return storage.transaction([&username, palle](StorageSession &session) {
+        ConquisterState &state = session.state();
+        std::vector<std::pair<std::string, std::int64_t>> ranked(state.scores.begin(), state.scores.end());
+        std::ranges::sort(ranked, ranks_before);
+        const auto mine = std::ranges::find_if(ranked, [&username](const auto &entry) {
+            return entry.first == username;
+        });
+        if (mine == ranked.end() || mine == ranked.begin()) {
+            return std::string{};
+        }
+        const std::string above = std::prev(mine)->first;
+        state.scores[above] = counter(state.scores, above) + palle;
+        return above;
+    });
+}
+
+bool is_last(Storage &storage, const std::string &username) {
+    return storage.transaction([&username](StorageSession &session) {
+        const ConquisterState &state = session.state();
+        if (state.scores.size() < 2) {
+            return false;
+        }
+        const auto lowest = std::ranges::min_element(state.scores, [](const auto &a, const auto &b) {
+            return a.second < b.second;
+        });
+        return lowest != state.scores.end() && lowest->first == username;
+    });
+}
+
 void mark_target(Storage &storage, const std::string &username, std::int64_t now) {
     storage.transaction([&username, now](StorageSession &session) {
         session.state().marked[username] = now;
@@ -541,7 +572,7 @@ std::optional<HappeningResult> happening_strike(Storage &storage, std::int64_t n
                 return std::nullopt;
             }
             HappeningResult happened;
-            happened.what = static_cast<Happening>(session.random_index(8));
+            happened.what = static_cast<Happening>(session.random_index(14));
             switch (happened.what) {
             case Happening::earthquake:
                 state.ids.clear();
@@ -598,6 +629,78 @@ std::optional<HappeningResult> happening_strike(Storage &storage, std::int64_t n
                 happened.players = genuine ? 1 : 0;
                 break;
             }
+            case Happening::twinning: {
+                if (state.scores.size() < 2) {
+                    return std::nullopt;
+                }
+                const std::size_t first = session.random_index(state.scores.size());
+                std::size_t second = session.random_index(state.scores.size());
+                if (second == first) {
+                    second = (first + 1) % state.scores.size();
+                }
+                const auto one = std::next(state.scores.begin(), static_cast<std::ptrdiff_t>(first));
+                const auto other = std::next(state.scores.begin(), static_cast<std::ptrdiff_t>(second));
+                std::swap(one->second, other->second);
+                happened.player = one->first;
+                happened.palle = other->second;
+                happened.players = 2;
+                break;
+            }
+            case Happening::mirror: {
+                std::vector<std::int64_t> values;
+                std::ranges::transform(state.scores, std::back_inserter(values), [](const auto &entry) {
+                    return entry.second;
+                });
+                std::ranges::sort(values);
+                std::vector<std::pair<std::string, std::int64_t>> ranked(state.scores.begin(), state.scores.end());
+                std::ranges::sort(ranked, ranks_before);
+                for (std::size_t which = 0; which < ranked.size(); ++which) {
+                    state.scores[ranked[which].first] = values.at(which);
+                }
+                happened.players = ranked.size();
+                break;
+            }
+            case Happening::luxury_tax: {
+                const std::int64_t total = std::accumulate(
+                    state.scores.begin(),
+                    state.scores.end(),
+                    std::int64_t{0},
+                    [](std::int64_t so_far, const Counters::value_type &entry) {
+                        return so_far + entry.second;
+                    }
+                );
+                const std::int64_t average = total / static_cast<std::int64_t>(state.scores.size());
+                for (Counters::value_type &entry : state.scores) {
+                    if (entry.second > average) {
+                        const std::int64_t due = (entry.second - average) / 20;
+                        entry.second -= due;
+                        happened.palle += due;
+                        happened.players += 1;
+                    }
+                }
+                break;
+            }
+            case Happening::daylight_saving:
+                happened.palle = 3600;
+                for (Counters::value_type &entry : state.scores) {
+                    entry.second += happened.palle;
+                }
+                happened.players = state.scores.size();
+                break;
+            case Happening::strike:
+                for (Raid &raid : state.raids) {
+                    raid.arrive = std::min(raid.arrive, now);
+                    raid.back = std::min(raid.back, now);
+                }
+                happened.players = state.raids.size();
+                break;
+            case Happening::rounding:
+                for (Counters::value_type &entry : state.scores) {
+                    const std::int64_t rest = ((entry.second % 1000) + 1000) % 1000;
+                    entry.second += rest >= 500 ? 1000 - rest : -rest;
+                }
+                happened.players = state.scores.size();
+                break;
             case Happening::famine:
                 happened.player = someone(session, state);
                 if (happened.player.empty()) {
@@ -608,7 +711,6 @@ std::optional<HappeningResult> happening_strike(Storage &storage, std::int64_t n
                 state.shields.erase(happened.player);
                 break;
             }
-            static_cast<void>(now);
             return happened;
         });
 

@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <array>
+#include <numeric>
 #include <cctype>
 #include <chrono>
 #include <exception>
@@ -957,6 +958,28 @@ std::string happening_reply(const HappeningResult &what) {
                   what.palle,
                   what.player
               );
+    case Happening::twinning:
+        return std::format(
+            "👯 GEMELLAGGIO: {} e un altro si sono scambiati il portafoglio senza accorgersene.",
+            what.player
+        );
+    case Happening::mirror:
+        return std::format("🪞 SPECCHIO: la classifica si è ribaltata, tutti e {} al contrario.", what.players);
+    case Happening::luxury_tax:
+        return std::format(
+            "💎 TASSA SUL LUSSO: {} palle prelevate a {} giocatori sopra la media.",
+            what.palle,
+            what.players
+        );
+    case Happening::daylight_saving:
+        return std::format("🕐 ORA LEGALE: un'ora regalata a tutti, {} palle a testa.", what.palle);
+    case Happening::strike:
+        return std::format(
+            "🚏 SCIOPERO DEI TRASPORTI: {} viaggi in corso sono finiti tutti insieme, dove capitava.",
+            what.players
+        );
+    case Happening::rounding:
+        return std::format("🧾 ARROTONDAMENTO: le palle di tutti e {} finiscono in tre zeri.", what.players);
     case Happening::famine:
         return std::format(
             "🍽️ CARITATEVOLE CARESTIA per {}: palloncino e boost spariti, resta solo la buona volontà.",
@@ -1115,6 +1138,28 @@ std::optional<std::string> lucky_word_reply(const CommandContext &context, std::
 }
 
 /* The pinball table under the chat: now and then a message hits a bumper. */
+/* A word said twice in the same message. */
+bool repeated_word(std::string_view message) {
+    std::vector<std::string_view> words;
+    std::size_t at = 0;
+    while (at < message.size()) {
+        const std::size_t end = std::min(message.find(' ', at), message.size());
+        if (end > at + 2) {
+            words.push_back(message.substr(at, end - at));
+        }
+        at = end + 1;
+    }
+    std::ranges::sort(words);
+    return std::ranges::adjacent_find(words) != words.end();
+}
+
+/* The seventeenth of the month, which around here is nobody's friend. */
+bool is_the_seventeenth(std::int64_t now) {
+    const std::chrono::sys_seconds instant{std::chrono::seconds{now}};
+    const std::chrono::year_month_day today{std::chrono::floor<std::chrono::days>(instant)};
+    return static_cast<unsigned>(today.day()) == 17;
+}
+
 std::optional<std::string> flipper_reply(
     const CommandContext &context,
     std::string_view lowered,
@@ -1138,21 +1183,44 @@ std::optional<std::string> flipper_reply(
     if (!first) {
         return std::nullopt;
     }
-    /* The ball does not stop at the first target. */
+
+    /* The ball bounces on, and three old superstitions decide how far. */
+    int bounces = context.config.flipper_chain - 1;
+    std::string extra;
+    if (repeated_word(lowered)) {
+        bounces += context.config.flipper_chain;
+        extra += "\n🔁 ECO: la parola ripetuta vale doppio.";
+    }
+    if (is_last(context.storage, username)) {
+        bounces += 1;
+        extra += "\n🍀 FORTUNA DEL PRINCIPIANTE: un colpo in più all'ultimo della classe.";
+    }
+    if (is_the_seventeenth(now)) {
+        bounces += 1;
+        extra += "\n🔮 VENERDÌ 17: un colpo in più, e non è un regalo.";
+    }
     std::vector<FlipperResult> chain{*first};
-    const std::vector<FlipperResult> rest = cascade(
-        context.storage,
-        username,
-        context.config.flipper_chain - 1,
-        now,
-        context.config.boost_multiplier
-    );
+    const std::vector<FlipperResult> rest =
+        cascade(context.storage, username, bounces, now, context.config.boost_multiplier);
     chain.insert(chain.end(), rest.begin(), rest.end());
 
     std::string said;
     for (const FlipperResult &hit : chain) {
         said += said.empty() ? "" : "\n";
         said += std::vformat(flippers.at(hit.which).text, std::make_format_args(username));
+    }
+    said += extra;
+    /* Whatever happened to him happens, one place up, to the man above. */
+    const std::int64_t moved = std::accumulate(
+        chain.begin(),
+        chain.end(),
+        std::int64_t{0},
+        [](std::int64_t so_far, const FlipperResult &hit) { return so_far + hit.palle; }
+    );
+    if (moved != 0) {
+        if (const std::string above = domino(context.storage, username, moved); !above.empty()) {
+            said += std::format("\n🁣 EFFETTO DOMINO: anche {} si vede muovere {} palle.", above, moved);
+        }
     }
     said += std::format("\n💰 Totale: {} palle.", chain.back().score);
     return said;

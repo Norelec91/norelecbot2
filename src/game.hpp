@@ -272,7 +272,25 @@ struct LotteryDraw {
 /* Draws the winner once the time is up. */
 [[nodiscard]] std::optional<LotteryDraw> lottery_draw(Storage &storage, std::int64_t now);
 
-enum class Happening { earthquake, amnesty, rain, inflation, black_market, pedlar, famine, ministry };
+enum class Happening {
+    earthquake,
+    amnesty,
+    rain,
+    inflation,
+    black_market,
+    pedlar,
+    famine,
+    ministry,
+    /* 1: two players wake up in each other's shoes. 2: the leaderboard turns upside down.
+       3: the rich pay. 4: an hour given to everybody. 5: every raid lands at once.
+       6: every score rounded off to the nearest thousand. */
+    twinning,
+    mirror,
+    luxury_tax,
+    daylight_saving,
+    strike,
+    rounding,
+};
 
 struct HappeningResult {
     Happening what = Happening::earthquake;
@@ -284,6 +302,11 @@ struct HappeningResult {
 
 /* One of the things that happen to the world, drawn at random. */
 [[nodiscard]] std::optional<HappeningResult> happening_strike(Storage &storage, std::int64_t now);
+
+/* Passes the same fortune on to whoever is one place above him. */
+[[nodiscard]] std::string domino(Storage &storage, const std::string &username, std::int64_t palle);
+/* Whether he is last of all: beginners are owed some luck. */
+[[nodiscard]] bool is_last(Storage &storage, const std::string &username);
 
 /* Marks somebody as the one the next thing happens to. */
 void mark_target(Storage &storage, const std::string &username, std::int64_t now);
