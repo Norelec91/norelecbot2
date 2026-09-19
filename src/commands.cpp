@@ -1204,6 +1204,275 @@ std::string game_opened_reply(const GameOpened &opened) {
             opened.target,
             opened.pot
         );
+    case Game::sealed:
+        return std::format(
+            "🕶️ ASTA CIECA: un'offerta a testa, nessuno vede quelle degli altri. Alla chiusura la più "
+            "alta si prende {} palle e paga quanto ha offerto.",
+            opened.pot
+        );
+    case Game::unique:
+        return std::format(
+            "🎯 NUMERO UNICO: un numero da 1 a 50 a testa. Vince il più basso scelto da una persona "
+            "sola: {} palle.",
+            opened.pot
+        );
+    case Game::average:
+        return std::format(
+            "📊 MEDIA: un numero da 0 a 100 a testa. Vince chi si avvicina ai due terzi della media "
+            "di tutti: {} palle.",
+            opened.pot
+        );
+    case Game::pyramid:
+        return std::format(
+            "🏗️ PIRAMIDE: un'offerta a testa. C'è un tetto che non vi dico: chi lo supera è fuori, "
+            "chi resta sotto e ha offerto di più prende {} palle.",
+            opened.pot
+        );
+    case Game::potato:
+        return "🥔 PATATA BOLLENTE: chi scrive se la ritrova in mano. La miccia è già accesa e chi la tiene quando scoppia paga un decimo.";
+    case Game::chairs:
+        return std::format(
+            "🪑 SEDIE: si entra scrivendo. Ogni venticinque secondi esce chi ha scritto di meno, "
+            "l'ultimo rimasto si prende {} palle.",
+            opened.pot
+        );
+    case Game::russian:
+        return std::format(
+            "🔫 ROULETTE RUSSA: ogni messaggio è un colpo, uno su sei parte. Chi è ancora in piedi "
+            "alla chiusura si divide {} palle.",
+            opened.pot
+        );
+    case Game::climb:
+        return std::format(
+            "🧗 SCALATA: si entra con cento palle, ogni messaggio le moltiplica per una volta e mezza, "
+            "ma una volta su quattro si precipita. Alla chiusura si incassa, fino a {} palle.",
+            opened.pot
+        );
+    case Game::bank:
+        return std::format(
+            "🃏 BANCO: ogni messaggio pesca una carta, si arriva a 21 senza sballare. Il punto più "
+            "alto alla chiusura vale {} palle.",
+            opened.pot
+        );
+    case Game::collect:
+        return std::format(
+            "🤝 COLLETTA: mettete insieme esattamente {} palle, un versamento a testa. Se ci arrivate "
+            "tornano indietro tutte più {} palle da dividere, se sforate restano al banco.",
+            opened.secret,
+            opened.pot
+        );
+    case Game::trial:
+        return std::format(
+            "⚖️ PROCESSO: sul banco degli imputati c'è {}. Scrivete colpevole o innocente: se passa "
+            "la condanna paga un decimo a chi lo ha accusato, se è assolto sono gli accusatori a "
+            "pagargli cento palle a testa.",
+            opened.target
+        );
+    case Game::bounty:
+        return std::format(
+            "💰 TAGLIA: {} palle sulla testa di {}. Il primo che ne scrive il nome le incassa, e le "
+            "paga lui. A meno che non scriva pago e se la compri a metà prezzo.",
+            opened.secret,
+            opened.target
+        );
+    case Game::siege:
+        return std::format(
+            "🏰 ASSEDIO: {} è chiuso dentro @TheConquister37. Servono {} colpi per buttarlo giù, e "
+            "ogni suo messaggio ne respinge uno. Chi dà l'ultimo colpo prende {} palle.",
+            opened.target,
+            opened.secret,
+            opened.pot
+        );
+    case Game::market:
+        return "📈 BORSA: il titolo parte da 100 e si muove a ogni messaggio. Scrivete compro o vendo una volta sola, alla chiusura si fanno i conti.";
+    case Game::wager:
+        return "🎲 SCOMMESSA: puntate un numero di palle. Alla chiusura si somma tutto: chi ha puntato pari vince se il totale è pari, e viceversa.";
+    case Game::relay:
+        return std::format(
+            "🏃 STAFFETTA: sei passaggi senza fermarsi più di quindici secondi, e mai due di fila "
+            "dalla stessa persona. Se arrivate in fondo {} palle da dividere.",
+            opened.pot
+        );
+    case Game::hostage:
+        return std::format(
+            "🧨 OSTAGGIO: Kio tiene {} e chiede {} palle di riscatto. Versate scrivendo numeri: se "
+            "alla chiusura mancano, l'ostaggio paga un decimo di tutto quello che ha.",
+            opened.target,
+            opened.secret
+        );
+    case Game::legacy:
+        return std::format(
+            "📜 EREDITÀ: {} palle senza padrone. Scrivete quanto ne chiedete: prende tutto chi ne ha "
+            "chieste meno di chiunque altro.",
+            opened.secret
+        );
+    case Game::customs:
+        return std::format(
+            "🛃 DOGANA: controllo su ogni messaggio. Chi passa più volte senza farsi trovare merce "
+            "addosso si prende {} palle, ogni sequestro ne costa cento.",
+            opened.pot
+        );
+    case Game::marathon:
+        return std::format(
+            "🏃‍♂️ MARATONA: {} parole da coprire tutti insieme. Chi scrive quella che taglia il "
+            "traguardo si prende {} palle.",
+            opened.secret,
+            opened.pot
+        );
+    case Game::stars:
+        return std::format(
+            "♈ ZODIACO: oggi la casa è {}. Scrivete una volta sola: chi ha il segno giusto si prende "
+            "metà piatto, chi ha quello opposto lascia un ventesimo di quello che ha.",
+            zodiac::element_name(static_cast<zodiac::Element>(opened.secret))
+        );
+    case Game::fraud:
+        return std::format(
+            "🚨 FRODE: dichiarate quante palle avete. Chi dichiara meno di un decimo del vero paga la "
+            "differenza alla Guardia di Finanza, la dichiarazione più alta e onesta prende {} palle.",
+            opened.pot
+        );
+    case Game::scheme:
+        return "💹 SCHEMA: si entra con duecento palle, che vanno divise fra chi è entrato prima. Gli ultimi due della catena restano con il cerino in mano.";
+    case Game::refund:
+        return std::format(
+            "📦 RESO: {} ha aperto una segnalazione. Scrivete rimborso o truffa: il supporto clienti "
+            "decide a sorte, ma più voti ci sono da una parte più è probabile. In ballo {} palle.",
+            opened.target,
+            opened.pot / 2
+        );
+    case Game::spy:
+        return std::format(
+            "🕵️‍♀️ SPIA: fra voi c'è una spia che non sa di esserlo. Fate un nome: se la prendete vi "
+            "dividete {} palle, se scappa se le tiene tutte lei.",
+            opened.pot
+        );
+    case Game::plot:
+        return "🗡️ CONGIURA: scrivete il nome di chi volete far cadere. Il più nominato lascia un decimo di quello che ha a chi lo ha nominato.";
+    case Game::dowry:
+        return std::format(
+            "💍 DOTE: scrivete sposo e un nome. Se quello risponde di sì vi dividete {} palle.",
+            opened.pot
+        );
+    case Game::bingo:
+        return std::format(
+            "🎱 TOMBOLA: una cartella a testa scrivendo qualsiasi cosa, cinque numeri fino a 30. "
+            "Estraggo ogni venti secondi, cartella piena {} palle.",
+            opened.pot
+        );
+    case Game::horses:
+        return std::format(
+            "🐎 IPPODROMO: quattro cavalli, scrivete il numero del vostro. Corrono da soli, chi ha "
+            "puntato sul vincente prende {} palle.",
+            opened.pot
+        );
+    case Game::quake:
+        return "🌋 TERREMOTO: la terra trema ogni trenta secondi. Chi non si fa sentire in tempo perde un ventesimo di quello che ha.";
+    case Game::war:
+        return std::format(
+            "⚔️ GUERRA: vi divido in due schieramenti man mano che scrivete. Alla chiusura il "
+            "fronte più forte si divide {} palle, l'altro ne lascia cento a testa.",
+            opened.pot
+        );
+    case Game::deposit:
+        return "🏦 BANCA: scrivete quante palle depositate. Alla chiusura tornano con il dieci per cento di interessi, salvo fallimento.";
+    case Game::talent:
+        return std::format(
+            "🎤 TALENTO: vince il messaggio con più parole diverse fra loro. In palio {} palle.",
+            opened.pot
+        );
+    case Game::treasure:
+        return std::format(
+            "🏹 CACCIA AL TESORO: ho nascosto una parola fra queste: {}. Ogni tentativo sbagliato "
+            "costa venti palle, quello giusto ne vale {}.",
+            std::string{mirrors.at(0)} + ", " + std::string{mirrors.at(2)} + ", " +
+                std::string{mirrors.at(4)} + ", " + std::string{mirrors.at(6)} + ", " +
+                std::string{mirrors.at(8)} + ", e altre",
+            opened.pot
+        );
+    case Game::domino:
+        return std::format(
+            "🁣 DOMINO: si parte dal {}. Ogni numero deve cominciare con la cifra con cui finisce il "
+            "precedente. Chi sbaglia paga un decimo.",
+            opened.secret
+        );
+    case Game::tunnel:
+        return std::format(
+            "🚇 TUNNEL: ogni messaggio deve contenere una parola più lunga della precedente. Se "
+            "arrivate a otto vi dividete {} palle.",
+            opened.pot
+        );
+    case Game::dutch:
+        return std::format(
+            "📉 RIBASSO: il piatto vale {} palle e il prezzo scende di mille ogni venti secondi. "
+            "Scrivete prendo per comprarlo al prezzo di adesso.",
+            opened.pot
+        );
+    case Game::riddle:
+        return std::format(
+            "🗿 ENIGMA: ho in mente una parola e do un indizio ogni quaranta secondi. Chi indovina "
+            "subito prende {} palle, dopo il secondo indizio la metà, dopo il terzo un terzo.",
+            opened.pot
+        );
+    case Game::navy:
+        return std::format(
+            "🚢 BATTAGLIA NAVALE: venticinque caselle, una nave. Ogni colpo a vuoto costa venti "
+            "palle, centrarla ne vale {}.",
+            opened.pot
+        );
+    case Game::election:
+        return "🗳️ ELEZIONI: scrivete il nome di chi volete sindaco. Il più votato mette una tassa di cinquanta palle su chi ha votato.";
+    case Game::tug:
+        return std::format(
+            "🪢 TIRO ALLA FUNE: chi ha il nome dalla A alla M tira da una parte, gli altri "
+            "dall'altra. Ogni messaggio è uno strattone, il lato dove sta la fune alla chiusura si "
+            "divide {} palle.",
+            opened.pot
+        );
+    case Game::jenga:
+        return std::format(
+            "🏯 TORRE: ogni messaggio sfila un pezzo. Una volta su otto la torre viene giù e chi "
+            "l'ha toccata paga un decimo, chi resta in piedi si divide {} palle.",
+            opened.pot
+        );
+    case Game::whispers:
+        return std::format(
+            "📞 TELEFONO SENZA FILI: si parte da {}. Ogni messaggio deve contenere la parola "
+            "precedente con una sola lettera cambiata. Cinque passaggi e si divide {} palle.",
+            opened.target,
+            opened.pot
+        );
+    case Game::smuggle:
+        return "🕶️ CONTRABBANDO: dichiarate quante palle mettete nel carico. Alla chiusura la dogana ne controlla uno a caso: quello lo perde, gli altri raddoppiano.";
+    case Game::insurance:
+        return "☂️ ASSICURAZIONE: scrivete assicuro per versare cento palle di premio. Una volta su tre succede il disastro e gli assicurati ne prendono cinquecento, altrimenti il premio resta alla compagnia.";
+    case Game::strike:
+        return "🪧 SCIOPERO: finché nessuno parla la cassa cresce di cinquecento palle ogni venti secondi. Il primo che scrive fa saltare tutto e paga un decimo.";
+    case Game::contest:
+        return std::format(
+            "📝 CONCORSO PUBBLICO: tre domande, una ogni quarantacinque secondi, un punto a testa "
+            "per ogni risposta giusta. Prima domanda: {} In palio {} palle.",
+            questions.at(static_cast<std::size_t>(opened.secret)).asked,
+            opened.pot
+        );
+    case Game::cadastre:
+        return std::format(
+            "🏚️ CATASTO: prendete un lotto da 1 a 20 scrivendone il numero. I lotti chiesti da una "
+            "persona sola rendono, quelli contesi non rendono niente. In ballo {} palle.",
+            opened.pot
+        );
+    case Game::pilgrimage:
+        return std::format(
+            "⛪ PELLEGRINAGGIO: {} parole di cammino da fare insieme, ma ogni venti secondi il "
+            "sentiero ne toglie dieci. Se arrivate, {} palle da dividere.",
+            opened.secret,
+            opened.pot
+        );
+    case Game::apocalypse:
+        return std::format(
+            "☄️ APOCALISSE: scrivete per salire sull'arca. Ogni venticinque secondi ne salvo uno a "
+            "caso: i salvati si dividono {} palle, chi resta giù perde un quinto di tutto.",
+            opened.pot
+        );
     }
     return {};
 }
@@ -1406,6 +1675,283 @@ std::string game_closed_reply(const GameClosed &closed) {
         return "🕐 Trenta secondi passati senza che nessuno li azzeccasse.";
     case Game::order:
         return "🔀 Nessuno le ha messe in ordine. L'alfabeto aspetta.";
+    case Game::sealed:
+        return closed.winner.empty()
+            ? std::string{"🕶️ Asta cieca deserta o finita in parità: il piatto resta lì."}
+            : std::format(
+                  "🕶️ Ha vinto {} offrendo {}: {} palle in cassa, meno l'offerta.",
+                  closed.winner,
+                  closed.detail,
+                  closed.pot
+              );
+    case Game::unique:
+        return closed.winner.empty()
+            ? std::string{"🎯 Nessun numero solitario: avete pensato tutti la stessa cosa."}
+            : std::format(
+                  "🎯 Il numero unico più basso era {} ed è di {}: {} palle.",
+                  closed.detail,
+                  closed.winner,
+                  closed.pot
+              );
+    case Game::average:
+        return closed.winner.empty()
+            ? std::string{"📊 Nessun numero, nessuna media."}
+            : std::format(
+                  "📊 I due terzi della media facevano {}: più vicino {}, che si prende {} palle.",
+                  closed.secret,
+                  closed.winner,
+                  closed.pot
+              );
+    case Game::pyramid:
+        return closed.winner.empty()
+            ? std::format("🏗️ Il tetto era {} e lo avete superato tutti.", closed.secret)
+            : std::format(
+                  "🏗️ Il tetto era {}: {} si è fermato a {} e prende {} palle.",
+                  closed.secret,
+                  closed.winner,
+                  closed.detail,
+                  closed.pot
+              );
+    case Game::potato:
+        return "🥔 La patata si è raffreddata da sola: nessuno l'ha toccata.";
+    case Game::chairs:
+        return "🪑 La musica si ferma: le sedie restano vuote.";
+    case Game::russian:
+        return closed.table.empty()
+            ? std::string{"🔫 Nessuno ha avuto il fegato di premere."}
+            : std::format("🔫 Sopravvissuti: {} palle a testa per chi è rimasto in piedi.", closed.secret);
+    case Game::climb:
+        return closed.secret == 0
+            ? std::string{"🧗 Parete deserta: nessuno ha provato a salire."}
+            : std::format("🧗 Scendono in {} con le palle in tasca.", closed.secret);
+    case Game::bank:
+        return closed.winner.empty()
+            ? std::string{"🃏 Sballati tutti: il banco ringrazia."}
+            : std::format("🃏 {} chiude a {} e si prende {} palle.", closed.winner, closed.secret, closed.pot);
+    case Game::collect:
+        return std::format(
+            "🤝 La colletta si chiude a {} su {}.",
+            closed.detail,
+            closed.secret
+        );
+    case Game::trial:
+        if (closed.winner.empty()) {
+            return "⚖️ Processo senza giuria: il fascicolo torna in archivio.";
+        }
+        return closed.detail == "colpevole"
+            ? std::format("⚖️ {} è colpevole e paga {} palle a chi lo ha accusato.", closed.winner, closed.secret)
+            : std::format("⚖️ {} è assolto: gli accusatori gli versano {} palle.", closed.winner, closed.secret);
+    case Game::bounty:
+        return "💰 La taglia scade: nessuno ha fatto il nome, nessuno ha pagato.";
+    case Game::siege:
+        return "🏰 L'assedio si scioglie da solo. Le mura reggono.";
+    case Game::market:
+        return std::format("📈 Chiusura a {}: i conti sono fatti.", closed.secret);
+    case Game::wager:
+        return std::format("🎲 Totale {}, quindi {}. Pagati e incassati.", closed.secret, closed.detail);
+    case Game::relay:
+        return "🏃 Il testimone è caduto per terra. Niente per nessuno.";
+    case Game::hostage:
+        return closed.winner.empty()
+            ? std::string{"🧨 Nessun ostaggio, nessun riscatto."}
+            : std::format(
+                  "🧨 Riscatto fermo a {} su {}: {} paga un decimo di tutto.",
+                  closed.detail,
+                  closed.secret,
+                  closed.winner
+              );
+    case Game::legacy:
+        return closed.winner.empty()
+            ? std::string{"📜 Eredità contesa o nessuno si è fatto avanti: resta al notaio."}
+            : std::format(
+                  "📜 {} aveva chiesto solo {} e si prende tutte e {} le palle.",
+                  closed.winner,
+                  closed.detail,
+                  closed.secret
+              );
+    case Game::customs:
+        return closed.winner.empty()
+            ? std::string{"🛃 Dogana chiusa: nessuno è passato."}
+            : std::format("🛃 {} è passato {} volte e si prende {} palle.", closed.winner, closed.secret, closed.pot);
+    case Game::marathon:
+        return "🏃‍♂️ La maratona finisce senza traguardo. Restate a metà strada.";
+    case Game::stars:
+        return std::format(
+            "♈ La casa di {} si chiude.",
+            zodiac::element_name(static_cast<zodiac::Element>(closed.secret))
+        );
+    case Game::fraud:
+        return closed.winner.empty()
+            ? std::string{"🚨 Nessuna dichiarazione onesta. Il fascicolo passa alla Guardia di Finanza."}
+            : std::format(
+                  "🚨 {} ha dichiarato {} palle senza barare e si prende {} palle.",
+                  closed.winner,
+                  closed.secret,
+                  closed.pot
+              );
+    case Game::scheme:
+        return closed.winner.empty()
+            ? std::string{"💹 Schema chiuso senza iscritti. Per una volta non ci è cascato nessuno."}
+            : std::format(
+                  "💹 La catena si ferma a {}: chi è entrato per ultimo, {}, resta con il cerino.",
+                  closed.secret,
+                  closed.winner
+              );
+    case Game::refund:
+        if (closed.winner.empty()) {
+            return "📦 Segnalazione chiusa senza pareri. Il supporto clienti archivia.";
+        }
+        return closed.detail == "rimborsato"
+            ? std::format("📦 Il supporto clienti rimborsa {}: {} palle.", closed.winner, closed.secret)
+            : std::format("📦 Segnalazione respinta: {} perde {} palle.", closed.winner, closed.secret);
+    case Game::spy:
+        if (closed.winner.empty()) {
+            return "🕵️‍♀️ Nessuna spia, nessun sospetto.";
+        }
+        return closed.detail == "presa"
+            ? std::format("🕵️‍♀️ La spia era {}: {} palle a testa a chi l'ha riconosciuta.", closed.winner, closed.secret)
+            : std::format("🕵️‍♀️ La spia era {} e se ne va con {} palle.", closed.winner, closed.pot);
+    case Game::plot:
+        return closed.winner.empty()
+            ? std::string{"🗡️ Congiura sciolta: troppi nomi e nessun accordo."}
+            : std::format("🗡️ {} cade: {} palle ai congiurati.", closed.winner, closed.secret);
+    case Game::dowry:
+        return "💍 Nessuno ha detto sì. La dote resta in famiglia.";
+    case Game::bingo:
+        return "🎱 Tombola chiusa senza cartella piena.";
+    case Game::horses:
+        return closed.winner.empty()
+            ? std::format("🐎 Vince il cavallo {} e non ci aveva puntato nessuno.", closed.secret)
+            : std::format("🐎 Vince il cavallo {}: {} palle a chi ci credeva.", closed.secret, closed.pot);
+    case Game::quake:
+        return "🌋 La terra si ferma. Chi è rimasto in piedi, è rimasto in piedi.";
+    case Game::war:
+        return closed.winner.empty()
+            ? std::string{"⚔️ Guerra finita in parità: tutti a casa come prima."}
+            : std::format("⚔️ Vince il fronte {}: il piatto si divide fra i suoi.", closed.secret);
+    case Game::deposit:
+        return closed.detail == "fallita"
+            ? std::format("🏦 La banca è fallita con {} depositi dentro. Sportelli chiusi.", closed.secret)
+            : std::format("🏦 La banca regge: {} depositi restituiti con gli interessi.", closed.secret);
+    case Game::talent:
+        return closed.winner.empty()
+            ? std::string{"🎤 Palco vuoto: nessuno si è esibito."}
+            : std::format("🎤 Vince {} con {} parole diverse: {} palle.", closed.winner, closed.secret, closed.pot);
+    case Game::treasure:
+        return std::format(
+            "🏹 Tempo scaduto: il tesoro era sotto {}.",
+            mirrors.at(static_cast<std::size_t>(closed.secret))
+        );
+    case Game::domino:
+        return "🁣 Le tessere restano sul tavolo. Nessuno le rimette a posto.";
+    case Game::tunnel:
+        return "🚇 La galleria si ferma a metà. Torneranno domani con le pale.";
+    case Game::dutch:
+        return "📉 Prezzo sceso fino in fondo e nessuno ha detto prendo.";
+    case Game::riddle:
+        return std::format(
+            "🗿 Tempo scaduto: la parola era {}.",
+            mirrors.at(static_cast<std::size_t>(closed.secret))
+        );
+    case Game::navy:
+        return std::format("🚢 La nave era alla casella {} e se ne va indisturbata.", closed.secret);
+    case Game::election:
+        return closed.winner.empty()
+            ? std::string{"🗳️ Elezioni nulle: nessuna maggioranza."}
+            : std::format("🗳️ {} è sindaco e incassa {} palle di tasse.", closed.winner, closed.secret);
+    case Game::tug:
+        return closed.winner.empty()
+            ? std::string{"🪢 La fune resta in mezzo: pari e patta."}
+            : std::format("🪢 Vince il lato {}: il piatto va a loro.", closed.detail);
+    case Game::jenga:
+        return closed.secret == 0
+            ? std::string{"🏯 Nessuno ha osato toccare la torre."}
+            : std::format("🏯 La torre resta in piedi dopo {} pezzi: piatto diviso fra i coraggiosi.", closed.secret);
+    case Game::whispers:
+        return "📞 La linea è caduta prima del quinto passaggio.";
+    case Game::smuggle:
+        return closed.winner.empty()
+            ? std::string{"🕶️ Camion vuoto: la dogana non ha trovato niente da controllare."}
+            : std::format("🕶️ Controllato il carico di {}: {} palle sequestrate, gli altri raddoppiano.", closed.winner, closed.secret);
+    case Game::insurance:
+        return closed.detail == "disastro"
+            ? std::format("☂️ Disastro! I {} assicurati incassano cinquecento palle a testa.", closed.secret)
+            : std::format("☂️ Nessun disastro: la compagnia si tiene i premi di {} assicurati.", closed.secret);
+    case Game::strike:
+        return closed.secret == 0
+            ? std::string{"🪧 Sciopero finito senza cassa."}
+            : std::format("🪧 Sciopero riuscito: {} palle in cassa, {} palle a testa per tutti.", closed.secret, closed.detail);
+    case Game::contest:
+        return closed.winner.empty()
+            ? std::string{"📝 Concorso annullato per mancanza di idonei."}
+            : std::format("📝 Vince {} con {} punti e si prende {} palle.", closed.winner, closed.secret, closed.pot);
+    case Game::cadastre:
+        return closed.secret == 0
+            ? std::string{"🏚️ Tutti i lotti contesi: il catasto non registra niente."}
+            : std::format("🏚️ {} lotti assegnati, {} palle di rendita a testa.", closed.secret, closed.detail);
+    case Game::pilgrimage:
+        return "⛪ Il pellegrinaggio si ferma per strada. Si riprova l'anno prossimo.";
+    case Game::apocalypse:
+        return closed.secret == 0
+            ? std::string{"☄️ Arca vuota: non si è salvato nessuno."}
+            : std::format("☄️ {} salvati si dividono il piatto, chi è rimasto giù perde un quinto.", closed.secret);
+    }
+    return {};
+}
+
+std::string game_ticked_reply(const GameTicked &ticked) {
+    if (ticked.kind == Game::potato) {
+        return ticked.player.empty()
+            ? std::string{"🥔 La patata è scoppiata senza che nessuno la toccasse."}
+            : std::format(
+                  "💥 La patata è scoppiata in mano a {}, che paga {} palle.",
+                  ticked.player,
+                  ticked.palle
+              );
+    }
+    if (ticked.kind == Game::strike) {
+        return std::format("🪧 Lo sciopero tiene: in cassa {} palle.", ticked.number);
+    }
+    if (ticked.kind == Game::contest) {
+        return std::format("📝 Domanda {}: {}", ticked.number, ticked.detail);
+    }
+    if (ticked.kind == Game::pilgrimage) {
+        return std::format("⛪ Il sentiero riporta indietro: {} passi.", ticked.number);
+    }
+    if (ticked.kind == Game::apocalypse) {
+        return std::format("☄️ {} è stato salvato. Restano giù in {}.", ticked.player, ticked.number);
+    }
+    if (ticked.kind == Game::dutch) {
+        return std::format("📉 Il prezzo scende a {}.", ticked.number);
+    }
+    if (ticked.kind == Game::riddle) {
+        return std::format("🗿 Indizio {}: {}. Ora vale {} palle.", ticked.number, ticked.detail, ticked.palle);
+    }
+    if (ticked.kind == Game::bingo) {
+        return ticked.decided
+            ? std::format("🎱 TOMBOLA! {} ha la cartella piena e si prende {} palle.", ticked.player, ticked.palle)
+            : std::format("🎱 Esce il {}.", ticked.number);
+    }
+    if (ticked.kind == Game::horses) {
+        return std::format("🐎 Il cavallo {} avanza: è a {} lunghezze.", ticked.number, ticked.palle);
+    }
+    if (ticked.kind == Game::quake) {
+        return std::format(
+            "🌋 Scossa: {} giocatori non si erano fatti sentire e lasciano {} palle fra le macerie.",
+            ticked.number,
+            ticked.palle
+        );
+    }
+    if (ticked.kind == Game::chairs) {
+        return ticked.decided
+            ? std::format(
+                  "🪑 {} si alza al giro {}. Resta seduto solo {}, che si prende {} palle.",
+                  ticked.player,
+                  ticked.number,
+                  ticked.detail,
+                  ticked.palle
+              )
+            : std::format("🪑 Giro {}: {} resta in piedi ed è fuori.", ticked.number, ticked.player);
     }
     return {};
 }
@@ -1903,6 +2449,184 @@ std::optional<std::string> game_reply(const CommandContext &context, std::string
         return std::format("🕐 {} è arrivato al secondo giusto e si prende {} palle.", played->player, played->palle);
     case Game::order:
         return std::format("🔀 {} le ha messe in fila e si prende {} palle.", played->player, played->palle);
+    case Game::sealed:
+    case Game::unique:
+    case Game::average:
+    case Game::pyramid:
+        return std::format("🤐 Offerta di {} registrata. Nessuno la vede fino alla chiusura.", played->player);
+    case Game::potato:
+        return std::format("🥔 La patata passa a {}. Scotta.", played->player);
+    case Game::chairs:
+        return std::format("🪑 {} si siede: giro {}.", played->player, played->number);
+    case Game::russian:
+        return played->detail == "click"
+            ? std::format("🔫 Click. {} è ancora qui.", played->player)
+            : std::format("🔫 BANG! {} esce di scena e paga {} palle.", played->player, played->palle);
+    case Game::climb:
+        if (played->detail == "dentro") {
+            return std::format("🧗 {} entra mettendo cento palle sulla parete.", played->player);
+        }
+        if (played->detail == "caduto") {
+            return std::format("🧗 {} è precipitato e lascia lì {} palle.", played->player, played->palle);
+        }
+        return std::format("🧗 {} sale: {} palle appese al chiodo.", played->player, played->number);
+    case Game::bank:
+        return played->detail == "sballato"
+            ? std::format("🃏 {} pesca un {} e sballa.", played->player, played->number)
+            : std::format("🃏 {} pesca un {} ed è a {}.", played->player, played->number, played->palle);
+    case Game::collect:
+        return std::format(
+            "🤝 {} versa {} palle: siamo a {}.",
+            played->player,
+            played->palle,
+            played->number
+        );
+    case Game::trial:
+        return std::format("⚖️ {} vota {}. Voti raccolti: {}.", played->player, played->detail, played->number);
+    case Game::bounty:
+        return played->detail == "pagata"
+            ? std::format("💰 {} si è comprato la taglia per {} palle.", played->player, played->palle)
+            : std::format(
+                  "💰 {} ha consegnato {} e incassa {} palle.",
+                  played->player,
+                  played->detail,
+                  played->palle
+              );
+    case Game::siege:
+        if (played->detail == "difende") {
+            return std::format("🏰 {} respinge: si torna a {} colpi.", played->player, played->number);
+        }
+        if (played->detail == "caduto") {
+            return std::format("🏰 Le mura cedono! {} entra e si prende {} palle.", played->player, played->palle);
+        }
+        return std::format("🏰 {} colpisce: {} colpi a segno.", played->player, played->number);
+    case Game::market:
+        if (played->detail == "prezzo") {
+            return std::format("📈 Il titolo si muove: {}.", played->number);
+        }
+        return std::format("📈 {} {} a {}.", played->player, played->detail, played->number);
+    case Game::wager:
+        return std::format("🎲 {} punta {} palle.", played->player, played->number);
+    case Game::relay:
+        return played->decided
+            ? std::format("🏃 Sesto passaggio! {} palle a testa per chi ha corso.", played->palle)
+            : std::format("🏃 {} passa il testimone: {} su 6.", played->player, played->number);
+    case Game::hostage:
+        return played->decided
+            ? std::format("🧨 Riscatto pagato: {} è libero.", played->detail)
+            : std::format("🧨 {} versa {} palle: siamo a {}.", played->player, played->palle, played->number);
+    case Game::legacy:
+        return std::format("📜 La richiesta di {} è agli atti.", played->player);
+    case Game::customs:
+        return played->palle > 0
+            ? std::format(
+                  "🛃 Sequestro: {} aveva {} addosso e paga {} palle.",
+                  played->player,
+                  played->detail,
+                  played->palle
+              )
+            : std::format("🛃 {} passa il controllo: {} volte.", played->player, played->number);
+    case Game::marathon:
+        return played->decided
+            ? std::format("🏃‍♂️ {} taglia il traguardo e si prende {} palle.", played->player, played->palle)
+            : std::format("🏃‍♂️ {} parole coperte.", played->number);
+    case Game::stars:
+        if (played->number > 0) {
+            return std::format("♈ {} è {} ed è in casa: {} palle.", played->player, played->detail, played->palle);
+        }
+        if (played->number < 0) {
+            return std::format("♈ {} è {}, casa opposta: lascia {} palle.", played->player, played->detail, played->palle);
+        }
+        return std::format("♈ {} è {}: oggi né carne né pesce.", played->player, played->detail);
+    case Game::fraud:
+        return std::format("🚨 {} dichiara {} palle. Agli atti.", played->player, played->number);
+    case Game::scheme:
+        return std::format(
+            "💹 {} entra per {} e a chi c'era già vanno {} palle a testa.",
+            played->player,
+            played->number,
+            played->palle
+        );
+    case Game::refund:
+        return std::format("📦 {} dice {}. Segnalazioni: {}.", played->player, played->detail, played->number);
+    case Game::spy:
+        return std::format("🕵️‍♀️ {} fa il nome di {}.", played->player, played->detail);
+    case Game::plot:
+        return std::format("🗡️ {} ha messo una croce su un nome.", played->player);
+    case Game::dowry:
+        return played->decided
+            ? std::format("💍 {} e {} si dividono la dote: {} palle a testa.", played->player, played->detail, played->palle)
+            : std::format("💍 {} chiede la mano di {}. Si aspetta risposta.", played->player, played->detail);
+    case Game::bingo:
+        return std::format("🎱 Cartella a {}.", played->player);
+    case Game::horses:
+        return std::format("🐎 {} punta sul cavallo {}.", played->player, played->number);
+    case Game::quake:
+        return std::format("🌋 {} si fa sentire e resta in piedi.", played->player);
+    case Game::war:
+        return std::format("⚔️ {} combatte per il fronte {}: forza {}.", played->player, played->number, played->palle);
+    case Game::deposit:
+        return std::format("🏦 {} deposita {} palle.", played->player, played->palle);
+    case Game::talent:
+        return std::format("🎤 {} passa in testa con {} parole diverse.", played->player, played->number);
+    case Game::treasure:
+        return played->decided
+            ? std::format("🏹 {} ha trovato {} e si prende {} palle.", played->player, played->detail, played->palle)
+            : std::format("🏹 {} scava sotto {}: niente, e venti palle in meno.", played->player, played->detail);
+    case Game::domino:
+        return played->decided
+            ? std::format("🁣 {} attacca male la tessera e paga {} palle.", played->player, played->palle)
+            : std::format("🁣 {} tessere in fila, si prosegue dal {}.", played->palle, played->number);
+    case Game::tunnel:
+        return played->decided
+            ? std::format("🚇 Otto metri di galleria! {} palle a testa a chi ha scavato.", played->palle)
+            : std::format("🚇 {} scava: {} su 8.", played->player, played->number);
+    case Game::dutch:
+        return std::format(
+            "📉 {} compra a {} e porta a casa {} palle di differenza.",
+            played->player,
+            played->number,
+            played->palle
+        );
+    case Game::riddle:
+        return std::format("🗿 {} ha sciolto l'enigma: era {}. {} palle.", played->player, played->detail, played->palle);
+    case Game::navy:
+        return played->detail == "colpito"
+            ? std::format("🚢 Colpito e affondato! {} centra la {} e prende {} palle.", played->player, played->number, played->palle)
+            : std::format("🚢 Acqua alla {}: {} palle in meno per {}.", played->number, played->palle, played->player);
+    case Game::election:
+        return std::format("🗳️ {} vota {}.", played->player, played->detail);
+    case Game::tug:
+        return std::format("🪢 {} strattona: la fune è a {}.", played->player, played->palle);
+    case Game::jenga:
+        return played->detail == "crollo"
+            ? std::format("🏯 La torre viene giù addosso a {}, che paga {} palle.", played->player, played->palle)
+            : std::format("🏯 {} sfila il pezzo numero {}. Regge.", played->player, played->number);
+    case Game::whispers:
+        return played->decided
+            ? std::format("📞 Cinque passaggi: {} palle a testa a chi era in linea.", played->palle)
+            : std::format("📞 {} sente {}: {} su 5.", played->player, played->detail, played->number);
+    case Game::smuggle:
+        return std::format("🕶️ {} carica {} palle nel camion.", played->player, played->palle);
+    case Game::insurance:
+        return std::format("☂️ {} si assicura per cento palle.", played->player);
+    case Game::strike:
+        return std::format(
+            "🪧 {} ha rotto lo sciopero a {} palle di cassa e paga {} palle.",
+            played->player,
+            played->number,
+            played->palle
+        );
+    case Game::contest:
+        return std::format("📝 Risposta esatta di {}: {} punti.", played->player, played->number);
+    case Game::cadastre:
+        return std::format("🏚️ {} mette gli occhi sul lotto {}.", played->player, played->number);
+    case Game::pilgrimage:
+        return played->decided
+            ? std::format("⛪ Arrivati! {} palle a testa ai pellegrini.", played->palle)
+            : std::format("⛪ {} passi fatti.", played->number);
+    case Game::apocalypse:
+        return std::format("☄️ {} sale sull'arca. A bordo in {}.", played->player, played->number);
     }
     return std::nullopt;
 }

@@ -466,6 +466,25 @@ std::int64_t letters_in(std::string_view message) {
     });
 }
 
+/* Dentro challenge ogni giocatore ha le sue caselle: "b:alice" è l'offerta di alice. */
+std::string player_key(std::string_view prefix, std::string_view username) {
+    return std::format("{}:{}", prefix, username);
+}
+
+std::vector<std::pair<std::string, std::int64_t>> players_with(
+    const Counters &counters,
+    std::string_view prefix
+) {
+    const std::string head = std::format("{}:", prefix);
+    std::vector<std::pair<std::string, std::int64_t>> found;
+    for (const Counters::value_type &entry : counters) {
+        if (entry.first.starts_with(head)) {
+            found.emplace_back(entry.first.substr(head.size()), entry.second);
+        }
+    }
+    return found;
+}
+
 /* Every word of a message, lowercased, for the games that look at one word at a time. */
 std::vector<std::string> words_in(std::string_view message) {
     /* L'apostrofo separa come uno spazio: in l'impiccato la parola è impiccato. */
@@ -523,7 +542,7 @@ std::string uncovered(std::string_view word, std::int64_t mask) {
     return shown;
 }
 
-constexpr std::array<std::pair<std::string_view, Game>, 51> game_names{{
+constexpr std::array<std::pair<std::string_view, Game>, 103> game_names{{
     {"corsa", Game::race},
     {"indovina", Game::guess},
     {"asta", Game::auction},
@@ -575,6 +594,57 @@ constexpr std::array<std::pair<std::string_view, Game>, 51> game_names{{
     {"slot", Game::slot},
     {"cronometro", Game::stopwatch},
     {"ordine", Game::order},
+    {"astacieca", Game::sealed},
+    {"unico", Game::unique},
+    {"media", Game::average},
+    {"piramide", Game::pyramid},
+    {"patata", Game::potato},
+    {"sedie", Game::chairs},
+    {"russa", Game::russian},
+    {"scalata", Game::climb},
+    {"banco", Game::bank},
+    {"colletta", Game::collect},
+    {"processo", Game::trial},
+    {"taglia", Game::bounty},
+    {"assedio", Game::siege},
+    {"borsa", Game::market},
+    {"scommessa", Game::wager},
+    {"staffetta", Game::relay},
+    {"ostaggio", Game::hostage},
+    {"eredità", Game::legacy},
+    {"eredita", Game::legacy},
+    {"dogana", Game::customs},
+    {"maratona", Game::marathon},
+    {"zodiaco", Game::stars},
+    {"frode", Game::fraud},
+    {"schema", Game::scheme},
+    {"reso", Game::refund},
+    {"spia", Game::spy},
+    {"congiura", Game::plot},
+    {"dote", Game::dowry},
+    {"tombola", Game::bingo},
+    {"ippodromo", Game::horses},
+    {"terremoto", Game::quake},
+    {"guerra", Game::war},
+    {"banca", Game::deposit},
+    {"talento", Game::talent},
+    {"caccia", Game::treasure},
+    {"domino", Game::domino},
+    {"tunnel", Game::tunnel},
+    {"ribasso", Game::dutch},
+    {"enigma", Game::riddle},
+    {"navale", Game::navy},
+    {"elezioni", Game::election},
+    {"fune", Game::tug},
+    {"torre", Game::jenga},
+    {"telefono", Game::whispers},
+    {"contrabbando", Game::smuggle},
+    {"assicurazione", Game::insurance},
+    {"sciopero", Game::strike},
+    {"concorso", Game::contest},
+    {"catasto", Game::cadastre},
+    {"pellegrinaggio", Game::pilgrimage},
+    {"apocalisse", Game::apocalypse},
 }};
 
 }
@@ -605,7 +675,7 @@ std::optional<GameOpened> game_open(
                 return std::nullopt;
             }
             GameOpened opened;
-            opened.kind = wanted ? *wanted : static_cast<Game>(session.random_index(50));
+            opened.kind = wanted ? *wanted : static_cast<Game>(session.random_index(100));
             opened.closes = now + open_for;
             opened.pot = pot;
             switch (opened.kind) {
@@ -805,6 +875,69 @@ std::optional<GameOpened> game_open(
                     std::format("{} {} {}", three.at(0), three.at(1), three.at(2));
                 break;
             }
+            case Game::pyramid:
+                /* Il tetto è segreto: chi lo supera ha alzato troppo. */
+                opened.secret = 20 + static_cast<std::int64_t>(session.random_index(61));
+                break;
+            case Game::potato:
+                /* La miccia dura fra quaranta secondi e due minuti. */
+                state.challenge["fuse"] = now + 40 + static_cast<std::int64_t>(session.random_index(81));
+                break;
+            case Game::chairs:
+                state.challenge["round"] = 1;
+                state.challenge["deadline"] = now + 25;
+                break;
+            case Game::collect:
+                opened.secret = 300 + static_cast<std::int64_t>(session.random_index(601));
+                state.challenge["count"] = 0;
+                break;
+            case Game::trial:
+            case Game::bounty:
+            case Game::hostage: {
+                /* Serve qualcuno su cui puntare il dito. */
+                if (state.scores.empty()) {
+                    return std::nullopt;
+                }
+                const std::size_t which = session.random_index(state.scores.size());
+                opened.target =
+                    std::next(state.scores.begin(), static_cast<std::ptrdiff_t>(which))->first;
+                state.challenge_who["target"] = opened.target;
+                if (opened.kind == Game::hostage) {
+                    opened.secret = 200 + static_cast<std::int64_t>(session.random_index(801));
+                    state.challenge["count"] = 0;
+                }
+                if (opened.kind == Game::bounty) {
+                    opened.secret = 500 + static_cast<std::int64_t>(session.random_index(1501));
+                }
+                break;
+            }
+            case Game::siege: {
+                if (!state.current) {
+                    return std::nullopt;
+                }
+                opened.target = state.current->username;
+                state.challenge_who["target"] = opened.target;
+                /* Quanti colpi servono per buttarlo giù. */
+                opened.secret = 5 + static_cast<std::int64_t>(session.random_index(6));
+                break;
+            }
+            case Game::market:
+                opened.secret = 100;
+                state.challenge["price"] = 100;
+                break;
+            case Game::wager:
+                break;
+            case Game::relay:
+                state.challenge["deadline"] = now + 15;
+                state.challenge["count"] = 0;
+                break;
+            case Game::legacy:
+                opened.secret = 1000 + static_cast<std::int64_t>(session.random_index(4001));
+                break;
+            case Game::marathon:
+                opened.secret = 60 + static_cast<std::int64_t>(session.random_index(141));
+                state.challenge["count"] = 0;
+                break;
             case Game::race:
             case Game::auction:
             case Game::longest:
@@ -815,6 +948,116 @@ std::optional<GameOpened> game_open(
             case Game::river:
             case Game::coin:
             case Game::slot:
+            case Game::sealed:
+            case Game::unique:
+            case Game::average:
+            case Game::russian:
+            case Game::climb:
+            case Game::bank:
+            case Game::customs:
+                break;
+            case Game::stars:
+                /* La casa del giorno decide chi è in favore. */
+                opened.secret = static_cast<std::int64_t>(zodiac::element_of_day(now));
+                break;
+            case Game::fraud:
+                break;
+            case Game::scheme:
+                state.challenge["count"] = 0;
+                break;
+            case Game::refund:
+            case Game::spy: {
+                if (state.scores.empty()) {
+                    return std::nullopt;
+                }
+                const std::size_t which = session.random_index(state.scores.size());
+                const std::string &chosen =
+                    std::next(state.scores.begin(), static_cast<std::ptrdiff_t>(which))->first;
+                state.challenge_who["target"] = chosen;
+                /* Nel gioco della spia il nome non si dice: lo sa solo il bot. */
+                opened.target = opened.kind == Game::refund ? chosen : std::string{};
+                break;
+            }
+            case Game::plot:
+            case Game::dowry:
+                break;
+            case Game::bingo:
+                state.challenge["deadline"] = now + 20;
+                state.challenge["drawn"] = 0;
+                break;
+            case Game::horses:
+                state.challenge["deadline"] = now + 15;
+                state.challenge["h1"] = 0;
+                state.challenge["h2"] = 0;
+                state.challenge["h3"] = 0;
+                state.challenge["h4"] = 0;
+                break;
+            case Game::quake:
+                state.challenge["deadline"] = now + 30;
+                break;
+            case Game::war:
+                state.challenge["w1"] = 0;
+                state.challenge["w2"] = 0;
+                break;
+            case Game::deposit:
+            case Game::talent:
+            case Game::election:
+                break;
+            case Game::treasure:
+            case Game::riddle:
+                opened.secret = static_cast<std::int64_t>(session.random_index(mirrors.size()));
+                if (opened.kind == Game::riddle) {
+                    state.challenge["deadline"] = now + 40;
+                    state.challenge["clues"] = 1;
+                }
+                break;
+            case Game::domino:
+                opened.secret = static_cast<std::int64_t>(session.random_index(10));
+                state.challenge["letter"] = opened.secret;
+                break;
+            case Game::tunnel:
+                state.challenge["bid"] = 0;
+                state.challenge["count"] = 0;
+                break;
+            case Game::dutch:
+                opened.secret = pot;
+                state.challenge["price"] = pot;
+                state.challenge["deadline"] = now + 20;
+                break;
+            case Game::navy:
+                opened.secret = 1 + static_cast<std::int64_t>(session.random_index(25));
+                break;
+            case Game::tug:
+                state.challenge["rope"] = 0;
+                break;
+            case Game::jenga:
+            case Game::smuggle:
+            case Game::insurance:
+            case Game::cadastre:
+                break;
+            case Game::whispers: {
+                const std::string_view first = mirrors.at(session.random_index(mirrors.size()));
+                opened.target = first;
+                state.challenge_who["word"] = opened.target;
+                state.challenge["count"] = 0;
+                break;
+            }
+            case Game::strike:
+                state.challenge["deadline"] = now + 20;
+                state.challenge["count"] = 0;
+                break;
+            case Game::contest:
+                opened.secret = static_cast<std::int64_t>(session.random_index(questions.size()));
+                state.challenge["deadline"] = now + 45;
+                state.challenge["round"] = 1;
+                break;
+            case Game::pilgrimage:
+                opened.secret = 80 + static_cast<std::int64_t>(session.random_index(121));
+                state.challenge["count"] = 0;
+                state.challenge["deadline"] = now + 20;
+                break;
+            case Game::apocalypse:
+                state.challenge["deadline"] = now + 25;
                 break;
             }
             state.challenge["kind"] = static_cast<std::int64_t>(opened.kind);
@@ -1559,6 +1802,918 @@ std::optional<GamePlayed> game_play(
             state.scores[username] = counter(state.scores, username) + played.palle;
             break;
         }
+        case Game::sealed: {
+            const std::int64_t said = number_in(message);
+            if (said < 1) {
+                return std::nullopt;
+            }
+            const std::string key = player_key("b", username);
+            if (state.challenge.find(key) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            state.challenge[key] = said;
+            played.player = username;
+            break;
+        }
+        case Game::unique: {
+            const std::int64_t said = number_in(message);
+            if (said < 1 || said > 50) {
+                return std::nullopt;
+            }
+            const std::string key = player_key("b", username);
+            if (state.challenge.find(key) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            state.challenge[key] = said;
+            played.player = username;
+            break;
+        }
+        case Game::average: {
+            const std::int64_t said = number_in(message);
+            if (said < 0 || said > 100) {
+                return std::nullopt;
+            }
+            const std::string key = player_key("b", username);
+            if (state.challenge.find(key) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            state.challenge[key] = said;
+            played.player = username;
+            break;
+        }
+        case Game::pyramid: {
+            const std::int64_t said = number_in(message);
+            if (said < 1) {
+                return std::nullopt;
+            }
+            const std::string key = player_key("b", username);
+            if (state.challenge.find(key) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            state.challenge[key] = said;
+            played.player = username;
+            break;
+        }
+        case Game::potato: {
+            /* Chi parla si ritrova la patata in mano. */
+            const auto holder = state.challenge_who.find("leader");
+            if (holder != state.challenge_who.end() && holder->second == username) {
+                return std::nullopt;
+            }
+            state.challenge_who["leader"] = username;
+            played.player = username;
+            played.number = counter(state.challenge, "fuse") - now;
+            break;
+        }
+        case Game::chairs: {
+            const std::string seat = player_key("in", username);
+            const bool first_time = state.challenge.find(seat) == state.challenge.end();
+            state.challenge[seat] = 1;
+            const std::string seen = player_key("n", username);
+            state.challenge[seen] = counter(state.challenge, seen) + 1;
+            if (!first_time) {
+                return std::nullopt;
+            }
+            played.player = username;
+            played.number = counter(state.challenge, "round");
+            break;
+        }
+        case Game::russian: {
+            if (state.challenge.find(player_key("out", username)) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            state.challenge[player_key("in", username)] = 1;
+            if (session.random_index(6) != 0) {
+                played.player = username;
+                played.detail = "click";
+                break;
+            }
+            state.challenge[player_key("out", username)] = 1;
+            state.challenge.erase(player_key("in", username));
+            played.player = username;
+            played.detail = "bang";
+            played.palle = counter(state.scores, username) / 10;
+            state.scores[username] = counter(state.scores, username) - played.palle;
+            break;
+        }
+        case Game::climb: {
+            if (state.challenge.find(player_key("out", username)) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            const std::string stake = player_key("s", username);
+            if (state.challenge.find(stake) == state.challenge.end()) {
+                /* Si entra mettendo cento palle sul tavolo. */
+                state.challenge[stake] = 100;
+                state.scores[username] = counter(state.scores, username) - 100;
+                played.player = username;
+                played.number = 100;
+                played.detail = "dentro";
+                break;
+            }
+            if (session.random_index(4) == 0) {
+                state.challenge[player_key("out", username)] = 1;
+                played.player = username;
+                played.palle = counter(state.challenge, stake);
+                state.challenge.erase(stake);
+                played.detail = "caduto";
+                break;
+            }
+            state.challenge[stake] = counter(state.challenge, stake) * 3 / 2;
+            played.player = username;
+            played.number = counter(state.challenge, stake);
+            played.detail = "sale";
+            break;
+        }
+        case Game::bank: {
+            if (state.challenge.find(player_key("out", username)) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            const std::string hand = player_key("s", username);
+            const std::int64_t card = 1 + static_cast<std::int64_t>(session.random_index(11));
+            const std::int64_t total = counter(state.challenge, hand) + card;
+            state.challenge[hand] = total;
+            played.player = username;
+            played.number = card;
+            if (total > 21) {
+                state.challenge[player_key("out", username)] = 1;
+                state.challenge.erase(hand);
+                played.detail = "sballato";
+                break;
+            }
+            played.palle = total;
+            played.detail = "carta";
+            break;
+        }
+        case Game::collect: {
+            const std::int64_t said = number_in(message);
+            if (said < 1) {
+                return std::nullopt;
+            }
+            const std::string key = player_key("b", username);
+            if (state.challenge.find(key) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            state.challenge[key] = said;
+            state.scores[username] = counter(state.scores, username) - said;
+            const std::int64_t total = counter(state.challenge, "count") + said;
+            state.challenge["count"] = total;
+            played.player = username;
+            played.number = total;
+            played.palle = said;
+            break;
+        }
+        case Game::trial: {
+            const auto accused = state.challenge_who.find("target");
+            if (accused == state.challenge_who.end() || accused->second == username) {
+                return std::nullopt;
+            }
+            const bool guilty = text::contains_ignore_case(message, "colpevole");
+            const bool clear = text::contains_ignore_case(message, "innocente");
+            if (guilty == clear) {
+                return std::nullopt;
+            }
+            const std::string key = player_key("v", username);
+            if (state.challenge.find(key) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            state.challenge[key] = guilty ? 1 : 0;
+            played.player = username;
+            played.detail = guilty ? "colpevole" : "innocente";
+            played.number = static_cast<std::int64_t>(players_with(state.challenge, "v").size());
+            break;
+        }
+        case Game::bounty: {
+            const auto hunted = state.challenge_who.find("target");
+            if (hunted == state.challenge_who.end()) {
+                return std::nullopt;
+            }
+            if (username == hunted->second) {
+                if (!text::contains_ignore_case(message, "pago")) {
+                    return std::nullopt;
+                }
+                /* Chi ha la taglia sulla testa può comprarsela, a metà prezzo. */
+                played.decided = true;
+                played.player = username;
+                played.detail = "pagata";
+                played.palle = secret / 2;
+                state.scores[username] = counter(state.scores, username) - played.palle;
+                break;
+            }
+            if (!text::contains_ignore_case(message, hunted->second)) {
+                return std::nullopt;
+            }
+            played.decided = true;
+            played.player = username;
+            played.detail = hunted->second;
+            played.palle = secret;
+            state.scores[username] = counter(state.scores, username) + played.palle;
+            state.scores[hunted->second] = counter(state.scores, hunted->second) - played.palle;
+            break;
+        }
+        case Game::siege: {
+            const auto held = state.challenge_who.find("target");
+            if (held == state.challenge_who.end()) {
+                return std::nullopt;
+            }
+            if (username == held->second) {
+                /* Il difensore rimanda indietro un colpo per volta. */
+                state.challenge["count"] = std::max(std::int64_t{0}, counter(state.challenge, "count") - 1);
+                played.player = username;
+                played.detail = "difende";
+                played.number = counter(state.challenge, "count");
+                break;
+            }
+            const std::int64_t hits = counter(state.challenge, "count") + 1;
+            state.challenge["count"] = hits;
+            played.player = username;
+            played.detail = "colpo";
+            played.number = hits;
+            if (hits >= secret) {
+                played.decided = true;
+                played.palle = counter(state.challenge, "pot");
+                state.scores[username] = counter(state.scores, username) + played.palle;
+                state.scores[held->second] =
+                    counter(state.scores, held->second) - counter(state.scores, held->second) / 10;
+                played.detail = "caduto";
+            }
+            break;
+        }
+        case Game::market: {
+            const bool buying = text::contains_ignore_case(message, "compro");
+            const bool selling = text::contains_ignore_case(message, "vendo");
+            const std::string key = player_key("b", username);
+            if (buying == selling) {
+                /* Ogni altro messaggio muove il prezzo e basta. */
+                const std::int64_t move = static_cast<std::int64_t>(session.random_index(21)) - 10;
+                state.challenge["price"] = std::max(std::int64_t{1}, counter(state.challenge, "price") + move);
+                played.player = username;
+                played.detail = "prezzo";
+                played.number = counter(state.challenge, "price");
+                break;
+            }
+            if (state.challenge.find(key) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            state.challenge[key] = buying ? counter(state.challenge, "price") : -counter(state.challenge, "price");
+            played.player = username;
+            played.detail = buying ? "compra" : "vende";
+            played.number = counter(state.challenge, "price");
+            break;
+        }
+        case Game::wager: {
+            const std::int64_t said = number_in(message);
+            if (said < 1) {
+                return std::nullopt;
+            }
+            const std::string key = player_key("b", username);
+            if (state.challenge.find(key) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            state.challenge[key] = said;
+            state.challenge["count"] = counter(state.challenge, "count") + said;
+            played.player = username;
+            played.number = said;
+            break;
+        }
+        case Game::relay: {
+            const std::int64_t deadline = counter(state.challenge, "deadline");
+            if (deadline != 0 && now > deadline) {
+                return std::nullopt;
+            }
+            const auto last = state.challenge_who.find("leader");
+            if (last != state.challenge_who.end() && last->second == username) {
+                return std::nullopt;
+            }
+            state.challenge_who["leader"] = username;
+            state.challenge[player_key("in", username)] = 1;
+            const std::int64_t passes = counter(state.challenge, "count") + 1;
+            state.challenge["count"] = passes;
+            state.challenge["deadline"] = now + 15;
+            played.player = username;
+            played.number = passes;
+            if (passes >= 6) {
+                played.decided = true;
+                const std::vector<std::pair<std::string, std::int64_t>> runners =
+                    players_with(state.challenge, "in");
+                const std::int64_t share =
+                    counter(state.challenge, "pot") / static_cast<std::int64_t>(runners.size());
+                for (const std::pair<std::string, std::int64_t> &runner : runners) {
+                    state.scores[runner.first] = counter(state.scores, runner.first) + share;
+                }
+                played.palle = share;
+            }
+            break;
+        }
+        case Game::hostage: {
+            const std::int64_t said = number_in(message);
+            if (said < 1) {
+                return std::nullopt;
+            }
+            const auto held = state.challenge_who.find("target");
+            if (held == state.challenge_who.end() || held->second == username) {
+                return std::nullopt;
+            }
+            state.scores[username] = counter(state.scores, username) - said;
+            const std::int64_t paid = counter(state.challenge, "count") + said;
+            state.challenge["count"] = paid;
+            state.challenge[player_key("b", username)] =
+                counter(state.challenge, player_key("b", username)) + said;
+            played.player = username;
+            played.number = paid;
+            played.palle = said;
+            if (paid >= secret) {
+                played.decided = true;
+                played.detail = held->second;
+            }
+            break;
+        }
+        case Game::legacy: {
+            const std::int64_t said = number_in(message);
+            if (said < 1) {
+                return std::nullopt;
+            }
+            const std::string key = player_key("b", username);
+            if (state.challenge.find(key) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            state.challenge[key] = said;
+            played.player = username;
+            break;
+        }
+        case Game::customs: {
+            const std::string_view smuggled = forbidden_words.at(
+                static_cast<std::size_t>(session.random_index(forbidden_words.size()))
+            );
+            played.player = username;
+            if (text::contains_ignore_case(message, smuggled)) {
+                played.detail = std::string{smuggled};
+                played.palle = 100;
+                state.scores[username] = counter(state.scores, username) - played.palle;
+                break;
+            }
+            const std::string key = player_key("b", username);
+            state.challenge[key] = counter(state.challenge, key) + 1;
+            played.number = counter(state.challenge, key);
+            played.detail = "passa";
+            break;
+        }
+        case Game::marathon: {
+            const std::int64_t words = static_cast<std::int64_t>(words_in(message).size());
+            if (words < 1) {
+                return std::nullopt;
+            }
+            const std::int64_t covered = counter(state.challenge, "count") + words;
+            state.challenge["count"] = covered;
+            played.player = username;
+            played.number = covered;
+            if (covered >= secret) {
+                played.decided = true;
+                played.palle = counter(state.challenge, "pot");
+                state.scores[username] = counter(state.scores, username) + played.palle;
+            }
+            break;
+        }
+        case Game::stars: {
+            const std::string key = player_key("b", username);
+            if (state.challenge.find(key) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            const zodiac::Sign sign = zodiac::sign_of(username);
+            const auto house = static_cast<zodiac::Element>(secret);
+            state.challenge[key] = 1;
+            played.player = username;
+            played.detail = sign.name;
+            if (sign.element == house) {
+                played.palle = counter(state.challenge, "pot") / 2;
+                state.scores[username] = counter(state.scores, username) + played.palle;
+                played.number = 1;
+                break;
+            }
+            if (zodiac::opposed(sign.element, house)) {
+                played.palle = counter(state.scores, username) / 20;
+                state.scores[username] = counter(state.scores, username) - played.palle;
+                played.number = -1;
+                break;
+            }
+            played.number = 0;
+            break;
+        }
+        case Game::fraud: {
+            const std::int64_t said = number_in(message);
+            if (said < 0) {
+                return std::nullopt;
+            }
+            const std::string key = player_key("b", username);
+            if (state.challenge.find(key) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            state.challenge[key] = said;
+            played.player = username;
+            played.number = said;
+            break;
+        }
+        case Game::scheme: {
+            const std::string key = player_key("b", username);
+            if (state.challenge.find(key) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            /* Si entra pagando duecento palle, che vanno a chi è entrato prima. */
+            const std::int64_t place = counter(state.challenge, "count") + 1;
+            state.challenge["count"] = place;
+            state.challenge[key] = place;
+            state.scores[username] = counter(state.scores, username) - 200;
+            const std::vector<std::pair<std::string, std::int64_t>> before =
+                players_with(state.challenge, "b");
+            const std::int64_t share = before.size() > 1
+                ? 200 / static_cast<std::int64_t>(before.size() - 1)
+                : 0;
+            for (const std::pair<std::string, std::int64_t> &sooner : before) {
+                if (sooner.second < place) {
+                    state.scores[sooner.first] = counter(state.scores, sooner.first) + share;
+                }
+            }
+            played.player = username;
+            played.number = place;
+            played.palle = share;
+            break;
+        }
+        case Game::refund: {
+            const auto buyer = state.challenge_who.find("target");
+            if (buyer == state.challenge_who.end() || buyer->second == username) {
+                return std::nullopt;
+            }
+            const bool yes = text::contains_ignore_case(message, "rimborso");
+            const bool no = text::contains_ignore_case(message, "truffa");
+            if (yes == no) {
+                return std::nullopt;
+            }
+            const std::string key = player_key("v", username);
+            if (state.challenge.find(key) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            state.challenge[key] = yes ? 1 : 0;
+            played.player = username;
+            played.detail = yes ? "rimborso" : "truffa";
+            played.number = static_cast<std::int64_t>(players_with(state.challenge, "v").size());
+            break;
+        }
+        case Game::spy: {
+            const std::vector<std::string> words = words_in(message);
+            const auto named = std::ranges::find_if(words, [&state](const std::string &word) {
+                return state.scores.find(word) != state.scores.end();
+            });
+            if (named == words.end()) {
+                return std::nullopt;
+            }
+            const std::string key = player_key("v", username);
+            if (state.challenge.find(key) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            state.challenge[key] = 1;
+            state.challenge_who[player_key("says", username)] = *named;
+            played.player = username;
+            played.detail = *named;
+            break;
+        }
+        case Game::plot: {
+            const std::vector<std::string> words = words_in(message);
+            const auto named = std::ranges::find_if(words, [&state, &username](const std::string &word) {
+                return word != username && state.scores.find(word) != state.scores.end();
+            });
+            if (named == words.end()) {
+                return std::nullopt;
+            }
+            const std::string key = player_key("v", username);
+            if (state.challenge.find(key) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            state.challenge[key] = 1;
+            state.challenge_who[player_key("says", username)] = *named;
+            state.challenge[player_key("t", *named)] = counter(state.challenge, player_key("t", *named)) + 1;
+            played.player = username;
+            played.detail = "segnato";
+            break;
+        }
+        case Game::dowry: {
+            const std::vector<std::string> words = words_in(message);
+            const auto asked = std::ranges::find_if(words, [&state, &username](const std::string &word) {
+                return word != username && state.scores.find(word) != state.scores.end();
+            });
+            const auto waiting = state.challenge_who.find("leader");
+            if (waiting != state.challenge_who.end()) {
+                const auto wanted = state.challenge_who.find("target");
+                const bool yes = text::contains_ignore_case(message, "sì") ||
+                                 text::contains_ignore_case(message, "si") ||
+                                 text::contains_ignore_case(message, "accetto");
+                if (wanted != state.challenge_who.end() && wanted->second == username && yes) {
+                    played.decided = true;
+                    played.player = username;
+                    played.detail = waiting->second;
+                    played.palle = counter(state.challenge, "pot") / 2;
+                    state.scores[username] = counter(state.scores, username) + played.palle;
+                    state.scores[waiting->second] = counter(state.scores, waiting->second) + played.palle;
+                    break;
+                }
+            }
+            if (asked == words.end() || !text::contains_ignore_case(message, "sposo")) {
+                return std::nullopt;
+            }
+            state.challenge_who["leader"] = username;
+            state.challenge_who["target"] = *asked;
+            played.player = username;
+            played.detail = *asked;
+            break;
+        }
+        case Game::bingo: {
+            const std::string key = player_key("c", username);
+            if (state.challenge.find(key) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            /* Una cartella a testa: cinque numeri fra 1 e 30, in un solo intero. */
+            std::int64_t card = 0;
+            for (int at = 0; at < 5; ++at) {
+                card = (card * 31) + 1 + static_cast<std::int64_t>(session.random_index(30));
+            }
+            state.challenge[key] = card;
+            played.player = username;
+            played.number = card;
+            played.detail = "cartella";
+            break;
+        }
+        case Game::horses: {
+            const std::int64_t said = number_in(message);
+            if (said < 1 || said > 4) {
+                return std::nullopt;
+            }
+            const std::string key = player_key("b", username);
+            if (state.challenge.find(key) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            state.challenge[key] = said;
+            played.player = username;
+            played.number = said;
+            break;
+        }
+        case Game::quake: {
+            state.challenge[player_key("seen", username)] = now;
+            played.player = username;
+            played.detail = "in piedi";
+            break;
+        }
+        case Game::war: {
+            const std::string key = player_key("s", username);
+            std::int64_t side = counter(state.challenge, key);
+            if (side == 0) {
+                side = (counter(state.challenge, "w1") <= counter(state.challenge, "w2")) ? 1 : 2;
+                state.challenge[key] = side;
+            }
+            const std::string lane = side == 1 ? "w1" : "w2";
+            state.challenge[lane] = counter(state.challenge, lane) + 1;
+            played.player = username;
+            played.number = side;
+            played.palle = counter(state.challenge, lane);
+            break;
+        }
+        case Game::deposit: {
+            const std::int64_t said = number_in(message);
+            if (said < 1) {
+                return std::nullopt;
+            }
+            const std::string key = player_key("b", username);
+            if (state.challenge.find(key) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            state.challenge[key] = said;
+            state.scores[username] = counter(state.scores, username) - said;
+            played.player = username;
+            played.palle = said;
+            break;
+        }
+        case Game::talent: {
+            const std::vector<std::string> words = words_in(message);
+            std::vector<std::string> kept = words;
+            std::ranges::sort(kept);
+            const auto last = std::ranges::unique(kept);
+            kept.erase(last.begin(), last.end());
+            const auto score = static_cast<std::int64_t>(kept.size());
+            if (score <= counter(state.challenge, "bid")) {
+                return std::nullopt;
+            }
+            state.challenge["bid"] = score;
+            state.challenge_who["leader"] = username;
+            played.player = username;
+            played.number = score;
+            break;
+        }
+        case Game::treasure: {
+            const std::string_view chest = mirrors.at(static_cast<std::size_t>(secret));
+            const std::vector<std::string> words = words_in(message);
+            if (std::ranges::find(words, chest) != words.end()) {
+                played.decided = true;
+                played.player = username;
+                played.detail = chest;
+                played.palle = counter(state.challenge, "pot");
+                state.scores[username] = counter(state.scores, username) + played.palle;
+                break;
+            }
+            const auto wrong = std::ranges::find_if(words, [](const std::string &word) {
+                return std::ranges::find(mirrors, word) != mirrors.end();
+            });
+            if (wrong == words.end()) {
+                return std::nullopt;
+            }
+            played.player = username;
+            played.detail = *wrong;
+            played.palle = 20;
+            state.scores[username] = counter(state.scores, username) - played.palle;
+            break;
+        }
+        case Game::domino: {
+            const std::int64_t said = number_in(message);
+            if (said < 0) {
+                return std::nullopt;
+            }
+            const std::int64_t wanted = counter(state.challenge, "letter");
+            played.player = username;
+            played.number = wanted;
+            if (said / 10 % 10 != wanted && said % 10 != wanted && said != wanted) {
+                played.decided = true;
+                played.palle = counter(state.scores, username) / 10;
+                state.scores[username] = counter(state.scores, username) - played.palle;
+                break;
+            }
+            state.challenge["letter"] = said % 10;
+            state.challenge["count"] = counter(state.challenge, "count") + 1;
+            played.number = said % 10;
+            played.palle = counter(state.challenge, "count");
+            break;
+        }
+        case Game::tunnel: {
+            const std::vector<std::string> words = words_in(message);
+            const std::size_t longest = std::accumulate(
+                words.begin(),
+                words.end(),
+                std::size_t{0},
+                [](std::size_t so_far, const std::string &word) {
+                    return std::max(so_far, word.size());
+                }
+            );
+            if (static_cast<std::int64_t>(longest) <= counter(state.challenge, "bid")) {
+                return std::nullopt;
+            }
+            state.challenge["bid"] = static_cast<std::int64_t>(longest);
+            state.challenge[player_key("in", username)] = 1;
+            const std::int64_t steps = counter(state.challenge, "count") + 1;
+            state.challenge["count"] = steps;
+            played.player = username;
+            played.number = steps;
+            if (steps >= 8) {
+                played.decided = true;
+                const std::vector<std::pair<std::string, std::int64_t>> diggers =
+                    players_with(state.challenge, "in");
+                const std::int64_t share =
+                    counter(state.challenge, "pot") / static_cast<std::int64_t>(diggers.size());
+                for (const std::pair<std::string, std::int64_t> &digger : diggers) {
+                    state.scores[digger.first] = counter(state.scores, digger.first) + share;
+                }
+                played.palle = share;
+            }
+            break;
+        }
+        case Game::dutch: {
+            if (!text::contains_ignore_case(message, "prendo")) {
+                return std::nullopt;
+            }
+            const std::int64_t price = counter(state.challenge, "price");
+            played.decided = true;
+            played.player = username;
+            played.number = price;
+            played.palle = counter(state.challenge, "pot") - price;
+            state.scores[username] = counter(state.scores, username) + played.palle;
+            break;
+        }
+        case Game::riddle: {
+            const std::string_view answer = mirrors.at(static_cast<std::size_t>(secret));
+            if (!text::contains_ignore_case(message, answer)) {
+                return std::nullopt;
+            }
+            const std::int64_t clues = std::max(std::int64_t{1}, counter(state.challenge, "clues"));
+            played.decided = true;
+            played.player = username;
+            played.detail = answer;
+            played.palle = counter(state.challenge, "pot") / clues;
+            state.scores[username] = counter(state.scores, username) + played.palle;
+            break;
+        }
+        case Game::navy: {
+            const std::int64_t said = number_in(message);
+            if (said < 1 || said > 25) {
+                return std::nullopt;
+            }
+            const std::string key = std::format("shot{}", said);
+            if (state.challenge.find(key) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            state.challenge[key] = 1;
+            played.player = username;
+            played.number = said;
+            if (said == secret) {
+                played.decided = true;
+                played.detail = "colpito";
+                played.palle = counter(state.challenge, "pot");
+                state.scores[username] = counter(state.scores, username) + played.palle;
+                break;
+            }
+            played.detail = "acqua";
+            played.palle = 20;
+            state.scores[username] = counter(state.scores, username) - played.palle;
+            break;
+        }
+        case Game::election: {
+            const std::vector<std::string> words = words_in(message);
+            const auto voted = std::ranges::find_if(words, [&state](const std::string &word) {
+                return state.scores.find(word) != state.scores.end();
+            });
+            if (voted == words.end()) {
+                return std::nullopt;
+            }
+            const std::string key = player_key("v", username);
+            if (state.challenge.find(key) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            state.challenge[key] = 1;
+            state.challenge[player_key("t", *voted)] =
+                counter(state.challenge, player_key("t", *voted)) + 1;
+            played.player = username;
+            played.detail = *voted;
+            break;
+        }
+        case Game::tug: {
+            /* Da che parte della fune stai lo dice la prima lettera del nome. */
+            const std::int64_t side = !username.empty() && std::tolower(static_cast<unsigned char>(username.front())) <= 'm' ? 1 : 2;
+            state.challenge[player_key("s", username)] = side;
+            const std::int64_t rope = counter(state.challenge, "rope") + (side == 1 ? 1 : -1);
+            state.challenge["rope"] = rope;
+            played.player = username;
+            played.number = side;
+            played.palle = rope;
+            break;
+        }
+        case Game::jenga: {
+            state.challenge[player_key("in", username)] = 1;
+            const std::int64_t pulled = counter(state.challenge, "count") + 1;
+            state.challenge["count"] = pulled;
+            played.player = username;
+            played.number = pulled;
+            if (session.random_index(8) == 0) {
+                played.decided = true;
+                played.detail = "crollo";
+                played.palle = counter(state.scores, username) / 10;
+                state.scores[username] = counter(state.scores, username) - played.palle;
+                break;
+            }
+            played.detail = "regge";
+            break;
+        }
+        case Game::whispers: {
+            const auto word = state.challenge_who.find("word");
+            if (word == state.challenge_who.end()) {
+                return std::nullopt;
+            }
+            const std::vector<std::string> words = words_in(message);
+            const auto said = std::ranges::find_if(words, [&word](const std::string &candidate) {
+                if (candidate.size() != word->second.size() || candidate == word->second) {
+                    return false;
+                }
+                int different = 0;
+                for (std::size_t at = 0; at < candidate.size(); ++at) {
+                    different += candidate.at(at) == word->second.at(at) ? 0 : 1;
+                }
+                return different == 1;
+            });
+            if (said == words.end()) {
+                return std::nullopt;
+            }
+            state.challenge_who["word"] = *said;
+            state.challenge[player_key("in", username)] = 1;
+            const std::int64_t passes = counter(state.challenge, "count") + 1;
+            state.challenge["count"] = passes;
+            played.player = username;
+            played.detail = *said;
+            played.number = passes;
+            if (passes >= 5) {
+                played.decided = true;
+                const std::vector<std::pair<std::string, std::int64_t>> line =
+                    players_with(state.challenge, "in");
+                const std::int64_t share =
+                    counter(state.challenge, "pot") / static_cast<std::int64_t>(line.size());
+                for (const std::pair<std::string, std::int64_t> &one : line) {
+                    state.scores[one.first] = counter(state.scores, one.first) + share;
+                }
+                played.palle = share;
+            }
+            break;
+        }
+        case Game::smuggle: {
+            const std::int64_t said = number_in(message);
+            if (said < 1) {
+                return std::nullopt;
+            }
+            const std::string key = player_key("b", username);
+            if (state.challenge.find(key) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            state.challenge[key] = said;
+            state.scores[username] = counter(state.scores, username) - said;
+            played.player = username;
+            played.palle = said;
+            break;
+        }
+        case Game::insurance: {
+            if (!text::contains_ignore_case(message, "assicuro")) {
+                return std::nullopt;
+            }
+            const std::string key = player_key("b", username);
+            if (state.challenge.find(key) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            state.challenge[key] = 100;
+            state.scores[username] = counter(state.scores, username) - 100;
+            played.player = username;
+            played.palle = 100;
+            break;
+        }
+        case Game::strike: {
+            played.decided = true;
+            played.player = username;
+            played.number = counter(state.challenge, "count");
+            played.palle = counter(state.scores, username) / 10;
+            state.scores[username] = counter(state.scores, username) - played.palle;
+            break;
+        }
+        case Game::contest: {
+            const std::size_t asked = static_cast<std::size_t>(counter(state.challenge, "secret"));
+            if (!text::contains_ignore_case(message, questions.at(asked).answer)) {
+                return std::nullopt;
+            }
+            const std::string key = player_key("p", username);
+            const std::string round = player_key("r", username);
+            if (counter(state.challenge, round) == counter(state.challenge, "round")) {
+                return std::nullopt;
+            }
+            state.challenge[round] = counter(state.challenge, "round");
+            state.challenge[key] = counter(state.challenge, key) + 1;
+            played.player = username;
+            played.number = counter(state.challenge, key);
+            break;
+        }
+        case Game::cadastre: {
+            const std::int64_t said = number_in(message);
+            if (said < 1 || said > 20) {
+                return std::nullopt;
+            }
+            const std::string key = player_key("b", username);
+            if (state.challenge.find(key) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            state.challenge[key] = said;
+            played.player = username;
+            played.number = said;
+            break;
+        }
+        case Game::pilgrimage: {
+            const auto steps = static_cast<std::int64_t>(words_in(message).size());
+            if (steps < 1) {
+                return std::nullopt;
+            }
+            const std::int64_t walked = counter(state.challenge, "count") + steps;
+            state.challenge["count"] = walked;
+            state.challenge[player_key("in", username)] = 1;
+            played.player = username;
+            played.number = walked;
+            if (walked >= secret) {
+                played.decided = true;
+                const std::vector<std::pair<std::string, std::int64_t>> pilgrims =
+                    players_with(state.challenge, "in");
+                const std::int64_t share =
+                    counter(state.challenge, "pot") / static_cast<std::int64_t>(pilgrims.size());
+                for (const std::pair<std::string, std::int64_t> &pilgrim : pilgrims) {
+                    state.scores[pilgrim.first] = counter(state.scores, pilgrim.first) + share;
+                }
+                played.palle = share;
+            }
+            break;
+        }
+        case Game::apocalypse: {
+            const std::string key = player_key("in", username);
+            if (state.challenge.find(key) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            state.challenge[key] = 1;
+            played.player = username;
+            played.number = static_cast<std::int64_t>(players_with(state.challenge, "in").size());
+            break;
+        }
         case Game::forbidden: {
             const std::string_view word = forbidden_words.at(static_cast<std::size_t>(secret));
             if (!text::contains_ignore_case(message, word)) {
@@ -1592,6 +2747,579 @@ std::optional<GameClosed> game_close(Storage &storage, std::int64_t now) {
             closed.kind = static_cast<Game>(counter(state.challenge, "kind"));
             closed.pot = counter(state.challenge, "pot");
             closed.secret = counter(state.challenge, "secret");
+            if (closed.kind == Game::tug) {
+                closed.table = players_with(state.challenge, "s");
+                const std::int64_t rope = counter(state.challenge, "rope");
+                closed.secret = rope;
+                if (rope != 0 && !closed.table.empty()) {
+                    const std::int64_t winning = rope > 0 ? 1 : 2;
+                    std::vector<std::string> pullers;
+                    for (const std::pair<std::string, std::int64_t> &puller : closed.table) {
+                        if (puller.second == winning) {
+                            pullers.push_back(puller.first);
+                        }
+                    }
+                    if (!pullers.empty()) {
+                        const std::int64_t share =
+                            closed.pot / static_cast<std::int64_t>(pullers.size());
+                        for (const std::string &puller : pullers) {
+                            state.scores[puller] = counter(state.scores, puller) + share;
+                        }
+                        closed.winner = pullers.front();
+                        closed.detail = winning == 1 ? "a-m" : "n-z";
+                    }
+                }
+            }
+            if (closed.kind == Game::jenga) {
+                closed.table = players_with(state.challenge, "in");
+                if (!closed.table.empty()) {
+                    const std::int64_t share =
+                        closed.pot / static_cast<std::int64_t>(closed.table.size());
+                    for (const std::pair<std::string, std::int64_t> &player : closed.table) {
+                        state.scores[player.first] = counter(state.scores, player.first) + share;
+                    }
+                    closed.secret = counter(state.challenge, "count");
+                }
+            }
+            if (closed.kind == Game::smuggle) {
+                closed.table = players_with(state.challenge, "b");
+                if (!closed.table.empty()) {
+                    const std::size_t checked = session.random_index(closed.table.size());
+                    const std::pair<std::string, std::int64_t> &caught =
+                        closed.table.at(checked);
+                    closed.winner = caught.first;
+                    closed.secret = caught.second;
+                    for (const std::pair<std::string, std::int64_t> &load : closed.table) {
+                        if (load.first != caught.first) {
+                            state.scores[load.first] = counter(state.scores, load.first) + (load.second * 2);
+                        }
+                    }
+                }
+            }
+            if (closed.kind == Game::insurance) {
+                closed.table = players_with(state.challenge, "b");
+                const bool disaster = session.random_index(3) == 0;
+                closed.detail = disaster ? "disastro" : "sereno";
+                closed.secret = static_cast<std::int64_t>(closed.table.size());
+                if (disaster) {
+                    for (const std::pair<std::string, std::int64_t> &insured : closed.table) {
+                        state.scores[insured.first] = counter(state.scores, insured.first) + 500;
+                    }
+                }
+            }
+            if (closed.kind == Game::strike) {
+                /* Nessuno ha parlato fino alla fine: la cassa si divide fra tutti. */
+                const std::int64_t kitty = counter(state.challenge, "count");
+                closed.secret = kitty;
+                if (kitty > 0 && !state.scores.empty()) {
+                    const std::int64_t share = kitty / static_cast<std::int64_t>(state.scores.size());
+                    for (Counters::value_type &entry : state.scores) {
+                        entry.second += share;
+                    }
+                    closed.detail = std::format("{}", share);
+                }
+            }
+            if (closed.kind == Game::contest) {
+                closed.table = players_with(state.challenge, "p");
+                std::int64_t best = 0;
+                int howmany = 0;
+                for (const std::pair<std::string, std::int64_t> &player : closed.table) {
+                    if (player.second > best) {
+                        best = player.second;
+                        howmany = 1;
+                        closed.winner = player.first;
+                    } else if (player.second == best) {
+                        ++howmany;
+                    }
+                }
+                if (best == 0 || howmany > 1) {
+                    closed.winner.clear();
+                } else {
+                    closed.secret = best;
+                    state.scores[closed.winner] = counter(state.scores, closed.winner) + closed.pot;
+                }
+            }
+            if (closed.kind == Game::cadastre) {
+                closed.table = players_with(state.challenge, "b");
+                Counters howmany;
+                for (const std::pair<std::string, std::int64_t> &claim : closed.table) {
+                    howmany[std::format("{}", claim.second)] += 1;
+                }
+                std::vector<std::string> owners;
+                for (const std::pair<std::string, std::int64_t> &claim : closed.table) {
+                    if (counter(howmany, std::format("{}", claim.second)) == 1) {
+                        owners.push_back(claim.first);
+                    }
+                }
+                closed.secret = static_cast<std::int64_t>(owners.size());
+                if (!owners.empty()) {
+                    const std::int64_t rent = closed.pot / static_cast<std::int64_t>(owners.size());
+                    for (const std::string &owner : owners) {
+                        state.scores[owner] = counter(state.scores, owner) + rent;
+                    }
+                    closed.winner = owners.front();
+                    closed.detail = std::format("{}", rent);
+                }
+            }
+            if (closed.kind == Game::apocalypse) {
+                closed.table = players_with(state.challenge, "in");
+                const std::vector<std::pair<std::string, std::int64_t>> saved =
+                    players_with(state.challenge, "safe");
+                closed.secret = static_cast<std::int64_t>(saved.size());
+                if (!saved.empty()) {
+                    const std::int64_t share =
+                        closed.pot / static_cast<std::int64_t>(saved.size());
+                    for (const std::pair<std::string, std::int64_t> &one : saved) {
+                        state.scores[one.first] = counter(state.scores, one.first) + share;
+                    }
+                }
+                for (const std::pair<std::string, std::int64_t> &left : closed.table) {
+                    const std::int64_t lost = counter(state.scores, left.first) / 5;
+                    state.scores[left.first] = counter(state.scores, left.first) - lost;
+                    closed.winner = left.first;
+                }
+            }
+            if (closed.kind == Game::war) {
+                const std::int64_t first = counter(state.challenge, "w1");
+                const std::int64_t second = counter(state.challenge, "w2");
+                closed.table = players_with(state.challenge, "s");
+                if (first != second && !closed.table.empty()) {
+                    const std::int64_t winning = first > second ? 1 : 2;
+                    closed.secret = winning;
+                    std::vector<std::string> victors;
+                    for (const std::pair<std::string, std::int64_t> &soldier : closed.table) {
+                        if (soldier.second == winning) {
+                            victors.push_back(soldier.first);
+                        } else {
+                            state.scores[soldier.first] = counter(state.scores, soldier.first) - 100;
+                        }
+                    }
+                    if (!victors.empty()) {
+                        const std::int64_t share =
+                            closed.pot / static_cast<std::int64_t>(victors.size());
+                        for (const std::string &victor : victors) {
+                            state.scores[victor] = counter(state.scores, victor) + share;
+                        }
+                        closed.winner = victors.front();
+                    }
+                }
+            }
+            if (closed.kind == Game::deposit) {
+                closed.table = players_with(state.challenge, "b");
+                /* Una volta su cinque la banca chiude gli sportelli e si tiene tutto. */
+                const bool failed = session.random_index(5) == 0;
+                closed.detail = failed ? "fallita" : "solida";
+                if (!failed) {
+                    for (const std::pair<std::string, std::int64_t> &saved : closed.table) {
+                        state.scores[saved.first] =
+                            counter(state.scores, saved.first) + saved.second + (saved.second / 10);
+                    }
+                }
+                closed.secret = static_cast<std::int64_t>(closed.table.size());
+            }
+            if (closed.kind == Game::talent) {
+                const auto leader = state.challenge_who.find("leader");
+                if (leader != state.challenge_who.end()) {
+                    closed.winner = leader->second;
+                    closed.secret = counter(state.challenge, "bid");
+                    state.scores[closed.winner] = counter(state.scores, closed.winner) + closed.pot;
+                }
+            }
+            if (closed.kind == Game::election) {
+                closed.table = players_with(state.challenge, "t");
+                std::int64_t most = 0;
+                int howmany = 0;
+                for (const std::pair<std::string, std::int64_t> &votes : closed.table) {
+                    if (votes.second > most) {
+                        most = votes.second;
+                        howmany = 1;
+                        closed.winner = votes.first;
+                    } else if (votes.second == most) {
+                        ++howmany;
+                    }
+                }
+                if (most == 0 || howmany > 1) {
+                    closed.winner.clear();
+                } else {
+                    /* Il sindaco mette una tassa di cinquanta palle su ogni elettore. */
+                    const std::vector<std::pair<std::string, std::int64_t>> voters =
+                        players_with(state.challenge, "v");
+                    for (const std::pair<std::string, std::int64_t> &voter : voters) {
+                        state.scores[voter.first] = counter(state.scores, voter.first) - 50;
+                    }
+                    closed.secret = 50 * static_cast<std::int64_t>(voters.size());
+                    state.scores[closed.winner] = counter(state.scores, closed.winner) + closed.secret;
+                }
+            }
+            if (closed.kind == Game::fraud) {
+                closed.table = players_with(state.challenge, "b");
+                std::int64_t best = -1;
+                for (const std::pair<std::string, std::int64_t> &declared : closed.table) {
+                    const std::int64_t real = counter(state.scores, declared.first);
+                    if (declared.second * 10 < real) {
+                        /* Dichiarato meno di un decimo: evasione, e la multa è il doppio. */
+                        const std::int64_t fine = (real / 10) - declared.second;
+                        state.scores[declared.first] = counter(state.scores, declared.first) - fine;
+                        continue;
+                    }
+                    if (declared.second > best) {
+                        best = declared.second;
+                        closed.winner = declared.first;
+                    }
+                }
+                if (best < 0) {
+                    closed.winner.clear();
+                } else {
+                    closed.secret = best;
+                    state.scores[closed.winner] = counter(state.scores, closed.winner) + closed.pot;
+                }
+            }
+            if (closed.kind == Game::scheme) {
+                closed.table = players_with(state.challenge, "b");
+                closed.secret = static_cast<std::int64_t>(closed.table.size());
+                for (const std::pair<std::string, std::int64_t> &joined : closed.table) {
+                    if (joined.second > closed.secret - 2) {
+                        closed.winner = joined.first;
+                    }
+                }
+            }
+            if (closed.kind == Game::refund) {
+                const auto buyer = state.challenge_who.find("target");
+                closed.table = players_with(state.challenge, "v");
+                if (buyer != state.challenge_who.end() && !closed.table.empty()) {
+                    closed.winner = buyer->second;
+                    const std::int64_t yes = std::accumulate(
+                        closed.table.begin(),
+                        closed.table.end(),
+                        std::int64_t{0},
+                        [](std::int64_t sum, const std::pair<std::string, std::int64_t> &vote) {
+                            return sum + vote.second;
+                        }
+                    );
+                    /* Il supporto clienti ha l'ultima parola, e la tira a sorte pesata sui voti. */
+                    const auto jurors = static_cast<std::int64_t>(closed.table.size());
+                    const bool refunded =
+                        static_cast<std::int64_t>(session.random_index(static_cast<std::size_t>(jurors))) < yes;
+                    closed.detail = refunded ? "rimborsato" : "respinto";
+                    closed.secret = closed.pot / 2;
+                    if (refunded) {
+                        state.scores[closed.winner] = counter(state.scores, closed.winner) + closed.secret;
+                    } else {
+                        state.scores[closed.winner] = counter(state.scores, closed.winner) - closed.secret;
+                    }
+                }
+            }
+            if (closed.kind == Game::spy) {
+                const auto spy = state.challenge_who.find("target");
+                closed.table = players_with(state.challenge, "v");
+                if (spy != state.challenge_who.end()) {
+                    closed.winner = spy->second;
+                    std::vector<std::string> right;
+                    for (const std::pair<std::string, std::int64_t> &vote : closed.table) {
+                        const auto said = state.challenge_who.find(player_key("says", vote.first));
+                        if (said != state.challenge_who.end() && said->second == spy->second) {
+                            right.push_back(vote.first);
+                        }
+                    }
+                    if (right.empty()) {
+                        closed.detail = "scappata";
+                        state.scores[closed.winner] = counter(state.scores, closed.winner) + closed.pot;
+                    } else {
+                        closed.detail = "presa";
+                        const std::int64_t share =
+                            closed.pot / static_cast<std::int64_t>(right.size());
+                        for (const std::string &hunter : right) {
+                            state.scores[hunter] = counter(state.scores, hunter) + share;
+                        }
+                        closed.secret = share;
+                    }
+                }
+            }
+            if (closed.kind == Game::plot) {
+                closed.table = players_with(state.challenge, "t");
+                std::int64_t most = 0;
+                int howmany = 0;
+                for (const std::pair<std::string, std::int64_t> &marked : closed.table) {
+                    if (marked.second > most) {
+                        most = marked.second;
+                        howmany = 1;
+                        closed.winner = marked.first;
+                    } else if (marked.second == most) {
+                        ++howmany;
+                    }
+                }
+                if (most == 0 || howmany > 1) {
+                    closed.winner.clear();
+                } else {
+                    const std::int64_t taken = counter(state.scores, closed.winner) / 10;
+                    state.scores[closed.winner] = counter(state.scores, closed.winner) - taken;
+                    closed.secret = taken;
+                    std::vector<std::string> plotters;
+                    for (const std::pair<std::string, std::int64_t> &vote : players_with(state.challenge, "v")) {
+                        const auto said = state.challenge_who.find(player_key("says", vote.first));
+                        if (said != state.challenge_who.end() && said->second == closed.winner) {
+                            plotters.push_back(vote.first);
+                        }
+                    }
+                    if (!plotters.empty()) {
+                        const std::int64_t share =
+                            taken / static_cast<std::int64_t>(plotters.size());
+                        for (const std::string &plotter : plotters) {
+                            state.scores[plotter] = counter(state.scores, plotter) + share;
+                        }
+                    }
+                }
+            }
+            if (closed.kind == Game::horses) {
+                closed.table = players_with(state.challenge, "b");
+                std::int64_t ahead = 0;
+                for (int horse = 1; horse <= 4; ++horse) {
+                    const std::int64_t run = counter(state.challenge, std::format("h{}", horse));
+                    if (run > ahead) {
+                        ahead = run;
+                        closed.secret = horse;
+                    }
+                }
+                for (const std::pair<std::string, std::int64_t> &bet : closed.table) {
+                    if (bet.second == closed.secret) {
+                        state.scores[bet.first] = counter(state.scores, bet.first) + closed.pot;
+                        closed.winner = bet.first;
+                    }
+                }
+            }
+            if (closed.kind == Game::trial) {
+                const auto accused = state.challenge_who.find("target");
+                closed.table = players_with(state.challenge, "v");
+                if (accused != state.challenge_who.end() && !closed.table.empty()) {
+                    closed.winner = accused->second;
+                    const std::int64_t against = std::accumulate(
+                        closed.table.begin(),
+                        closed.table.end(),
+                        std::int64_t{0},
+                        [](std::int64_t sum, const std::pair<std::string, std::int64_t> &vote) {
+                            return sum + vote.second;
+                        }
+                    );
+                    const auto jurors = static_cast<std::int64_t>(closed.table.size());
+                    if (against * 2 > jurors) {
+                        const std::int64_t fine = counter(state.scores, closed.winner) / 10;
+                        state.scores[closed.winner] = counter(state.scores, closed.winner) - fine;
+                        const std::int64_t share = against > 0 ? fine / against : 0;
+                        for (const std::pair<std::string, std::int64_t> &vote : closed.table) {
+                            if (vote.second == 1) {
+                                state.scores[vote.first] = counter(state.scores, vote.first) + share;
+                            }
+                        }
+                        closed.secret = fine;
+                        closed.detail = "colpevole";
+                    } else {
+                        /* Assolto: chi lo accusava paga cento palle a testa. */
+                        for (const std::pair<std::string, std::int64_t> &vote : closed.table) {
+                            if (vote.second == 1) {
+                                state.scores[vote.first] = counter(state.scores, vote.first) - 100;
+                                state.scores[closed.winner] = counter(state.scores, closed.winner) + 100;
+                            }
+                        }
+                        closed.secret = against * 100;
+                        closed.detail = "assolto";
+                    }
+                }
+            }
+            if (closed.kind == Game::market) {
+                closed.table = players_with(state.challenge, "b");
+                closed.secret = counter(state.challenge, "price");
+                for (const std::pair<std::string, std::int64_t> &position : closed.table) {
+                    /* Comprato è positivo, venduto è negativo: il segno dice da che parte stava. */
+                    const std::int64_t gain = position.second > 0
+                        ? closed.secret - position.second
+                        : -closed.secret - position.second;
+                    state.scores[position.first] = counter(state.scores, position.first) + (gain * 10);
+                }
+            }
+            if (closed.kind == Game::wager) {
+                closed.table = players_with(state.challenge, "b");
+                const std::int64_t total = counter(state.challenge, "count");
+                closed.secret = total;
+                closed.detail = total % 2 == 0 ? "pari" : "dispari";
+                for (const std::pair<std::string, std::int64_t> &bet : closed.table) {
+                    const bool even = bet.second % 2 == 0;
+                    const std::int64_t change = even == (total % 2 == 0) ? bet.second : -bet.second;
+                    state.scores[bet.first] = counter(state.scores, bet.first) + change;
+                }
+            }
+            if (closed.kind == Game::hostage) {
+                const auto held = state.challenge_who.find("target");
+                closed.table = players_with(state.challenge, "b");
+                const std::int64_t paid = counter(state.challenge, "count");
+                closed.detail = std::format("{}", paid);
+                if (held != state.challenge_who.end()) {
+                    closed.winner = held->second;
+                    if (paid < closed.secret) {
+                        const std::int64_t taken = counter(state.scores, closed.winner) / 10;
+                        state.scores[closed.winner] = counter(state.scores, closed.winner) - taken;
+                    }
+                }
+            }
+            if (closed.kind == Game::legacy) {
+                closed.table = players_with(state.challenge, "b");
+                std::int64_t least = -1;
+                int howmany = 0;
+                for (const std::pair<std::string, std::int64_t> &claim : closed.table) {
+                    if (least < 0 || claim.second < least) {
+                        least = claim.second;
+                        howmany = 1;
+                        closed.winner = claim.first;
+                    } else if (claim.second == least) {
+                        ++howmany;
+                    }
+                }
+                if (least < 0 || howmany > 1) {
+                    closed.winner.clear();
+                } else {
+                    closed.detail = std::format("{}", least);
+                    state.scores[closed.winner] = counter(state.scores, closed.winner) + closed.secret;
+                }
+            }
+            if (closed.kind == Game::customs) {
+                closed.table = players_with(state.challenge, "b");
+                std::int64_t best = 0;
+                for (const std::pair<std::string, std::int64_t> &runs : closed.table) {
+                    if (runs.second > best) {
+                        best = runs.second;
+                        closed.winner = runs.first;
+                    }
+                }
+                if (best > 0) {
+                    closed.secret = best;
+                    state.scores[closed.winner] = counter(state.scores, closed.winner) + closed.pot;
+                }
+            }
+            if (closed.kind == Game::sealed || closed.kind == Game::pyramid) {
+                closed.table = players_with(state.challenge, "b");
+                std::int64_t best = -1;
+                int howmany = 0;
+                for (const std::pair<std::string, std::int64_t> &bid : closed.table) {
+                    if (closed.kind == Game::pyramid && bid.second > closed.secret) {
+                        continue;
+                    }
+                    if (bid.second > best) {
+                        best = bid.second;
+                        howmany = 1;
+                        closed.winner = bid.first;
+                    } else if (bid.second == best) {
+                        ++howmany;
+                    }
+                }
+                if (best < 0 || howmany > 1) {
+                    closed.winner.clear();
+                } else {
+                    closed.detail = std::format("{}", best);
+                    state.scores[closed.winner] = counter(state.scores, closed.winner) + closed.pot;
+                    if (closed.kind == Game::sealed) {
+                        state.scores[closed.winner] = counter(state.scores, closed.winner) - best;
+                    }
+                }
+            }
+            if (closed.kind == Game::unique) {
+                closed.table = players_with(state.challenge, "b");
+                Counters howmany;
+                for (const std::pair<std::string, std::int64_t> &bid : closed.table) {
+                    howmany[std::format("{}", bid.second)] += 1;
+                }
+                std::int64_t best = -1;
+                for (const std::pair<std::string, std::int64_t> &bid : closed.table) {
+                    if (counter(howmany, std::format("{}", bid.second)) != 1) {
+                        continue;
+                    }
+                    if (best < 0 || bid.second < best) {
+                        best = bid.second;
+                        closed.winner = bid.first;
+                    }
+                }
+                if (best < 0) {
+                    closed.winner.clear();
+                } else {
+                    closed.detail = std::format("{}", best);
+                    state.scores[closed.winner] = counter(state.scores, closed.winner) + closed.pot;
+                }
+            }
+            if (closed.kind == Game::average) {
+                closed.table = players_with(state.challenge, "b");
+                if (!closed.table.empty()) {
+                    const std::int64_t total = std::accumulate(
+                        closed.table.begin(),
+                        closed.table.end(),
+                        std::int64_t{0},
+                        [](std::int64_t sum, const std::pair<std::string, std::int64_t> &bid) {
+                            return sum + bid.second;
+                        }
+                    );
+                    const std::int64_t wanted =
+                        total * 2 / (3 * static_cast<std::int64_t>(closed.table.size()));
+                    closed.secret = wanted;
+                    std::int64_t best = -1;
+                    for (const std::pair<std::string, std::int64_t> &bid : closed.table) {
+                        const std::int64_t away = bid.second > wanted ? bid.second - wanted : wanted - bid.second;
+                        if (best < 0 || away < best) {
+                            best = away;
+                            closed.winner = bid.first;
+                        }
+                    }
+                    state.scores[closed.winner] = counter(state.scores, closed.winner) + closed.pot;
+                }
+            }
+            if (closed.kind == Game::russian || closed.kind == Game::climb || closed.kind == Game::bank) {
+                closed.table = players_with(state.challenge, closed.kind == Game::russian ? "in" : "s");
+                if (closed.kind == Game::bank) {
+                    std::int64_t best = -1;
+                    for (const std::pair<std::string, std::int64_t> &hand : closed.table) {
+                        if (hand.second <= 21 && hand.second > best) {
+                            best = hand.second;
+                            closed.winner = hand.first;
+                        }
+                    }
+                    if (best < 0) {
+                        closed.winner.clear();
+                    } else {
+                        closed.secret = best;
+                        state.scores[closed.winner] = counter(state.scores, closed.winner) + closed.pot;
+                    }
+                }
+                if (closed.kind == Game::russian && !closed.table.empty()) {
+                    /* Chi è ancora vivo si divide il piatto. */
+                    const std::int64_t share =
+                        closed.pot / static_cast<std::int64_t>(closed.table.size());
+                    for (const std::pair<std::string, std::int64_t> &alive : closed.table) {
+                        state.scores[alive.first] = counter(state.scores, alive.first) + share;
+                    }
+                    closed.secret = share;
+                }
+                if (closed.kind == Game::climb) {
+                    for (const std::pair<std::string, std::int64_t> &stake : closed.table) {
+                        const std::int64_t paid = std::min(stake.second, closed.pot);
+                        state.scores[stake.first] = counter(state.scores, stake.first) + paid;
+                    }
+                    closed.secret = static_cast<std::int64_t>(closed.table.size());
+                }
+            }
+            if (closed.kind == Game::collect) {
+                closed.table = players_with(state.challenge, "b");
+                const std::int64_t total = counter(state.challenge, "count");
+                closed.detail = std::format("{}", total);
+                if (total == closed.secret && !closed.table.empty()) {
+                    const std::int64_t share =
+                        closed.pot / static_cast<std::int64_t>(closed.table.size());
+                    for (const std::pair<std::string, std::int64_t> &given : closed.table) {
+                        state.scores[given.first] =
+                            counter(state.scores, given.first) + given.second + share;
+                    }
+                } else if (total < closed.secret) {
+                    /* Non ci siamo arrivati: ognuno si riprende quello che aveva messo. */
+                    for (const std::pair<std::string, std::int64_t> &given : closed.table) {
+                        state.scores[given.first] = counter(state.scores, given.first) + given.second;
+                    }
+                }
+            }
             if (closed.kind == Game::shortest || closed.kind == Game::river) {
                 const auto leader = state.challenge_who.find("leader");
                 if (leader != state.challenge_who.end()) {
@@ -1644,6 +3372,237 @@ std::optional<GameClosed> game_close(Storage &storage, std::int64_t now) {
 
     if (result) {
         log_info("game closed kind={} winner={}", static_cast<int>(result->kind), result->winner);
+    }
+    return result;
+}
+
+std::optional<GameTicked> game_tick(Storage &storage, std::int64_t now) {
+    const std::optional<GameTicked> result =
+        storage.transaction([now](StorageSession &session) -> std::optional<GameTicked> {
+            ConquisterState &state = session.state();
+            const std::int64_t closes = counter(state.challenge, "closes");
+            if (closes == 0 || closes <= now) {
+                return std::nullopt;
+            }
+            GameTicked ticked;
+            ticked.kind = static_cast<Game>(counter(state.challenge, "kind"));
+            if (ticked.kind == Game::potato) {
+                const std::int64_t fuse = counter(state.challenge, "fuse");
+                if (fuse == 0 || fuse > now) {
+                    return std::nullopt;
+                }
+                const auto holder = state.challenge_who.find("leader");
+                ticked.decided = true;
+                if (holder != state.challenge_who.end()) {
+                    ticked.player = holder->second;
+                    ticked.palle = counter(state.scores, ticked.player) / 10;
+                    state.scores[ticked.player] = counter(state.scores, ticked.player) - ticked.palle;
+                }
+                state.challenge.clear();
+                state.challenge_who.clear();
+                return ticked;
+            }
+            if (ticked.kind == Game::strike) {
+                const std::int64_t deadline = counter(state.challenge, "deadline");
+                if (deadline == 0 || deadline > now) {
+                    return std::nullopt;
+                }
+                state.challenge["deadline"] = now + 20;
+                state.challenge["count"] = counter(state.challenge, "count") + 500;
+                ticked.number = counter(state.challenge, "count");
+                return ticked;
+            }
+            if (ticked.kind == Game::contest) {
+                const std::int64_t deadline = counter(state.challenge, "deadline");
+                if (deadline == 0 || deadline > now) {
+                    return std::nullopt;
+                }
+                const std::int64_t round = counter(state.challenge, "round") + 1;
+                if (round > 3) {
+                    return std::nullopt;
+                }
+                state.challenge["round"] = round;
+                state.challenge["deadline"] = now + 45;
+                state.challenge["secret"] =
+                    static_cast<std::int64_t>(session.random_index(questions.size()));
+                ticked.number = round;
+                ticked.detail = questions.at(static_cast<std::size_t>(counter(state.challenge, "secret"))).asked;
+                return ticked;
+            }
+            if (ticked.kind == Game::pilgrimage) {
+                const std::int64_t deadline = counter(state.challenge, "deadline");
+                if (deadline == 0 || deadline > now) {
+                    return std::nullopt;
+                }
+                state.challenge["deadline"] = now + 20;
+                const std::int64_t walked = std::max(std::int64_t{0}, counter(state.challenge, "count") - 10);
+                state.challenge["count"] = walked;
+                ticked.number = walked;
+                return ticked;
+            }
+            if (ticked.kind == Game::apocalypse) {
+                const std::int64_t deadline = counter(state.challenge, "deadline");
+                if (deadline == 0 || deadline > now) {
+                    return std::nullopt;
+                }
+                state.challenge["deadline"] = now + 25;
+                const std::vector<std::pair<std::string, std::int64_t>> waiting =
+                    players_with(state.challenge, "in");
+                if (waiting.empty()) {
+                    return std::nullopt;
+                }
+                const std::pair<std::string, std::int64_t> &lucky =
+                    waiting.at(session.random_index(waiting.size()));
+                state.challenge.erase(player_key("in", lucky.first));
+                state.challenge[player_key("safe", lucky.first)] = 1;
+                ticked.player = lucky.first;
+                ticked.number = static_cast<std::int64_t>(waiting.size()) - 1;
+                return ticked;
+            }
+            if (ticked.kind == Game::dutch) {
+                const std::int64_t deadline = counter(state.challenge, "deadline");
+                if (deadline == 0 || deadline > now) {
+                    return std::nullopt;
+                }
+                const std::int64_t price =
+                    std::max(std::int64_t{0}, counter(state.challenge, "price") - 1000);
+                state.challenge["price"] = price;
+                state.challenge["deadline"] = now + 20;
+                ticked.number = price;
+                return ticked;
+            }
+            if (ticked.kind == Game::riddle) {
+                const std::int64_t deadline = counter(state.challenge, "deadline");
+                if (deadline == 0 || deadline > now) {
+                    return std::nullopt;
+                }
+                const std::int64_t clues = counter(state.challenge, "clues") + 1;
+                if (clues > 3) {
+                    return std::nullopt;
+                }
+                state.challenge["clues"] = clues;
+                state.challenge["deadline"] = now + 40;
+                const std::string_view answer =
+                    mirrors.at(static_cast<std::size_t>(counter(state.challenge, "secret")));
+                ticked.number = clues;
+                ticked.palle = counter(state.challenge, "pot") / clues;
+                /* Il secondo indizio è la prima lettera, il terzo anche l'ultima. */
+                ticked.detail = clues == 2
+                    ? std::format("comincia per {}", answer.front())
+                    : std::format("comincia per {} e finisce per {}", answer.front(), answer.back());
+                return ticked;
+            }
+            if (ticked.kind == Game::bingo) {
+                const std::int64_t deadline = counter(state.challenge, "deadline");
+                if (deadline == 0 || deadline > now) {
+                    return std::nullopt;
+                }
+                const std::int64_t number = 1 + static_cast<std::int64_t>(session.random_index(30));
+                state.challenge["deadline"] = now + 20;
+                state.challenge[std::format("out{}", number)] = 1;
+                ticked.number = number;
+                for (const std::pair<std::string, std::int64_t> &card : players_with(state.challenge, "c")) {
+                    std::int64_t left = card.second;
+                    bool full = true;
+                    for (int at = 0; at < 5; ++at) {
+                        if (counter(state.challenge, std::format("out{}", left % 31)) == 0) {
+                            full = false;
+                        }
+                        left /= 31;
+                    }
+                    if (full) {
+                        ticked.decided = true;
+                        ticked.player = card.first;
+                        ticked.palle = counter(state.challenge, "pot");
+                        state.scores[card.first] = counter(state.scores, card.first) + ticked.palle;
+                        state.challenge.clear();
+                        state.challenge_who.clear();
+                        return ticked;
+                    }
+                }
+                return ticked;
+            }
+            if (ticked.kind == Game::horses) {
+                const std::int64_t deadline = counter(state.challenge, "deadline");
+                if (deadline == 0 || deadline > now) {
+                    return std::nullopt;
+                }
+                state.challenge["deadline"] = now + 15;
+                const std::int64_t running = 1 + static_cast<std::int64_t>(session.random_index(4));
+                const std::string lane = std::format("h{}", running);
+                const std::int64_t far = counter(state.challenge, lane) + 1;
+                state.challenge[lane] = far;
+                ticked.number = running;
+                ticked.palle = far;
+                return ticked;
+            }
+            if (ticked.kind == Game::quake) {
+                const std::int64_t deadline = counter(state.challenge, "deadline");
+                if (deadline == 0 || deadline > now) {
+                    return std::nullopt;
+                }
+                state.challenge["deadline"] = now + 30;
+                /* Trema: chi non si è fatto sentire negli ultimi trenta secondi perde un ventesimo. */
+                std::vector<std::string> shaken;
+                for (const std::pair<std::string, std::int64_t> &seen : players_with(state.challenge, "seen")) {
+                    if (now - seen.second > 30) {
+                        const std::int64_t lost = counter(state.scores, seen.first) / 20;
+                        state.scores[seen.first] = counter(state.scores, seen.first) - lost;
+                        shaken.push_back(seen.first);
+                        ticked.palle += lost;
+                    }
+                }
+                if (shaken.empty()) {
+                    return std::nullopt;
+                }
+                ticked.number = static_cast<std::int64_t>(shaken.size());
+                ticked.player = shaken.front();
+                return ticked;
+            }
+            if (ticked.kind == Game::chairs) {
+                const std::int64_t deadline = counter(state.challenge, "deadline");
+                if (deadline == 0 || deadline > now) {
+                    return std::nullopt;
+                }
+                std::vector<std::pair<std::string, std::int64_t>> seated =
+                    players_with(state.challenge, "in");
+                if (seated.size() < 2) {
+                    /* Da soli non si gioca: la musica si ferma senza eliminare nessuno. */
+                    state.challenge["deadline"] = now + 25;
+                    return std::nullopt;
+                }
+                /* Esce chi ha scritto di meno, a parità l'ultimo in ordine di nome. */
+                std::string slowest = seated.front().first;
+                std::int64_t fewest = counter(state.challenge, player_key("n", slowest));
+                for (const std::pair<std::string, std::int64_t> &player : seated) {
+                    const std::int64_t howmany = counter(state.challenge, player_key("n", player.first));
+                    if (howmany < fewest || (howmany == fewest && player.first > slowest)) {
+                        fewest = howmany;
+                        slowest = player.first;
+                    }
+                }
+                state.challenge.erase(player_key("in", slowest));
+                state.challenge.erase(player_key("n", slowest));
+                ticked.player = slowest;
+                ticked.number = counter(state.challenge, "round");
+                state.challenge["round"] = ticked.number + 1;
+                state.challenge["deadline"] = now + 25;
+                seated = players_with(state.challenge, "in");
+                if (seated.size() == 1) {
+                    ticked.decided = true;
+                    ticked.detail = seated.front().first;
+                    ticked.palle = counter(state.challenge, "pot");
+                    state.scores[ticked.detail] = counter(state.scores, ticked.detail) + ticked.palle;
+                    state.challenge.clear();
+                    state.challenge_who.clear();
+                }
+                return ticked;
+            }
+            return std::nullopt;
+        });
+
+    if (result) {
+        log_info("game ticked kind={} player={}", static_cast<int>(result->kind), result->player);
     }
     return result;
 }

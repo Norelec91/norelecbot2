@@ -158,6 +158,11 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
                 chaos.rest();
             }
             if (games_run) {
+                if (const std::optional<GameTicked> ticked = game_tick(storage, seconds_now())) {
+                    if (const std::string said = game_ticked_reply(*ticked); !said.empty()) {
+                        announce(config, said);
+                    }
+                }
                 if (const std::optional<GameClosed> closed = game_close(storage, seconds_now())) {
                     announce(config, game_closed_reply(*closed));
                 }

@@ -305,6 +305,57 @@ enum class Game {
     slot,
     stopwatch,
     order,
+    /* I giochi grossi: più mani, più giocatori, e qualcosa da perdere. */
+    sealed,
+    unique,
+    average,
+    pyramid,
+    potato,
+    chairs,
+    russian,
+    climb,
+    bank,
+    collect,
+    trial,
+    bounty,
+    siege,
+    market,
+    wager,
+    relay,
+    hostage,
+    legacy,
+    customs,
+    marathon,
+    stars,
+    fraud,
+    scheme,
+    refund,
+    spy,
+    plot,
+    dowry,
+    bingo,
+    horses,
+    quake,
+    war,
+    deposit,
+    talent,
+    treasure,
+    domino,
+    tunnel,
+    dutch,
+    riddle,
+    navy,
+    election,
+    tug,
+    jenga,
+    whispers,
+    smuggle,
+    insurance,
+    strike,
+    contest,
+    cadastre,
+    pilgrimage,
+    apocalypse,
 };
 
 struct GameOpened {
@@ -329,8 +380,21 @@ struct GamePlayed {
 struct GameClosed {
     Game kind = Game::race;
     std::string winner;
+    /* Chi ha giocato e con che numero, per i giochi che si contano alla fine. */
+    std::vector<std::pair<std::string, std::int64_t>> table;
+    std::string detail;
     std::int64_t pot = 0;
     std::int64_t secret = 0;
+};
+
+/* Quello che succede da solo mentre un gioco grosso è aperto. */
+struct GameTicked {
+    Game kind = Game::race;
+    bool decided = false;
+    std::string player;
+    std::string detail;
+    std::int64_t number = 0;
+    std::int64_t palle = 0;
 };
 
 enum class Hand { rock, paper, scissors };
@@ -357,6 +421,8 @@ struct DuelResult {
 /* Opens one at random, or the one asked for, if none is open. */
 [[nodiscard]] std::optional<GameOpened> game_open(Storage &storage, std::int64_t now, std::int64_t open_for,
                                                   std::int64_t pot, std::optional<Game> wanted = std::nullopt);
+/* Il battito dei giochi a tempo: la miccia che scende, il giro che finisce. */
+[[nodiscard]] std::optional<GameTicked> game_tick(Storage &storage, std::int64_t now);
 /* The game somebody has called by name, whatever else the message says. */
 [[nodiscard]] std::optional<Game> game_named(std::string_view message);
 /* What a message does to the game under way, if anything. */

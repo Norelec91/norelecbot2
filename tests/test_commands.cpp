@@ -708,11 +708,9 @@ TEST_CASE("the five games answer to whatever gets written") {
     CHECK(fight->contains("palle passano di mano"));
 
     SUBCASE("the race goes to whoever speaks first") {
-        std::optional<GameOpened> opened;
-        for (int tries = 0; tries < 400 && (!opened || opened->kind != Game::race); ++tries) {
-            static_cast<void>(game_close(storage, seconds_now_for_test() + 100000));
-            opened = game_open(storage, seconds_now_for_test(), 600, 5000);
-        }
+        static_cast<void>(game_close(storage, seconds_now_for_test() + 100000));
+        const std::optional<GameOpened> opened =
+            game_open(storage, seconds_now_for_test(), 600, 5000, Game::race);
         REQUIRE(opened);
         REQUIRE(opened->kind == Game::race);
         CHECK(game_opened_reply(*opened).contains("CORSA: pronti, via!"));
@@ -726,11 +724,9 @@ TEST_CASE("the five games answer to whatever gets written") {
     }
 
     SUBCASE("the number has to be the right one") {
-        std::optional<GameOpened> opened;
-        for (int tries = 0; tries < 400 && (!opened || opened->kind != Game::guess); ++tries) {
-            static_cast<void>(game_close(storage, seconds_now_for_test() + 100000));
-            opened = game_open(storage, seconds_now_for_test(), 600, 5000);
-        }
+        static_cast<void>(game_close(storage, seconds_now_for_test() + 100000));
+        const std::optional<GameOpened> opened =
+            game_open(storage, seconds_now_for_test(), 600, 5000, Game::guess);
         REQUIRE(opened);
         REQUIRE(opened->kind == Game::guess);
         CHECK(opened->secret >= 1);
@@ -795,22 +791,23 @@ TEST_CASE("the quiet pays everybody, and whoever breaks it pays") {
     Storage storage{config.conquister_path, config.quotes_path};
 
     const auto open_silence = [&] {
-        std::optional<GameOpened> opened;
-        for (int tries = 0; tries < 400 && (!opened || opened->kind != Game::silence); ++tries) {
-            static_cast<void>(game_close(storage, seconds_now_for_test() + 100000));
-            opened = game_open(storage, seconds_now_for_test(), 600, 1000);
-        }
-        return opened;
+        static_cast<void>(game_close(storage, seconds_now_for_test() + 100000));
+        return game_open(storage, seconds_now_for_test(), 600, 1000, Game::silence);
     };
 
     REQUIRE(open_silence());
+    /* Aprire e chiudere gli altri giochi in cerca del silenzio muove i punteggi: si misura da qui. */
+    const std::int64_t alice_quiet = conquister_user(storage, "alice")->score;
+    const std::int64_t bob_quiet = conquister_user(storage, "bob")->score;
     const GameClosed kept = *game_close(storage, seconds_now_for_test() + 100000);
     CHECK(kept.kind == Game::silence);
     CHECK(kept.secret == 2);
-    CHECK(conquister_user(storage, "alice")->score == 11000);
-    CHECK(conquister_user(storage, "bob")->score == 11000);
+    CHECK(conquister_user(storage, "alice")->score == alice_quiet + 1000);
+    CHECK(conquister_user(storage, "bob")->score == bob_quiet + 1000);
 
     REQUIRE(open_silence());
+    /* I giochi aperti mentre cercavamo il silenzio possono aver pagato: si guarda da qui in poi. */
+    const std::int64_t bob_before = conquister_user(storage, "bob")->score;
     const CommandContext context{
         .storage = storage,
         .config = config,
@@ -820,15 +817,16 @@ TEST_CASE("the quiet pays everybody, and whoever breaks it pays") {
         .owner = false,
         .whisper = {},
     };
+    const std::int64_t alice_before = conquister_user(storage, "alice")->score;
     const std::optional<std::string> broke = command_dispatch(context, "ops");
     REQUIRE(broke);
     CHECK(broke->contains("ha parlato per primo e paga"));
-    CHECK(conquister_user(storage, "alice")->score < 11000);
+    CHECK(conquister_user(storage, "alice")->score < alice_before);
     const std::optional<GameClosed> broken = game_close(storage, seconds_now_for_test() + 100000);
     REQUIRE(broken);
     CHECK(broken->secret == 0);
     /* And nobody was paid for a silence that was not kept. */
-    CHECK(conquister_user(storage, "bob")->score == 11000);
+    CHECK(conquister_user(storage, "bob")->score == bob_before);
 }
 
 TEST_CASE("the games that need a head, not a fast finger") {
@@ -853,11 +851,9 @@ TEST_CASE("the games that need a head, not a fast finger") {
     };
     const auto said = [&](std::string_view text) { return command_dispatch(context, text); };
     const auto open_kind = [&](Game wanted) {
-        std::optional<GameOpened> opened;
-        for (int tries = 0; tries < 800 && (!opened || opened->kind != wanted); ++tries) {
-            static_cast<void>(game_close(storage, seconds_now_for_test() + 100000));
-            opened = game_open(storage, seconds_now_for_test(), 600, 5000);
-        }
+        static_cast<void>(game_close(storage, seconds_now_for_test() + 100000));
+        const std::optional<GameOpened> opened =
+            game_open(storage, seconds_now_for_test(), 600, 5000, wanted);
         REQUIRE(opened);
         REQUIRE(opened->kind == wanted);
         return *opened;
@@ -1161,5 +1157,171 @@ TEST_CASE("the twenty that came after") {
         const std::optional<std::string> copied = said(std::format("ecco: {}", code));
         REQUIRE(copied);
         CHECK(copied->contains("ha copiato"));
+    }
+}
+
+TEST_CASE("the big games, where more than one hand is on the table") {
+    const TestPaths paths{"big-games-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":100000,"bob":100000},"quotes_added":{}})";
+    }
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{config.conquister_path, config.quotes_path};
+
+    const CommandContext alice{
+        .storage = storage,
+        .config = config,
+        .user_id = 1,
+        .username = "alice",
+        .claims_allowed = true,
+        .owner = false,
+        .whisper = {},
+    };
+    const CommandContext bob{
+        .storage = storage,
+        .config = config,
+        .user_id = 2,
+        .username = "bob",
+        .claims_allowed = true,
+        .owner = false,
+        .whisper = {},
+    };
+    const auto she = [&](std::string_view text) { return command_dispatch(alice, text); };
+    const auto he = [&](std::string_view text) { return command_dispatch(bob, text); };
+    const auto open_named = [&](std::string_view name, std::string_view word) {
+        static_cast<void>(game_close(storage, seconds_now_for_test() + 100000));
+        const std::optional<std::string> opened = she(word);
+        REQUIRE(opened);
+        CHECK(opened->contains(name));
+        return *opened;
+    };
+
+    SUBCASE("the sealed bid stays sealed until the end") {
+        open_named("ASTA CIECA", "facciamo un'astacieca");
+        const std::optional<std::string> bid = she("offro 400");
+        REQUIRE(bid);
+        /* Quello che ha offerto non si legge nella risposta. */
+        CHECK(bid->contains("registrata"));
+        CHECK_FALSE(bid->contains("400"));
+        /* Una sola offerta a testa: la seconda non viene presa. */
+        CHECK_FALSE(she("anzi 900").has_value());
+        REQUIRE(he("io dico 500"));
+        const std::optional<GameClosed> closed = game_close(storage, seconds_now_for_test() + 100000);
+        REQUIRE(closed);
+        CHECK(closed->winner == "bob");
+        CHECK(closed->table.size() == 2);
+    }
+
+    SUBCASE("the lowest number nobody else said") {
+        open_named("NUMERO UNICO", "giochiamo a unico");
+        REQUIRE(she("dico 7"));
+        REQUIRE(he("dico 3"));
+        const std::optional<GameClosed> closed = game_close(storage, seconds_now_for_test() + 100000);
+        REQUIRE(closed);
+        CHECK(closed->winner == "bob");
+        CHECK(closed->detail == "3");
+    }
+
+    SUBCASE("the potato goes off in somebody's hands") {
+        open_named("PATATA BOLLENTE", "tira fuori la patata");
+        REQUIRE(she("ce l'ho io"));
+        const std::optional<std::string> passed = he("presa");
+        REQUIRE(passed);
+        CHECK(passed->contains("passa a bob"));
+        /* La miccia dura al massimo due minuti. */
+        const std::optional<GameTicked> ticked = game_tick(storage, seconds_now_for_test() + 130);
+        REQUIRE(ticked);
+        CHECK(ticked->player == "bob");
+        CHECK(ticked->palle > 0);
+        CHECK(game_ticked_reply(*ticked).contains("scoppiata in mano a bob"));
+    }
+
+    SUBCASE("the chairs empty one player at a time") {
+        open_named("SEDIE", "mettiamo le sedie");
+        REQUIRE(she("mi siedo"));
+        REQUIRE(he("anche io"));
+        /* Alice ha scritto due volte, bob una: esce bob. */
+        REQUIRE_FALSE(she("io insisto").has_value());
+        const std::optional<GameTicked> ticked = game_tick(storage, seconds_now_for_test() + 30);
+        REQUIRE(ticked);
+        CHECK(ticked->player == "bob");
+        CHECK(ticked->decided);
+        CHECK(ticked->detail == "alice");
+    }
+
+    SUBCASE("the estate goes to whoever asked for least") {
+        open_named("EREDITÀ", "apriamo l'eredità");
+        REQUIRE(she("chiedo 900"));
+        REQUIRE(he("a me bastano 40"));
+        const std::optional<GameClosed> closed = game_close(storage, seconds_now_for_test() + 100000);
+        REQUIRE(closed);
+        CHECK(closed->winner == "bob");
+        CHECK(closed->detail == "40");
+    }
+
+    SUBCASE("the trial needs a jury and settles both ways") {
+        const std::string opened = open_named("PROCESSO", "apriamo un processo");
+        /* L'imputato è uno dei due, e il suo voto non conta. */
+        const bool alice_accused = opened.contains("imputati c'è alice");
+        const std::optional<std::string> vote =
+            alice_accused ? he("colpevole senza dubbio") : she("colpevole senza dubbio");
+        REQUIRE(vote);
+        CHECK(vote->contains("vota colpevole"));
+        const std::optional<GameClosed> closed = game_close(storage, seconds_now_for_test() + 100000);
+        REQUIRE(closed);
+        CHECK(closed->detail == "colpevole");
+        CHECK(closed->secret > 0);
+    }
+
+    SUBCASE("only the plots nobody else claimed pay rent") {
+        open_named("CATASTO", "apriamo il catasto");
+        REQUIRE(she("prendo il 7"));
+        REQUIRE(he("anche io il 7"));
+        const std::optional<GameClosed> closed = game_close(storage, seconds_now_for_test() + 100000);
+        REQUIRE(closed);
+        CHECK(closed->secret == 0);
+        CHECK(game_closed_reply(*closed).contains("contesi"));
+    }
+
+    SUBCASE("the whispered word changes one letter at a time") {
+        const std::string opened = open_named("TELEFONO", "facciamo telefono");
+        const auto started = std::ranges::find_if(mirrors, [&opened](const std::string_view word) {
+            return opened.contains(word);
+        });
+        REQUIRE(started != mirrors.end());
+        std::string changed{*started};
+        changed.front() = changed.front() == 'z' ? 'y' : 'z';
+        const std::optional<std::string> passed = she(std::format("io sento {}", changed));
+        REQUIRE(passed);
+        CHECK(passed->contains("1 su 5"));
+        /* Due lettere cambiate non passano. */
+        std::string wrong = changed;
+        wrong.at(1) = wrong.at(1) == 'q' ? 'w' : 'q';
+        wrong.back() = wrong.back() == 'q' ? 'w' : 'q';
+        CHECK_FALSE(he(std::format("e io {}", wrong)).has_value());
+    }
+
+    SUBCASE("the strike fills the kitty until somebody talks") {
+        open_named("SCIOPERO", "indiciamo uno sciopero");
+        const std::optional<GameTicked> ticked = game_tick(storage, seconds_now_for_test() + 30);
+        REQUIRE(ticked);
+        CHECK(ticked->number == 500);
+        const std::optional<std::string> broke = she("io però parlo");
+        REQUIRE(broke);
+        CHECK(broke->contains("ha rotto lo sciopero"));
+    }
+
+    SUBCASE("the bank pays the highest hand that did not bust") {
+        open_named("BANCO", "apriamo il banco");
+        std::optional<std::string> card = she("carta");
+        REQUIRE(card);
+        CHECK((card->contains("pesca un")));
+        const std::optional<GameClosed> closed = game_close(storage, seconds_now_for_test() + 100000);
+        REQUIRE(closed);
+        /* O ha sballato subito, o ha un punto valido che vince da solo. */
+        CHECK((closed->winner == "alice" || closed->winner.empty()));
     }
 }
