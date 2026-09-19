@@ -14,6 +14,7 @@ namespace norelecbot {
 /* Un gioco nato dalla forgia: la parola che lo chiama, la riga che lo annuncia, il suo codice. */
 struct ForgedGame {
     std::string keyword;
+    std::string family;
     std::string announce;
     std::string source;
 };
@@ -41,6 +42,23 @@ void forge_open_catalogue(std::string directory, LuaLimits limits);
 [[nodiscard]] LuaLimits forge_limits();
 /* Un gioco che si è rotto in partita non si riapre più. */
 void forge_condemn(const std::string &keyword, std::string_view why);
+
+/* Com'è andata una partita: serve a sapere quali giochi piacciono davvero. */
+struct ForgeVerdict {
+    std::string keyword;
+    std::string family;
+    std::int64_t players = 0;
+    std::int64_t messages = 0;
+    /* Quanti secondi sono passati fra l'apertura e la prima mossa; zero se non si è mosso nessuno. */
+    std::int64_t first_move = 0;
+    bool decided = false;
+    std::int64_t palle = 0;
+    std::int64_t at = 0;
+};
+
+/* Scrive una riga in coda al registro degli esiti. */
+void forge_record(const ForgeVerdict &verdict);
+[[nodiscard]] std::string forge_family_of(const std::string &keyword);
 
 /* Conia un gioco nuovo, lo collauda a vuoto e lo scrive su disco. Restituisce niente se non è
    riuscito a farne uno che stia in piedi. */

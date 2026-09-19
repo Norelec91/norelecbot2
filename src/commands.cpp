@@ -1511,9 +1511,14 @@ std::string game_opened_reply(const GameOpened &opened) {
             opened.pot
         );
     case Game::forged: {
-        /* L'annuncio se lo scrive il gioco stesso, quando la forgia lo conia. */
+        /* L'annuncio se lo scrive il gioco stesso, quando la forgia lo conia; se all'apertura ha
+           qualcosa da aggiungere, per esempio un codice da ripetere, va in coda. */
         const std::optional<std::string> said = forge_announce_of(opened.target);
-        return said ? *said : std::format("🛠️ {}: si gioca scrivendo.", opened.target);
+        std::string reply = said ? *said : std::format("🛠️ {}: si gioca scrivendo.", opened.target);
+        if (!opened.detail.empty()) {
+            reply.append("\n").append(opened.detail);
+        }
+        return reply;
     }
     }
     return {};

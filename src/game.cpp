@@ -698,6 +698,24 @@ LuaBotView forged_view(StorageSession &session, ConquisterState &state, std::int
     return view;
 }
 
+/* Com'è andata, scritta nel registro della forgia quando la partita finisce. */
+void record_forged(const ConquisterState &state, const std::string &keyword, bool decided, std::int64_t now) {
+    ForgeVerdict verdict;
+    verdict.keyword = keyword;
+    verdict.family = forge_family_of(keyword);
+    verdict.messages = counter(state.challenge, "fx:msgs");
+    verdict.palle = counter(state.challenge, "fx:palle");
+    verdict.decided = decided;
+    verdict.at = now;
+    const std::int64_t opened = counter(state.challenge, "fx:open");
+    const std::int64_t first = counter(state.challenge, "fx:first");
+    verdict.first_move = first > 0 && opened > 0 ? first - opened : 0;
+    verdict.players = std::ranges::count_if(state.challenge, [](const Counters::value_type &entry) {
+        return entry.first.starts_with("fx:p:");
+    });
+    forge_record(verdict);
+}
+
 /* Quello che lo script ha combinato, tradotto in palle e in una riga da scrivere in chat. */
 struct ForgedOutcome {
     bool ok = false;
@@ -727,6 +745,9 @@ ForgedOutcome run_forged(
     }
     outcome.ok = true;
     for (const LuaEffect &effect : run.effects) {
+        if (effect.kind == LuaEffect::Kind::pay || effect.kind == LuaEffect::Kind::take) {
+            state.challenge["fx:palle"] = counter(state.challenge, "fx:palle") + effect.palle;
+        }
         switch (effect.kind) {
         case LuaEffect::Kind::pay:
             state.scores[effect.who] = counter(state.scores, effect.who) + effect.palle;
@@ -1251,6 +1272,7 @@ std::optional<GameOpened> game_open(
                 }
                 state.challenge["pot"] = pot;
                 state.challenge["deadline"] = now + 25;
+                state.challenge["fx:open"] = now;
                 state.challenge_who["forged"] = opened.target;
                 const ForgedOutcome born = run_forged(session, state, opened.target, "open", {});
                 if (!born.ok) {
@@ -2953,6 +2975,11 @@ std::optional<GamePlayed> game_play(
                 return std::nullopt;
             }
             const std::string keyword = which->second;
+            state.challenge["fx:msgs"] = counter(state.challenge, "fx:msgs") + 1;
+            state.challenge["fx:p:" + username] = 1;
+            if (counter(state.challenge, "fx:first") == 0) {
+                state.challenge["fx:first"] = now;
+            }
             const ForgedOutcome moved =
                 run_forged(session, state, keyword, "message", {username, std::string{message}});
             if (!moved.ok) {
@@ -2967,6 +2994,9 @@ std::optional<GamePlayed> game_play(
             played.detail = moved.text;
             played.palle = moved.palle;
             played.decided = moved.decided;
+            if (played.decided) {
+                record_forged(state, keyword, true, now);
+            }
             break;
         }
         case Game::forbidden: {
@@ -3008,6 +3038,7 @@ std::optional<GameClosed> game_close(Storage &storage, std::int64_t now) {
                     closed.winner = which->second;
                     const ForgedOutcome last = run_forged(session, state, which->second, "close", {});
                     closed.detail = last.text;
+                    record_forged(state, which->second, false, now);
                 }
             }
             if (closed.kind == Game::truequote) {
@@ -3708,6 +3739,7 @@ std::optional<GameTicked> game_tick(Storage &storage, std::int64_t now) {
                 ticked.palle = beat.palle;
                 ticked.decided = beat.decided;
                 if (beat.decided) {
+                    record_forged(state, keyword, true, now);
                     state.challenge.clear();
                     state.challenge_who.clear();
                 }

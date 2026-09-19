@@ -227,3 +227,22 @@ TEST_CASE("a plain word from the group becomes a game name") {
     REQUIRE(born);
     CHECK(born->keyword == "zimbello");
 }
+
+TEST_CASE("the forge does not keep writing the same game") {
+    const ForgeDirectory home;
+    forge_open_catalogue(home.where.string(), small);
+    const ForgeRequest request = group_talk();
+    std::set<std::string> families;
+    std::set<std::string> titles;
+    for (int made = 0; made < 120; ++made) {
+        const std::optional<ForgedGame> game = forge_mint(request, rolling);
+        REQUIRE(game);
+        const std::optional<std::string> family = lua_field(game->source, "family", small);
+        REQUIRE(family);
+        families.insert(*family);
+        titles.insert(game->announce.substr(0, game->announce.find(':')));
+    }
+    /* Cento partite non possono essere tutte lo stesso gioco con un nome diverso. */
+    CHECK(families.size() >= 20);
+    CHECK(titles.size() >= 30);
+}
