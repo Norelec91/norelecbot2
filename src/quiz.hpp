@@ -41,6 +41,18 @@ inline constexpr std::array anagrams{
     "biglietto", "zodiaco", "penalità", "razzia", "classifica",
 };
 
+/* Words with no accents, so reading them backwards stays a word-sized job. */
+inline constexpr std::array mirrors{
+    "palla", "gioco", "regno", "quota", "denaro",
+    "tastiera", "fortuna", "pianeta", "gettone", "cartone",
+};
+
+/* Words whose last three letters are easy to match. */
+inline constexpr std::array rhymes{
+    "pallone", "cuore", "destino", "canzone", "mattina",
+    "quaderno", "pensiero", "fortuna", "bicchiere", "montagna",
+};
+
 }
 
 #endif

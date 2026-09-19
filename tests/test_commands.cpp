@@ -900,5 +900,66 @@ TEST_CASE("the games that need a head, not a fast finger") {
         REQUIRE(named);
         CHECK(named->contains("l'ha indovinato"));
     }
+
+    SUBCASE("the mirror wants the word the other way round") {
+        const GameOpened opened = open_kind(Game::mirror);
+        std::string word{mirrors.at(static_cast<std::size_t>(opened.secret))};
+        CHECK(game_opened_reply(opened).contains(word));
+        CHECK_FALSE(said(std::format("ma è {}", word)).has_value());
+        std::ranges::reverse(word);
+        const std::optional<std::string> read = said(std::format("allora {}", word));
+        REQUIRE(read);
+        CHECK(read->contains("al contrario"));
+    }
+
+    SUBCASE("a rhyme is any word that ends the same way") {
+        const GameOpened opened = open_kind(Game::rhyme);
+        const std::string_view asked = rhymes.at(static_cast<std::size_t>(opened.secret));
+        /* The word itself does not count, one that ends like it does. */
+        CHECK_FALSE(said(std::string{asked}).has_value());
+        const std::optional<std::string> rhymed =
+            said(std::format("che ne dici di stra{}", asked.substr(asked.size() - 3)));
+        REQUIRE(rhymed);
+        CHECK(rhymed->contains("ha trovato la rima"));
+    }
+
+    SUBCASE("the sight wants a message of exactly that many letters") {
+        const GameOpened opened = open_kind(Game::target);
+        const auto wanted = static_cast<std::size_t>(opened.secret);
+        CHECK_FALSE(said(std::string(wanted + 1, 'a')).has_value());
+        const std::optional<std::string> centred = said(std::string(wanted, 'a'));
+        REQUIRE(centred);
+        CHECK(centred->contains("ha centrato"));
+    }
+
+    SUBCASE("the closest guess wins when the time is up") {
+        const GameOpened opened = open_kind(Game::closest);
+        const std::int64_t secret = opened.secret;
+        const std::optional<std::string> far = said(std::format("dico {}", secret > 500 ? 1 : 1000));
+        REQUIRE(far);
+        CHECK(far->contains("è il più vicino per ora"));
+        /* Further away than the standing guess: nobody is told anything. */
+        CHECK_FALSE(said(std::format("allora {}", secret > 500 ? 0 : 1000000)).has_value());
+        const std::optional<std::string> near = said(std::format("ma no, {}", secret));
+        REQUIRE(near);
+        const std::optional<GameClosed> closed = game_close(storage, seconds_now_for_test() + 100000);
+        REQUIRE(closed);
+        CHECK(closed->winner == "alice");
+        CHECK(game_closed_reply(*closed).contains("ci è andato più vicino alice"));
+    }
+
+    SUBCASE("everybody draws one card and one only") {
+        static_cast<void>(open_kind(Game::cards));
+        const std::optional<std::string> drawn = said("io");
+        REQUIRE(drawn);
+        CHECK(drawn->starts_with("🃏 alice pesca un "));
+        /* The deck remembers: a second message draws nothing. */
+        CHECK_FALSE(said("e ancora io").has_value());
+        const std::optional<GameClosed> closed = game_close(storage, seconds_now_for_test() + 100000);
+        REQUIRE(closed);
+        CHECK(closed->winner == "alice");
+        CHECK(closed->secret >= 1);
+        CHECK(closed->secret <= 10);
+    }
 }
 

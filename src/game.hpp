@@ -254,7 +254,25 @@ struct TaxResult {
 };
 
 /* The four games the bot opens by itself, and the duel a player starts by asking for it. */
-enum class Game { race, guess, auction, forbidden, sequence, longest, silence, quiz, anagram, chain, counting, whois };
+enum class Game {
+    race,
+    guess,
+    auction,
+    forbidden,
+    sequence,
+    longest,
+    silence,
+    quiz,
+    anagram,
+    chain,
+    counting,
+    whois,
+    mirror,
+    rhyme,
+    target,
+    closest,
+    cards,
+};
 
 struct GameOpened {
     Game kind = Game::race;

@@ -987,6 +987,34 @@ std::string game_opened_reply(const GameOpened &opened) {
             "🕵️ INDOVINA CHI: penso a un giocatore di questo gruppo. Chi scrive il suo nome si prende {} palle.",
             opened.pot
         );
+    case Game::mirror:
+        return std::format(
+            "🪞 SPECCHIO: la parola è {}. Chi la scrive al contrario si prende {} palle.",
+            mirrors.at(static_cast<std::size_t>(opened.secret)),
+            opened.pot
+        );
+    case Game::rhyme:
+        return std::format(
+            "🎤 RIMA: trovate una parola che rimi con {}. La prima vale {} palle.",
+            rhymes.at(static_cast<std::size_t>(opened.secret)),
+            opened.pot
+        );
+    case Game::target:
+        return std::format(
+            "🎯 MIRINO: scrivete un messaggio lungo esattamente {} caratteri. Chi lo centra si prende {} palle.",
+            opened.secret,
+            opened.pot
+        );
+    case Game::closest:
+        return std::format(
+            "👁️ A OCCHIO: penso un numero fra 1 e 1000. Alla chiusura {} palle a chi ci è andato più vicino.",
+            opened.pot
+        );
+    case Game::cards:
+        return std::format(
+            "🃏 CARTA ALTA: si pesca scrivendo, una carta a testa. La più alta alla chiusura vale {} palle.",
+            opened.pot
+        );
     }
     return {};
 }
@@ -1038,6 +1066,36 @@ std::string game_closed_reply(const GameClosed &closed) {
         return "🔢 Non siamo arrivati a 20. Come al solito.";
     case Game::whois:
         return closed.winner.empty() ? std::string{"🕵️ Nessuno l'ha indovinato."} : std::string{};
+    case Game::mirror:
+        return std::format(
+            "🪞 Tempo scaduto: nessuno ha retto lo specchio. La parola era {}.",
+            mirrors.at(static_cast<std::size_t>(closed.secret))
+        );
+    case Game::rhyme:
+        return std::format(
+            "🎤 Tempo scaduto: nessuna rima con {}.",
+            rhymes.at(static_cast<std::size_t>(closed.secret))
+        );
+    case Game::target:
+        return std::format("🎯 Nessuno ha centrato i {} caratteri.", closed.secret);
+    case Game::closest:
+        return closed.winner.empty()
+            ? std::format("👁️ Il numero era {} e non l'ha cercato nessuno.", closed.secret)
+            : std::format(
+                  "👁️ Il numero era {}: ci è andato più vicino {} e si prende {} palle.",
+                  closed.secret,
+                  closed.winner,
+                  closed.pot
+              );
+    case Game::cards:
+        return closed.winner.empty()
+            ? std::string{"🃏 Nessuno ha pescato: il mazzo resta chiuso."}
+            : std::format(
+                  "🃏 Carta più alta a {} con un {}: {} palle.",
+                  closed.winner,
+                  closed.secret,
+                  closed.pot
+              );
     }
     return {};
 }
@@ -1416,6 +1474,21 @@ std::optional<std::string> game_reply(const CommandContext &context, std::string
                    : std::format("🔢 {}. Avanti il prossimo.", played->number));
     case Game::whois:
         return std::format("🕵️ {} l'ha indovinato e si prende {} palle.", played->player, played->palle);
+    case Game::mirror:
+        return std::format("🪞 {} l'ha letta al contrario e si prende {} palle.", played->player, played->palle);
+    case Game::rhyme:
+        return std::format("🎤 {} ha trovato la rima e si prende {} palle.", played->player, played->palle);
+    case Game::target:
+        return std::format(
+            "🎯 {} ha centrato i {} caratteri e si prende {} palle.",
+            played->player,
+            played->number,
+            played->palle
+        );
+    case Game::closest:
+        return std::format("👁️ {} dice {} ed è il più vicino per ora.", played->player, played->number);
+    case Game::cards:
+        return std::format("🃏 {} pesca un {}.", played->player, played->number);
     }
     return std::nullopt;
 }
