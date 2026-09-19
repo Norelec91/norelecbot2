@@ -523,7 +523,7 @@ std::string uncovered(std::string_view word, std::int64_t mask) {
     return shown;
 }
 
-constexpr std::array<std::pair<std::string_view, Game>, 37> game_names{{
+constexpr std::array<std::pair<std::string_view, Game>, 51> game_names{{
     {"corsa", Game::race},
     {"indovina", Game::guess},
     {"asta", Game::auction},
@@ -561,6 +561,20 @@ constexpr std::array<std::pair<std::string_view, Game>, 37> game_names{{
     {"alfabeto", Game::alphabet},
     {"caldo", Game::hotcold},
     {"lettere", Game::letters},
+    {"canzone", Game::song},
+    {"città", Game::city},
+    {"citta", Game::city},
+    {"ricetta", Game::dish},
+    {"nascosta", Game::hidden},
+    {"sillaba", Game::syllable},
+    {"film", Game::film},
+    {"serie", Game::series},
+    {"moneta", Game::coin},
+    {"semaforo", Game::trafficlight},
+    {"estremi", Game::ends},
+    {"slot", Game::slot},
+    {"cronometro", Game::stopwatch},
+    {"ordine", Game::order},
 }};
 
 }
@@ -591,7 +605,7 @@ std::optional<GameOpened> game_open(
                 return std::nullopt;
             }
             GameOpened opened;
-            opened.kind = wanted ? *wanted : static_cast<Game>(session.random_index(37));
+            opened.kind = wanted ? *wanted : static_cast<Game>(session.random_index(50));
             opened.closes = now + open_for;
             opened.pot = pot;
             switch (opened.kind) {
@@ -708,6 +722,89 @@ std::optional<GameOpened> game_open(
             case Game::letters:
                 opened.secret = static_cast<std::int64_t>(session.random_index(triples.size()));
                 break;
+            case Game::song:
+                opened.secret = static_cast<std::int64_t>(session.random_index(songs.size()));
+                break;
+            case Game::city:
+                /* A letter with more than one city behind it. */
+                opened.secret = static_cast<std::int64_t>(static_cast<unsigned char>(
+                    std::string_view{"bcfgmnprtv"}.at(session.random_index(10))
+                ));
+                break;
+            case Game::dish:
+                opened.secret = static_cast<std::int64_t>(session.random_index(dishes.size()));
+                break;
+            case Game::hidden: {
+                opened.secret = static_cast<std::int64_t>(session.random_index(mirrors.size()));
+                const std::string_view word = mirrors.at(static_cast<std::size_t>(opened.secret));
+                constexpr std::string_view noise = "bcdfghlmnpqrstvz";
+                for (int at = 0; at < 4; ++at) {
+                    opened.target.push_back(noise.at(session.random_index(noise.size())));
+                }
+                opened.target.append(word);
+                for (int at = 0; at < 4; ++at) {
+                    opened.target.push_back(noise.at(session.random_index(noise.size())));
+                }
+                break;
+            }
+            case Game::syllable:
+                opened.secret = static_cast<std::int64_t>(session.random_index(syllables.size()));
+                break;
+            case Game::film:
+                opened.secret = static_cast<std::int64_t>(session.random_index(films.size()));
+                break;
+            case Game::series: {
+                const std::int64_t start = 1 + static_cast<std::int64_t>(session.random_index(9));
+                const std::int64_t step = 2 + static_cast<std::int64_t>(session.random_index(8));
+                opened.target = std::format(
+                    "{}, {}, {}, {}",
+                    start,
+                    start + step,
+                    start + (2 * step),
+                    start + (3 * step)
+                );
+                opened.secret = start + (4 * step);
+                break;
+            }
+            case Game::trafficlight:
+                /* Green pays, red charges, and only the bot knows which one it is. */
+                opened.secret = static_cast<std::int64_t>(session.random_index(2));
+                break;
+            case Game::ends: {
+                constexpr std::string_view heads = "bcfmprstv";
+                constexpr std::string_view tails = "aeiono";
+                opened.secret = static_cast<std::int64_t>(static_cast<unsigned char>(
+                    heads.at(session.random_index(heads.size()))
+                ));
+                state.challenge["letter"] = opened.secret;
+                state.challenge["last"] = static_cast<std::int64_t>(static_cast<unsigned char>(
+                    tails.at(session.random_index(tails.size()))
+                ));
+                opened.target = std::format(
+                    "{}...{}",
+                    static_cast<char>(opened.secret),
+                    static_cast<char>(counter(state.challenge, "last"))
+                );
+                break;
+            }
+            case Game::stopwatch:
+                /* Thirty seconds from now, give or take two. */
+                opened.secret = now + 30;
+                break;
+            case Game::order: {
+                std::vector<std::string> three;
+                while (three.size() < 3) {
+                    const std::string word{mirrors.at(session.random_index(mirrors.size()))};
+                    if (std::ranges::find(three, word) == three.end()) {
+                        three.push_back(word);
+                    }
+                }
+                opened.target = std::format("{}, {}, {}", three.at(0), three.at(1), three.at(2));
+                std::ranges::sort(three);
+                state.challenge_who["target"] =
+                    std::format("{} {} {}", three.at(0), three.at(1), three.at(2));
+                break;
+            }
             case Game::race:
             case Game::auction:
             case Game::longest:
@@ -716,6 +813,8 @@ std::optional<GameOpened> game_open(
             case Game::roulette:
             case Game::shortest:
             case Game::river:
+            case Game::coin:
+            case Game::slot:
                 break;
             }
             state.challenge["kind"] = static_cast<std::int64_t>(opened.kind);
@@ -1265,6 +1364,197 @@ std::optional<GamePlayed> game_play(
             played.decided = true;
             played.player = username;
             played.detail = *found;
+            played.palle = counter(state.challenge, "pot");
+            state.scores[username] = counter(state.scores, username) + played.palle;
+            break;
+        }
+        case Game::song: {
+            if (!text::contains_ignore_case(message, songs.at(static_cast<std::size_t>(secret)).answer)) {
+                return std::nullopt;
+            }
+            played.decided = true;
+            played.player = username;
+            played.palle = counter(state.challenge, "pot");
+            state.scores[username] = counter(state.scores, username) + played.palle;
+            break;
+        }
+        case Game::city: {
+            const std::vector<std::string> words = words_in(message);
+            const auto named = std::ranges::find_if(words, [&](const std::string &word) {
+                return !word.empty() && static_cast<std::int64_t>(word.front()) == secret &&
+                       std::ranges::find(cities, word) != cities.end();
+            });
+            if (named == words.end()) {
+                return std::nullopt;
+            }
+            played.decided = true;
+            played.player = username;
+            played.detail = *named;
+            played.palle = counter(state.challenge, "pot");
+            state.scores[username] = counter(state.scores, username) + played.palle;
+            break;
+        }
+        case Game::dish: {
+            if (!text::contains_ignore_case(message, dishes.at(static_cast<std::size_t>(secret)).answer)) {
+                return std::nullopt;
+            }
+            played.decided = true;
+            played.player = username;
+            played.palle = counter(state.challenge, "pot");
+            state.scores[username] = counter(state.scores, username) + played.palle;
+            break;
+        }
+        case Game::hidden: {
+            if (!text::contains_ignore_case(message, mirrors.at(static_cast<std::size_t>(secret)))) {
+                return std::nullopt;
+            }
+            played.decided = true;
+            played.player = username;
+            played.detail = mirrors.at(static_cast<std::size_t>(secret));
+            played.palle = counter(state.challenge, "pot");
+            state.scores[username] = counter(state.scores, username) + played.palle;
+            break;
+        }
+        case Game::syllable: {
+            const std::string_view piece = syllables.at(static_cast<std::size_t>(secret));
+            const std::vector<std::string> words = words_in(message);
+            const auto found = std::ranges::find_if(words, [&piece](const std::string &word) {
+                return word.size() >= 5 && word.find(piece) != std::string::npos;
+            });
+            if (found == words.end()) {
+                return std::nullopt;
+            }
+            played.decided = true;
+            played.player = username;
+            played.detail = *found;
+            played.palle = counter(state.challenge, "pot");
+            state.scores[username] = counter(state.scores, username) + played.palle;
+            break;
+        }
+        case Game::film: {
+            if (!text::contains_ignore_case(message, films.at(static_cast<std::size_t>(secret)).answer)) {
+                return std::nullopt;
+            }
+            played.decided = true;
+            played.player = username;
+            played.palle = counter(state.challenge, "pot");
+            state.scores[username] = counter(state.scores, username) + played.palle;
+            break;
+        }
+        case Game::series: {
+            if (number_in(message) != secret) {
+                return std::nullopt;
+            }
+            played.decided = true;
+            played.player = username;
+            played.number = secret;
+            played.palle = counter(state.challenge, "pot");
+            state.scores[username] = counter(state.scores, username) + played.palle;
+            break;
+        }
+        case Game::coin: {
+            const bool heads = text::contains_ignore_case(message, "testa");
+            const bool tails = text::contains_ignore_case(message, "croce");
+            if (heads == tails) {
+                return std::nullopt;
+            }
+            const bool drawn = session.random_index(2) == 0;
+            played.decided = true;
+            played.player = username;
+            played.detail = drawn ? "testa" : "croce";
+            if (drawn == heads) {
+                played.palle = counter(state.challenge, "pot");
+                state.scores[username] = counter(state.scores, username) + played.palle;
+            }
+            break;
+        }
+        case Game::trafficlight: {
+            played.decided = true;
+            played.player = username;
+            played.number = secret;
+            if (secret == 1) {
+                played.palle = counter(state.challenge, "pot");
+                state.scores[username] = counter(state.scores, username) + played.palle;
+                break;
+            }
+            played.palle = counter(state.scores, username) / 10;
+            state.scores[username] = counter(state.scores, username) - played.palle;
+            break;
+        }
+        case Game::ends: {
+            const auto first = static_cast<char>(counter(state.challenge, "letter"));
+            const auto last = static_cast<char>(counter(state.challenge, "last"));
+            const std::vector<std::string> words = words_in(message);
+            const auto found = std::ranges::find_if(words, [first, last](const std::string &word) {
+                return word.size() >= 4 && word.front() == first && word.back() == last;
+            });
+            if (found == words.end()) {
+                return std::nullopt;
+            }
+            played.decided = true;
+            played.player = username;
+            played.detail = *found;
+            played.palle = counter(state.challenge, "pot");
+            state.scores[username] = counter(state.scores, username) + played.palle;
+            break;
+        }
+        case Game::slot: {
+            /* One pull each, like the cards. */
+            const std::string pulled = "drew:" + username;
+            if (state.challenge.find(pulled) != state.challenge.end()) {
+                return std::nullopt;
+            }
+            state.challenge[pulled] = 1;
+            const std::int64_t first = 1 + static_cast<std::int64_t>(session.random_index(5));
+            const std::int64_t second = 1 + static_cast<std::int64_t>(session.random_index(5));
+            const std::int64_t third = 1 + static_cast<std::int64_t>(session.random_index(5));
+            played.player = username;
+            played.detail = std::format("{} {} {}", first, second, third);
+            if (first == second && second == third) {
+                played.decided = true;
+                played.palle = counter(state.challenge, "pot");
+                state.scores[username] = counter(state.scores, username) + played.palle;
+                break;
+            }
+            if (first == second || second == third || first == third) {
+                played.palle = counter(state.challenge, "pot") / 5;
+                state.scores[username] = counter(state.scores, username) + played.palle;
+            }
+            break;
+        }
+        case Game::stopwatch: {
+            const std::int64_t late = now > secret ? now - secret : secret - now;
+            if (late > 2) {
+                return std::nullopt;
+            }
+            played.decided = true;
+            played.player = username;
+            played.number = late;
+            played.palle = counter(state.challenge, "pot");
+            state.scores[username] = counter(state.scores, username) + played.palle;
+            break;
+        }
+        case Game::order: {
+            const auto target = state.challenge_who.find("target");
+            if (target == state.challenge_who.end()) {
+                return std::nullopt;
+            }
+            const std::vector<std::string> wanted = words_in(target->second);
+            const std::string lowered = text::to_lower_copy(message);
+            std::size_t at = 0;
+            const bool in_order = std::ranges::all_of(wanted, [&](const std::string &word) {
+                const std::size_t found = lowered.find(word, at);
+                if (found == std::string::npos) {
+                    return false;
+                }
+                at = found + word.size();
+                return true;
+            });
+            if (!in_order) {
+                return std::nullopt;
+            }
+            played.decided = true;
+            played.player = username;
             played.palle = counter(state.challenge, "pot");
             state.scores[username] = counter(state.scores, username) + played.palle;
             break;

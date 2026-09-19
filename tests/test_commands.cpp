@@ -9,8 +9,10 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <cctype>
+#include <iterator>
 #include <chrono>
 #include <fstream>
 #include <map>
@@ -1095,6 +1097,59 @@ TEST_CASE("the twenty that came after") {
         const std::size_t at = opened.find("lettere ");
         REQUIRE(at != std::string::npos);
         CHECK_FALSE(said("no").has_value());
+    }
+
+    SUBCASE("the hidden word sits between the noise") {
+        const std::string opened = open_named("NASCOSTA", "dai, nascosta");
+        /* The word is one of the ten, and it is in there whole. */
+        const auto inside = std::ranges::find_if(mirrors, [&opened](const std::string_view word) {
+            return opened.contains(word);
+        });
+        REQUIRE(inside != mirrors.end());
+        const std::string found{*inside};
+        const std::optional<std::string> said_it = said(std::format("eccola: {}", found));
+        REQUIRE(said_it);
+        CHECK(said_it->contains("lì in mezzo"));
+    }
+
+    SUBCASE("a city has to be a real one and start with the letter") {
+        const std::string opened = open_named("CITTÀ", "facciamo città");
+        const std::size_t at = opened.find("comincia per ");
+        REQUIRE(at != std::string::npos);
+        const char letter = opened.at(at + std::string_view{"comincia per "}.size());
+        CHECK_FALSE(said("bibbiano").has_value());
+        const auto named_city = std::ranges::find_if(cities, [letter](const std::string_view name) {
+            return name.front() == letter;
+        });
+        REQUIRE(named_city != cities.end());
+        const std::string city{*named_city};
+        const std::optional<std::string> named = said(std::format("direi {}", city));
+        REQUIRE(named);
+        CHECK(named->contains(city));
+    }
+
+    SUBCASE("the traffic light decides before anybody writes") {
+        open_named("SEMAFORO", "proviamo il semaforo");
+        const std::optional<std::string> crossed = said("io passo");
+        REQUIRE(crossed);
+        CHECK((crossed->contains("Verde!") || crossed->contains("Rosso.")));
+    }
+
+    SUBCASE("three words in alphabetical order, in one message") {
+        const std::string opened = open_named("ORDINE", "giochiamo a ordine");
+        const std::size_t at = opened.find("🔀 ORDINE: ");
+        REQUIRE(at != std::string::npos);
+        std::vector<std::string> three;
+        std::ranges::copy_if(mirrors, std::back_inserter(three), [&opened](const std::string_view word) {
+            return opened.contains(word);
+        });
+        REQUIRE(three.size() == 3);
+        std::ranges::sort(three);
+        CHECK_FALSE(said("boh").has_value());
+        const std::optional<std::string> sorted =
+            said(std::format("{} {} {}", three.at(0), three.at(1), three.at(2)));
+        REQUIRE(sorted);
+        CHECK(sorted->contains("le ha messe in fila"));
     }
 
     SUBCASE("the copied string has to be identical") {

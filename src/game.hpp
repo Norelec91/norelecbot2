@@ -292,6 +292,19 @@ enum class Game {
     alphabet,
     hotcold,
     letters,
+    song,
+    city,
+    dish,
+    hidden,
+    syllable,
+    film,
+    series,
+    coin,
+    trafficlight,
+    ends,
+    slot,
+    stopwatch,
+    order,
 };
 
 struct GameOpened {

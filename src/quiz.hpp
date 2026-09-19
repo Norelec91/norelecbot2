@@ -119,6 +119,58 @@ inline constexpr std::array triples{
     "gno", "brd", "vel", "chi", "rst",
 };
 
+/* How a song goes on, for whoever still has the radio on. */
+inline constexpr std::array songs{
+    Question{"Nel blu dipinto di blu", "volare"},
+    Question{"Azzurro, il pomeriggio è troppo", "azzurro"},
+    Question{"Una vita spericolata, una vita come", "vasco"},
+    Question{"Ma il cielo è sempre più", "blu"},
+    Question{"Sarà perché ti", "amo"},
+    Question{"Bella ciao, bella ciao, bella ciao ciao", "ciao"},
+    Question{"Quanto è bella, quanto è cara, la nostra", "italia"},
+    Question{"Tanti auguri a", "te"},
+    Question{"La donna è mobile qual piuma al", "vento"},
+    Question{"Com'è profondo il", "mare"},
+};
+
+/* Cities, at least two for every letter the game draws. */
+inline constexpr std::array cities{
+    "bologna", "brescia", "bari", "catania", "como", "cagliari",
+    "firenze", "foggia", "ferrara", "genova", "grosseto", "gorizia",
+    "milano", "modena", "messina", "napoli", "novara", "nuoro",
+    "palermo", "parma", "pisa", "roma", "rimini", "ravenna",
+    "torino", "trieste", "treviso", "venezia", "verona", "varese",
+};
+
+/* A dish and something that has to be in it. */
+inline constexpr std::array dishes{
+    Question{"carbonara", "guanciale"},   Question{"pesto", "basilico"},
+    Question{"tiramisù", "mascarpone"},   Question{"caprese", "mozzarella"},
+    Question{"amatriciana", "pomodoro"},  Question{"risotto alla milanese", "zafferano"},
+    Question{"parmigiana", "melanzane"},  Question{"cacio e pepe", "pecorino"},
+    Question{"panzanella", "pane"},       Question{"vitello tonnato", "tonno"},
+};
+
+/* A film, described without naming it. */
+inline constexpr std::array films{
+    Question{"un pescetto smarrito e suo padre che lo cerca", "nemo"},
+    Question{"un cavallo nel letto e un'offerta che non si può rifiutare", "padrino"},
+    Question{"un bambino lasciato a casa da solo a Natale", "mamma"},
+    Question{"un anello da buttare in un vulcano", "anelli"},
+    Question{"una nave enorme e un iceberg", "titanic"},
+    Question{"un proiezionista di paese e un bambino", "paradiso"},
+    Question{"un pugile di Filadelfia che corre sui gradini", "rocky"},
+    Question{"dinosauri clonati in un parco", "jurassic"},
+    Question{"un robottino che pulisce la Terra abbandonata", "wall-e"},
+    Question{"una macchina del tempo ricavata da una DeLorean", "futuro"},
+};
+
+/* Syllables a word can be built around. */
+inline constexpr std::array syllables{
+    "man", "ter", "col", "pre", "sta",
+    "bar", "mon", "ver", "can", "por",
+};
+
 /* Words whose last three letters are easy to match. */
 inline constexpr std::array rhymes{
     "pallone", "cuore", "destino", "canzone", "mattina",
