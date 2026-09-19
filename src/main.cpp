@@ -1,4 +1,5 @@
 #include "config.hpp"
+#include "forge.hpp"
 #include "http_server.hpp"
 #include "irc.hpp"
 #include "logging.hpp"
@@ -29,6 +30,16 @@ int run() {
         return EXIT_FAILURE;
     }
     norelecbot::Storage storage{config->conquister_path, config->quotes_path};
+    if (config->forge_seconds > 0) {
+        /* La forgia tiene i giochi che il bot si scrive da solo. */
+        norelecbot::forge_open_catalogue(
+            config->forge_directory,
+            norelecbot::LuaLimits{
+                .steps = config->forge_steps,
+                .memory_bytes = static_cast<std::size_t>(config->forge_memory_kb) * 1024U,
+            }
+        );
+    }
 
     std::signal(SIGINT, request_stop);
     std::signal(SIGTERM, request_stop);

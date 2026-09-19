@@ -1,6 +1,7 @@
 #include "raids.hpp"
 
 #include "commands.hpp"
+#include "forge.hpp"
 #include "game.hpp"
 #include "irc.hpp"
 #include "logging.hpp"
@@ -81,6 +82,8 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
     Clock chaos{config.chaos_min_seconds, config.chaos_max_seconds};
     const bool games_run = config.game_min_seconds > 0;
     Clock games{config.game_min_seconds, config.game_max_seconds};
+    const bool forge_runs = config.forge_seconds > 0 && forge_ready();
+    Clock forge{config.forge_seconds, config.forge_seconds};
     const bool lottery_runs = config.lottery_min_seconds > 0;
     Clock lottery{config.lottery_min_seconds, config.lottery_max_seconds};
     const bool world_happens = config.happening_min_seconds > 0;
@@ -156,6 +159,38 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
                     )
                 );
                 chaos.rest();
+            }
+            if (forge_runs && forge.due(seconds_now())) {
+                /* Ogni dieci minuti il bot si scrive un gioco nuovo, lo collauda e lo annuncia. */
+                ForgeRequest request;
+                request.lexicon = lexicon_heard(storage, 400);
+                request.reserved = hand_written_words();
+                for (const std::string &name : player_names(storage)) {
+                    request.reserved.push_back(name);
+                }
+                for (const std::vector<std::string> *list :
+                     {&config.magic_words, &config.bet_words, &config.alms_words, &config.charisma_words,
+                      &config.taunt_words, &config.sixseven_words, &config.blessing_words,
+                      &config.flipper_words, &config.lucky_words, &config.cascade_words}) {
+                    request.reserved.insert(request.reserved.end(), list->begin(), list->end());
+                }
+                const std::optional<ForgedGame> born = forge_mint(request, [](std::int64_t count) {
+                    static std::mt19937_64 dice{std::random_device{}()};
+                    return static_cast<std::int64_t>(
+                        std::uniform_int_distribution<std::int64_t>{0, std::max(count, std::int64_t{1}) - 1}(dice)
+                    );
+                });
+                if (born && config.forge_announce) {
+                    announce(
+                        config,
+                        std::format(
+                            "🛠️ Ho scritto un gioco nuovo: si chiama {}. {}",
+                            born->keyword,
+                            born->announce
+                        )
+                    );
+                }
+                forge.rest();
             }
             if (games_run) {
                 if (const std::optional<GameTicked> ticked = game_tick(storage, seconds_now())) {

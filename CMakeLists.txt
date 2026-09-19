@@ -14,6 +14,10 @@ endforeach()
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(nlohmann_json 3.11 REQUIRED)
+# Lua muove i giochi che il bot si scrive da solo. Statico, così il VPS non ha niente da installare.
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LUA REQUIRED lua5.4)
+find_library(LUA_STATIC_LIBRARY NAMES liblua5.4.a lua5.4 lua HINTS ${LUA_LIBRARY_DIRS})
 find_package(spdlog REQUIRED)
 # vcpkg ships a CMake package for cpp-httplib, Debian only a pkg-config file.
 find_package(httplib CONFIG QUIET)
@@ -62,11 +66,17 @@ set(CORE_SOURCES
     src/zodiac.cpp
     src/position.cpp
     src/virus.cpp
+    src/lua_vm.cpp
+    src/forge.cpp
 )
 
 add_library(norelecbot_core STATIC ${CORE_SOURCES})
 target_include_directories(norelecbot_core PUBLIC src)
 target_link_libraries(norelecbot_core PUBLIC nlohmann_json::nlohmann_json spdlog::spdlog Threads::Threads)
+target_include_directories(norelecbot_core SYSTEM PRIVATE ${LUA_INCLUDE_DIRS})
+target_link_libraries(norelecbot_core PUBLIC ${LUA_STATIC_LIBRARY} ${CMAKE_DL_LIBS} m)
+# Le macro di Lua sono piene di cast vecchio stile: il resto del progetto resta severo.
+set_source_files_properties(src/lua_vm.cpp PROPERTIES COMPILE_OPTIONS "-Wno-old-style-cast")
 
 add_executable(norelecbot
     src/main.cpp
@@ -86,7 +96,7 @@ endif()
 include(CTest)
 if(BUILD_TESTING)
     find_package(doctest REQUIRED)
-    foreach(test config services commands rest-routes text zodiac position irc-protocol irc-session)
+    foreach(test config services commands rest-routes text zodiac position irc-protocol irc-session forge)
         string(REPLACE "-" "_" source "${test}")
         add_executable(test-${test} tests/test_${source}.cpp)
         target_link_libraries(test-${test} PRIVATE norelecbot_core doctest::doctest)

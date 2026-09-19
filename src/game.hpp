@@ -360,6 +360,8 @@ enum class Game {
     whosaid,
     halfquote,
     truequote,
+    /* I giochi che il bot si è scritto da solo: quale, lo dice challenge_who["forged"]. */
+    forged,
 };
 
 struct GameOpened {
@@ -426,7 +428,27 @@ struct DuelResult {
 
 /* Opens one at random, or the one asked for, if none is open. */
 [[nodiscard]] std::optional<GameOpened> game_open(Storage &storage, std::int64_t now, std::int64_t open_for,
-                                                  std::int64_t pot, std::optional<Game> wanted = std::nullopt);
+                                                  std::int64_t pot, std::optional<Game> wanted = std::nullopt,
+                                                  const std::string &forged_keyword = {});
+/* Le parole che il gruppo dice, dalla più detta in giù, per chi deve coniare un nome. */
+[[nodiscard]] std::vector<std::pair<std::string, std::int64_t>> lexicon_heard(Storage &storage, std::size_t most);
+/* Una parola in più nel vocabolario del gruppo. */
+void lexicon_hear(Storage &storage, std::string_view message);
+/* I nomi dei giocatori, che nessun gioco nuovo deve rubare. */
+[[nodiscard]] std::vector<std::string> player_names(Storage &storage);
+/* Le parole già impegnate dai giochi scritti a mano. */
+[[nodiscard]] std::vector<std::string> hand_written_words();
+/* Apre un gioco della forgia per nome. */
+[[nodiscard]] std::optional<GameOpened> game_open_forged(
+    Storage &storage,
+    std::int64_t now,
+    std::int64_t open_for,
+    std::int64_t pot,
+    const std::string &keyword
+);
+/* Il gioco forgiato che qualcuno ha chiamato per nome, se ce n'è uno. */
+[[nodiscard]] std::optional<std::string> forged_named(std::string_view message);
+
 /* Il battito dei giochi a tempo: la miccia che scende, il giro che finisce. */
 [[nodiscard]] std::optional<GameTicked> game_tick(Storage &storage, std::int64_t now);
 /* The game somebody has called by name, whatever else the message says. */

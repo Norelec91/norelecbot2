@@ -3,6 +3,7 @@
 #include "game.hpp"
 #include "commands.hpp"
 #include "game.hpp"
+#include "forge.hpp"
 #include "quiz.hpp"
 #include "virus.hpp"
 
@@ -1390,4 +1391,65 @@ TEST_CASE("the games made of the group's own quotes") {
         CHECK(closed->winner == "bob");
         CHECK(conquister_user(storage, "alice")->score == before + 5000);
     }
+}
+
+TEST_CASE("a game the bot wrote by itself is played like any other") {
+    const TestPaths paths{"forged-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":10000},"quotes_added":{}})";
+    }
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{config.conquister_path, config.quotes_path};
+
+    const auto stamp = std::chrono::system_clock::now().time_since_epoch().count();
+    const std::filesystem::path home =
+        std::filesystem::temp_directory_path() / std::format("norelecbot-forged-{}", stamp);
+    std::filesystem::create_directories(home);
+    forge_open_catalogue(home.string(), LuaLimits{.steps = 50000, .memory_bytes = std::size_t{1024} * 1024});
+
+    /* Con un caso che esce sempre zero la forgia scrive il gioco del numero da indovinare, e il
+       numero è l'uno: così la partita si può giocare fino in fondo dentro un test. */
+    const auto always_first = [](std::int64_t) { return std::int64_t{0}; };
+    ForgeRequest request;
+    request.lexicon = {{"zimbello", 40}, {"denuncia", 22}, {"ricorso", 9}};
+    request.reserved = hand_written_words();
+    const std::optional<ForgedGame> born = forge_mint(request, always_first);
+    REQUIRE(born);
+    CHECK(born->keyword == "zimbello");
+    CHECK(born->source.contains("G.keyword"));
+
+    const CommandContext context{
+        .storage = storage,
+        .config = config,
+        .user_id = 1,
+        .username = "alice",
+        .claims_allowed = true,
+        .owner = false,
+        .whisper = {},
+    };
+    const auto said = [&](std::string_view text) { return command_dispatch(context, text); };
+
+    /* La parola del gioco, detta in mezzo a una frase, lo apre. */
+    const std::optional<std::string> opened = said(std::format("dai facciamo {} adesso", born->keyword));
+    REQUIRE(opened);
+    CHECK(opened->contains(born->announce));
+
+    /* Il numero lo sceglie il gioco quando si apre: si provano tutti finché non cade quello giusto. */
+    const std::int64_t before = conquister_user(storage, "alice")->score;
+    std::optional<std::string> won;
+    for (int guess = 1; guess <= 20 && !won; ++guess) {
+        won = said(std::format("dico {}", guess));
+    }
+    REQUIRE(won);
+    CHECK(won->contains("alice"));
+    CHECK(conquister_user(storage, "alice")->score > before);
+
+    /* Vinto il gioco, la partita è chiusa e il messaggio dopo non risponde più. */
+    CHECK_FALSE(said("e adesso?").has_value());
+
+    std::error_code ignored;
+    std::filesystem::remove_all(home, ignored);
 }

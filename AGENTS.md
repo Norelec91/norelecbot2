@@ -17,3 +17,13 @@ leave behind; a new kind of gift means a new one there and in `mishap_strike`.
 
 Nothing in the table is ever aimed at a particular player, and none of it moves more than a handful of
 palle: the absurdity is in what happens, not in what it costs.
+
+## La forgia
+
+Ogni dieci minuti il bot si scrive un minigioco nuovo in Lua, lo collauda a vuoto e lo annuncia nel
+gruppo (`src/forge.cpp`, `src/lua_vm.cpp`). Il codice generato gira in una macchina Lua senza `io`,
+`os`, `require` né modo di caricare altro codice, con un tetto di istruzioni e di memoria; tocca il
+gioco solo attraverso la tabella `bot`, e le palle le muove il C++ dentro la stessa transazione, mai
+più del doppio del piatto per messaggio. La parola che chiama il gioco esce dal parlato del gruppo e
+non deve toccare nessuna parola già impegnata. Gli script stanno in `forge/`, uno per file, con un
+indice in coda a `forge/index.jsonl`: non si riscrive mai niente, si aggiunge soltanto.

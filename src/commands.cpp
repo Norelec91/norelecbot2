@@ -3,6 +3,7 @@
 #include "game.hpp"
 #include "mishaps.hpp"
 #include "position.hpp"
+#include "forge.hpp"
 #include "quiz.hpp"
 #include "text.hpp"
 #include "virus.hpp"
@@ -892,6 +893,22 @@ std::string handle_buy_boost(const CommandContext &context, std::string_view) {
     );
 }
 
+/* I giochi che il bot si è scritto da solo, dal più recente. */
+std::string handle_forged(const CommandContext &, std::string_view) {
+    if (!forge_ready()) {
+        return "🛠️ La forgia è spenta: i giochi sono solo quelli scritti a mano.";
+    }
+    const std::vector<std::string> recent = forge_recent(15);
+    if (recent.empty()) {
+        return "🛠️ La forgia non ha ancora scritto niente. Dammi dieci minuti.";
+    }
+    std::string reply = std::format("🛠️ Giochi che mi sono scritto da solo: {} in tutto. Gli ultimi:\n", forge_count());
+    for (const std::string &keyword : recent) {
+        reply += std::format("\n· {}", keyword);
+    }
+    return reply;
+}
+
 constexpr std::array commands{
     CommandDefinition{"/leaderboard", handle_leaderboard},
     CommandDefinition{"/zimbelli", handle_zimbelli},
@@ -909,6 +926,7 @@ constexpr std::array commands{
     CommandDefinition{"/buyboost", handle_buy_boost},
     CommandDefinition{"/quotes", handle_quotes},
     CommandDefinition{"/delquote", handle_delete_quote},
+    CommandDefinition{"/forgia", handle_forged},
 };
 
 const CommandDefinition *find_command(std::string_view name) {
@@ -1492,6 +1510,11 @@ std::string game_opened_reply(const GameOpened &opened) {
             opened.detail,
             opened.pot
         );
+    case Game::forged: {
+        /* L'annuncio se lo scrive il gioco stesso, quando la forgia lo conia. */
+        const std::optional<std::string> said = forge_announce_of(opened.target);
+        return said ? *said : std::format("🛠️ {}: si gioca scrivendo.", opened.target);
+    }
     }
     return {};
 }
@@ -1926,6 +1949,8 @@ std::string game_closed_reply(const GameClosed &closed) {
                   closed.winner,
                   closed.secret == 1 ? "vera" : "falsa"
               );
+    case Game::forged:
+        return closed.detail;
     }
     return {};
 }
@@ -1939,6 +1964,9 @@ std::string game_ticked_reply(const GameTicked &ticked) {
                   ticked.player,
                   ticked.palle
               );
+    }
+    if (ticked.kind == Game::forged) {
+        return ticked.detail;
     }
     if (ticked.kind == Game::strike) {
         return std::format("🪧 Lo sciopero tiene: in cassa {} palle.", ticked.number);
@@ -2664,6 +2692,8 @@ std::optional<std::string> game_reply(const CommandContext &context, std::string
         return std::format("✂️ {} la sapeva a memoria e si prende {} palle.", played->player, played->palle);
     case Game::truequote:
         return std::format("🎭 {} dice {}.", played->player, played->detail);
+    case Game::forged:
+        return played->detail.empty() ? std::nullopt : std::optional<std::string>{played->detail};
     }
     return std::nullopt;
 }
@@ -2672,6 +2702,16 @@ std::optional<std::string> game_reply(const CommandContext &context, std::string
 std::optional<std::string> game_called(const CommandContext &context, std::string_view message, std::int64_t now) {
     if (context.username.empty() || !context.claims_allowed) {
         return std::nullopt;
+    }
+    if (const std::optional<std::string> mine = forged_named(message)) {
+        const std::optional<GameOpened> born = game_open_forged(
+            context.storage,
+            now,
+            context.config.game_open_seconds,
+            context.config.game_pot,
+            *mine
+        );
+        return born ? std::optional<std::string>{game_opened_reply(*born)} : std::nullopt;
     }
     const std::optional<Game> wanted = game_named(message);
     if (!wanted) {
@@ -2891,6 +2931,10 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
         }
         if (message.empty()) {
             return std::nullopt;
+        }
+        if (!context.username.empty() && !message.starts_with('/')) {
+            /* Quello che il gruppo dice serve alla forgia per battezzare i giochi nuovi. */
+            lexicon_hear(context.storage, message);
         }
         const ParsedCommand command = parse_command(message);
         const CommandDefinition *definition = find_command(command.name);

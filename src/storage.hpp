@@ -77,6 +77,8 @@ struct ConquisterState {
     std::optional<Holder> current;
     Counters scores;
     Counters quotes_added;
+    /* Le parole che il gruppo dice, con quante volte: la forgia ci pesca i nomi dei giochi. */
+    Counters lexicon;
     /* Balloon owners mapped to the attempts their balloon has already survived. */
     Counters balloons;
     /* Users mapped to the instant their claim penalty expires. */

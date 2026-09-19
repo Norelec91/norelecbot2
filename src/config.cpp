@@ -175,6 +175,23 @@ constexpr std::array settings{
         config.blessing_words = split_names(value);
         return true;
     }},
+    Setting{"NORELECBOT_FORGE_SECONDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.forge_seconds, value, AppConfig::default_forge_seconds, 0);
+    }},
+    Setting{"NORELECBOT_FORGE_STEPS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.forge_steps, value, AppConfig::default_forge_steps, 1000);
+    }},
+    Setting{"NORELECBOT_FORGE_MEMORY_KB", [](AppConfig &config, std::string_view value) {
+        return set_number(config.forge_memory_kb, value, AppConfig::default_forge_memory_kb, 256);
+    }},
+    Setting{"NORELECBOT_FORGE_DIRECTORY", [](AppConfig &config, std::string_view value) {
+        config.forge_directory = std::string{value};
+        return true;
+    }},
+    Setting{"NORELECBOT_FORGE_ANNOUNCE", [](AppConfig &config, std::string_view value) {
+        config.forge_announce = value != "0";
+        return true;
+    }},
     Setting{"NORELECBOT_GAME_MIN_SECONDS", [](AppConfig &config, std::string_view value) {
         return set_number(config.game_min_seconds, value, AppConfig::default_game_min_seconds, 0);
     }},

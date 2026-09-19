@@ -3,6 +3,7 @@
 #include "logging.hpp"
 #include "mishaps.hpp"
 #include "quiz.hpp"
+#include "forge.hpp"
 #include "position.hpp"
 #include "text.hpp"
 #include "zodiac.hpp"
@@ -542,7 +543,8 @@ std::string uncovered(std::string_view word, std::int64_t mask) {
     return shown;
 }
 
-constexpr std::array<std::pair<std::string_view, Game>, 106> game_names{{
+/* La dimensione la conta il compilatore: una riga in meno o in più non lascia buchi. */
+constexpr auto game_names = std::to_array<std::pair<std::string_view, Game>>({
     {"corsa", Game::race},
     {"indovina", Game::guess},
     {"asta", Game::auction},
@@ -648,7 +650,7 @@ constexpr std::array<std::pair<std::string_view, Game>, 106> game_names{{
     {"battuta", Game::whosaid},
     {"mezza", Game::halfquote},
     {"vera", Game::truequote},
-}};
+});
 
 }
 
@@ -664,12 +666,96 @@ std::optional<Game> game_named(std::string_view message) {
     return std::nullopt;
 }
 
+namespace {
+
+/* Quello che uno script forgiato vede del gioco vero, e quello che gli si lascia fare. */
+LuaBotView forged_view(StorageSession &session, ConquisterState &state, std::int64_t pot) {
+    LuaBotView view;
+    view.pot = pot;
+    view.score = [&state](const std::string &who) { return counter(state.scores, who); };
+    view.players = [&state]() {
+        std::vector<std::string> names;
+        for (const Counters::value_type &entry : state.scores) {
+            if (names.size() >= 40) {
+                break;
+            }
+            names.push_back(entry.first);
+        }
+        return names;
+    };
+    view.random = [&session](std::int64_t count) {
+        return static_cast<std::int64_t>(session.random_index(static_cast<std::size_t>(std::max(count, std::int64_t{1}))));
+    };
+    view.get = [&state](const std::string &key) { return counter(state.challenge, "f:" + key); };
+    view.set = [&state](const std::string &key, std::int64_t value) { state.challenge["f:" + key] = value; };
+    view.name = [&state](const std::string &key) {
+        const auto found = state.challenge_who.find("f:" + key);
+        return found == state.challenge_who.end() ? std::string{} : found->second;
+    };
+    view.setname = [&state](const std::string &key, const std::string &value) {
+        state.challenge_who["f:" + key] = value;
+    };
+    return view;
+}
+
+/* Quello che lo script ha combinato, tradotto in palle e in una riga da scrivere in chat. */
+struct ForgedOutcome {
+    bool ok = false;
+    bool decided = false;
+    std::string text;
+    std::int64_t palle = 0;
+};
+
+ForgedOutcome run_forged(
+    StorageSession &session,
+    ConquisterState &state,
+    const std::string &keyword,
+    std::string_view moment,
+    const std::vector<LuaArg> &args
+) {
+    ForgedOutcome outcome;
+    const std::optional<std::string> source = forge_source(keyword);
+    if (!source) {
+        return outcome;
+    }
+    const std::int64_t pot = counter(state.challenge, "pot");
+    const LuaBotView view = forged_view(session, state, pot);
+    const LuaRun run = lua_invoke(*source, moment, view, args, forge_limits());
+    if (!run.ok) {
+        forge_condemn(keyword, run.error);
+        return outcome;
+    }
+    outcome.ok = true;
+    for (const LuaEffect &effect : run.effects) {
+        switch (effect.kind) {
+        case LuaEffect::Kind::pay:
+            state.scores[effect.who] = counter(state.scores, effect.who) + effect.palle;
+            outcome.palle += effect.palle;
+            break;
+        case LuaEffect::Kind::take:
+            state.scores[effect.who] = counter(state.scores, effect.who) - effect.palle;
+            outcome.palle += effect.palle;
+            break;
+        case LuaEffect::Kind::say:
+            outcome.text.append(outcome.text.empty() ? "" : " · ").append(effect.text);
+            break;
+        case LuaEffect::Kind::close:
+            outcome.decided = true;
+            break;
+        }
+    }
+    return outcome;
+}
+
+}
+
 std::optional<GameOpened> game_open(
     Storage &storage,
     std::int64_t now,
     std::int64_t open_for,
     std::int64_t pot,
-    std::optional<Game> wanted
+    std::optional<Game> wanted,
+    const std::string &forged_keyword
 ) {
     const std::optional<GameOpened> result =
         storage.transaction([&](StorageSession &session) -> std::optional<GameOpened> {
@@ -678,7 +764,26 @@ std::optional<GameOpened> game_open(
                 return std::nullopt;
             }
             GameOpened opened;
-            opened.kind = wanted ? *wanted : static_cast<Game>(session.random_index(103));
+            if (wanted) {
+                opened.kind = *wanted;
+                opened.target = *wanted == Game::forged ? forged_keyword : std::string{};
+            } else {
+                /* Prima una monetina fra scritti a mano e forgiati, così i 103 non affogano. */
+                const std::optional<std::string> mine = session.random_index(2) == 0
+                    ? forge_any([&session](std::int64_t count) {
+                          return static_cast<std::int64_t>(
+                              session.random_index(static_cast<std::size_t>(std::max(count, std::int64_t{1})))
+                          );
+                      })
+                    : std::nullopt;
+                if (mine) {
+                    opened.kind = Game::forged;
+                    opened.target = *mine;
+                    state.challenge_who["forged"] = *mine;
+                } else {
+                    opened.kind = static_cast<Game>(session.random_index(103));
+                }
+            }
             opened.closes = now + open_for;
             opened.pot = pot;
             switch (opened.kind) {
@@ -1062,6 +1167,8 @@ std::optional<GameOpened> game_open(
             case Game::apocalypse:
                 state.challenge["deadline"] = now + 25;
                 break;
+            case Game::forged:
+                break;
             case Game::whosaid:
             case Game::truequote: {
                 /* Serve una citazione di cui si sappia chi l'ha detta. */
@@ -1114,6 +1221,9 @@ std::optional<GameOpened> game_open(
                 break;
             }
             }
+            if (opened.kind == Game::forged && opened.target.empty()) {
+                return std::nullopt;
+            }
             state.challenge["kind"] = static_cast<std::int64_t>(opened.kind);
             state.challenge["closes"] = opened.closes;
             state.challenge["secret"] = opened.secret;
@@ -1122,6 +1232,34 @@ std::optional<GameOpened> game_open(
             state.challenge["bid"] =
                 (opened.kind == Game::closest || opened.kind == Game::shortest) ? 1000000 : 0;
             state.challenge_who.erase("leader");
+            if (opened.kind == Game::forged) {
+                /* Lo stato del gioco precedente non deve restare fra i piedi di questo. */
+                std::vector<std::string> leftovers;
+                for (const Counters::value_type &entry : state.challenge) {
+                    if (entry.first.starts_with("f:")) {
+                        leftovers.push_back(entry.first);
+                    }
+                }
+                for (const Authors::value_type &entry : state.challenge_who) {
+                    if (entry.first.starts_with("f:")) {
+                        leftovers.push_back(entry.first);
+                    }
+                }
+                for (const std::string &key : leftovers) {
+                    state.challenge.erase(key);
+                    state.challenge_who.erase(key);
+                }
+                state.challenge["pot"] = pot;
+                state.challenge["deadline"] = now + 25;
+                state.challenge_who["forged"] = opened.target;
+                const ForgedOutcome born = run_forged(session, state, opened.target, "open", {});
+                if (!born.ok) {
+                    state.challenge.clear();
+                    state.challenge_who.clear();
+                    return std::nullopt;
+                }
+                opened.detail = born.text;
+            }
             return opened;
         });
 
@@ -2809,6 +2947,28 @@ std::optional<GamePlayed> game_play(
             played.detail = yes ? "vera" : "falsa";
             break;
         }
+        case Game::forged: {
+            const auto which = state.challenge_who.find("forged");
+            if (which == state.challenge_who.end()) {
+                return std::nullopt;
+            }
+            const std::string keyword = which->second;
+            const ForgedOutcome moved =
+                run_forged(session, state, keyword, "message", {username, std::string{message}});
+            if (!moved.ok) {
+                state.challenge.clear();
+                state.challenge_who.clear();
+                return std::nullopt;
+            }
+            if (moved.text.empty() && !moved.decided) {
+                return std::nullopt;
+            }
+            played.player = username;
+            played.detail = moved.text;
+            played.palle = moved.palle;
+            played.decided = moved.decided;
+            break;
+        }
         case Game::forbidden: {
             const std::string_view word = forbidden_words.at(static_cast<std::size_t>(secret));
             if (!text::contains_ignore_case(message, word)) {
@@ -2842,6 +3002,14 @@ std::optional<GameClosed> game_close(Storage &storage, std::int64_t now) {
             closed.kind = static_cast<Game>(counter(state.challenge, "kind"));
             closed.pot = counter(state.challenge, "pot");
             closed.secret = counter(state.challenge, "secret");
+            if (closed.kind == Game::forged) {
+                const auto which = state.challenge_who.find("forged");
+                if (which != state.challenge_who.end()) {
+                    closed.winner = which->second;
+                    const ForgedOutcome last = run_forged(session, state, which->second, "close", {});
+                    closed.detail = last.text;
+                }
+            }
             if (closed.kind == Game::truequote) {
                 closed.table = players_with(state.challenge, "v");
                 const auto author = state.challenge_who.find("target");
@@ -3519,6 +3687,32 @@ std::optional<GameTicked> game_tick(Storage &storage, std::int64_t now) {
                 state.challenge_who.clear();
                 return ticked;
             }
+            if (ticked.kind == Game::forged) {
+                const std::int64_t deadline = counter(state.challenge, "deadline");
+                const auto which = state.challenge_who.find("forged");
+                if (deadline == 0 || deadline > now || which == state.challenge_who.end()) {
+                    return std::nullopt;
+                }
+                state.challenge["deadline"] = now + 25;
+                const std::string keyword = which->second;
+                const ForgedOutcome beat = run_forged(session, state, keyword, "tick", {now});
+                if (!beat.ok) {
+                    state.challenge.clear();
+                    state.challenge_who.clear();
+                    return std::nullopt;
+                }
+                if (beat.text.empty() && !beat.decided) {
+                    return std::nullopt;
+                }
+                ticked.detail = beat.text;
+                ticked.palle = beat.palle;
+                ticked.decided = beat.decided;
+                if (beat.decided) {
+                    state.challenge.clear();
+                    state.challenge_who.clear();
+                }
+                return ticked;
+            }
             if (ticked.kind == Game::strike) {
                 const std::int64_t deadline = counter(state.challenge, "deadline");
                 if (deadline == 0 || deadline > now) {
@@ -3722,6 +3916,102 @@ std::optional<GameTicked> game_tick(Storage &storage, std::int64_t now) {
         log_info("game ticked kind={} player={}", static_cast<int>(result->kind), result->player);
     }
     return result;
+}
+
+std::vector<std::pair<std::string, std::int64_t>> lexicon_heard(Storage &storage, std::size_t most) {
+    return storage.transaction([most](StorageSession &session) {
+        const ConquisterState &state = session.state();
+        std::vector<std::pair<std::string, std::int64_t>> heard{state.lexicon.begin(), state.lexicon.end()};
+        std::ranges::sort(heard, [](const auto &first, const auto &second) {
+            return first.second > second.second;
+        });
+        if (heard.size() > most) {
+            heard.resize(most);
+        }
+        return heard;
+    });
+}
+
+void lexicon_hear(Storage &storage, std::string_view message) {
+    const std::vector<std::string> words = words_in(message);
+    if (words.empty()) {
+        return;
+    }
+    storage.transaction([&words](StorageSession &session) {
+        ConquisterState &state = session.state();
+        for (const std::string &word : words) {
+            if (word.size() < 4 || word.size() > 14) {
+                continue;
+            }
+            const bool letters_only = std::ranges::all_of(word, [](const char letter) {
+                return letter >= 'a' && letter <= 'z';
+            });
+            if (!letters_only) {
+                continue;
+            }
+            state.lexicon[word] = counter(state.lexicon, word) + 1;
+        }
+        /* Il vocabolario non cresce all'infinito: quando è pieno, tutti i conti si dimezzano e
+           chi resta a zero esce. */
+        if (state.lexicon.size() > 2000) {
+            Counters kept;
+            for (const Counters::value_type &entry : state.lexicon) {
+                if (entry.second / 2 > 0) {
+                    kept.emplace(entry.first, entry.second / 2);
+                }
+            }
+            state.lexicon = std::move(kept);
+        }
+        return 0;
+    });
+}
+
+std::vector<std::string> player_names(Storage &storage) {
+    return storage.transaction([](StorageSession &session) {
+        const ConquisterState &state = session.state();
+        std::vector<std::string> names;
+        names.reserve(state.scores.size());
+        std::ranges::transform(state.scores, std::back_inserter(names), [](const Counters::value_type &entry) {
+            return text::to_lower_copy(entry.first);
+        });
+        return names;
+    });
+}
+
+std::vector<std::string> hand_written_words() {
+    std::vector<std::string> taken;
+    taken.reserve(game_names.size() + forbidden_words.size());
+    std::ranges::transform(game_names, std::back_inserter(taken), [](const auto &named) {
+        return std::string{named.first};
+    });
+    std::ranges::transform(forbidden_words, std::back_inserter(taken), [](const std::string_view word) {
+        return std::string{word};
+    });
+    return taken;
+}
+
+std::optional<GameOpened> game_open_forged(
+    Storage &storage,
+    std::int64_t now,
+    std::int64_t open_for,
+    std::int64_t pot,
+    const std::string &keyword
+) {
+    if (!forge_source(keyword)) {
+        return std::nullopt;
+    }
+    return game_open(storage, now, open_for, pot, Game::forged, keyword);
+}
+
+std::optional<std::string> forged_named(std::string_view message) {
+    if (!forge_ready()) {
+        return std::nullopt;
+    }
+    const std::vector<std::string> words = words_in(message);
+    const auto mine = std::ranges::find_if(words, [](const std::string &word) {
+        return forge_knows(word) && forge_source(word).has_value();
+    });
+    return mine == words.end() ? std::nullopt : std::optional<std::string>{*mine};
 }
 
 HandResult play_hand(Storage &storage, const std::string &username, Hand hand) {

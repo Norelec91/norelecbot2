@@ -43,6 +43,9 @@ struct AppConfig {
     static constexpr int default_lottery_max_seconds = 5400;
     static constexpr int default_lottery_open_seconds = 600;
     static constexpr int default_lottery_ticket = 200;
+    static constexpr int default_forge_seconds = 600;
+    static constexpr int default_forge_steps = 200000;
+    static constexpr int default_forge_memory_kb = 4096;
     static constexpr int default_game_min_seconds = 0;
     static constexpr int default_game_max_seconds = 5400;
     static constexpr int default_game_open_seconds = 180;
@@ -94,6 +97,12 @@ struct AppConfig {
     int lottery_open_seconds = default_lottery_open_seconds;
     int lottery_ticket = default_lottery_ticket;
     /* The games: how often one opens, how long it lasts, what is on the table. */
+    /* Ogni quanto il bot si scrive un gioco nuovo. Zero spegne la forgia. */
+    int forge_seconds = default_forge_seconds;
+    int forge_steps = default_forge_steps;
+    int forge_memory_kb = default_forge_memory_kb;
+    bool forge_announce = true;
+    std::string forge_directory = "forge";
     int game_min_seconds = default_game_min_seconds;
     int game_max_seconds = default_game_max_seconds;
     int game_open_seconds = default_game_open_seconds;
