@@ -937,6 +937,91 @@ Rules scramble_rules(Storage &storage, const Rules &least, const Rules &most) {
     return drawn;
 }
 
+namespace {
+
+/* What one of the new boons does to a player and, when it takes two, to somebody else. */
+void grant_boon(StorageSession &session, ConquisterState &state, const std::string &name, Boon boon,
+                std::int64_t now, std::int64_t boost) {
+    const auto other_than = [&session, &state, &name]() -> std::string {
+        std::vector<std::string> others;
+        for (const Counters::value_type &entry : state.scores) {
+            if (entry.first != name) {
+                others.push_back(entry.first);
+            }
+        }
+        if (others.empty()) {
+            return {};
+        }
+        return others[session.random_index(others.size())];
+    };
+
+    switch (boon) {
+    case Boon::balloon:
+        if (find_entry(state.balloons, name) == state.balloons.end()) {
+            state.balloons[name] = 0;
+        }
+        break;
+    case Boon::boost:
+        state.boosts[name] = boost;
+        break;
+    case Boon::teleport:
+        state.ids.erase(name);
+        static_cast<void>(player_id(session, state, name));
+        break;
+    case Boon::liked:
+        static_cast<void>(simpatia_change(state, name, 1, now));
+        break;
+    case Boon::disliked:
+        static_cast<void>(simpatia_change(state, name, -1, now));
+        break;
+    case Boon::forgiven:
+        state.cooldowns.erase(name);
+        break;
+    case Boon::steal:
+        if (const std::string other = other_than(); !other.empty()) {
+            state.scores[other] = counter(state.scores, other) - 50;
+            state.scores[name] = counter(state.scores, name) + 50;
+        }
+        break;
+    case Boon::donate:
+        if (const std::string other = other_than(); !other.empty()) {
+            state.scores[other] = counter(state.scores, other) + 50;
+            state.scores[name] = counter(state.scores, name) - 50;
+        }
+        break;
+    case Boon::swap:
+        if (const std::string other = other_than(); !other.empty()) {
+            const std::int64_t mine = counter(state.scores, name);
+            state.scores[name] = counter(state.scores, other);
+            state.scores[other] = mine;
+        }
+        break;
+    case Boon::pop:
+        state.balloons.erase(name);
+        state.shields.erase(name);
+        break;
+    case Boon::flat:
+        state.boosts.erase(name);
+        break;
+    case Boon::marked:
+        state.marked[name] = now;
+        break;
+    case Boon::freed:
+        state.reprogrammed.erase(name);
+        state.cooldowns.erase(name);
+        break;
+    case Boon::restored:
+        static_cast<void>(simpatia_change(state, name, simpatia_full, now));
+        break;
+    case Boon::grandfather:
+    case Boon::halved:
+    case Boon::none:
+        break;
+    }
+}
+
+}
+
 std::optional<FlipperResult> flipper_hit(
     Storage &storage,
     const std::string &username,
@@ -956,35 +1041,9 @@ std::optional<FlipperResult> flipper_hit(
             const std::int64_t before = counter(state.scores, username);
             hit.score = flipper_score_after(before, what);
             hit.palle = hit.score - before;
-            switch (what.boon) {
-            case Boon::grandfather:
-            case Boon::halved:
-                break;
-            case Boon::balloon:
-                if (find_entry(state.balloons, username) == state.balloons.end()) {
-                    state.balloons[username] = 0;
-                }
-                break;
-            case Boon::boost:
-                state.boosts[username] = boost;
-                break;
-            case Boon::teleport:
-                state.ids.erase(username);
-                static_cast<void>(player_id(session, state, username));
-                break;
-            case Boon::liked:
-                static_cast<void>(simpatia_change(state, username, 1, now));
-                break;
-            case Boon::disliked:
-                static_cast<void>(simpatia_change(state, username, -1, now));
-                break;
-            case Boon::forgiven:
-                state.cooldowns.erase(username);
-                break;
-            case Boon::none:
-                break;
-            }
             state.scores[username] = hit.score;
+            grant_boon(session, state, username, what.boon, now, boost);
+            hit.score = counter(state.scores, username);
             return hit;
         });
 
@@ -1237,6 +1296,7 @@ BalloonResult balloon_buy(
     return result;
 }
 
+
 std::optional<MishapResult> mishap_strike(Storage &storage, std::int64_t now, std::int64_t boost) {
     const std::optional<MishapResult> result =
         storage.transaction([&](StorageSession &session) -> std::optional<MishapResult> {
@@ -1253,33 +1313,7 @@ std::optional<MishapResult> mishap_strike(Storage &storage, std::int64_t now, st
             const Mishap &what = mishaps.at(mishap.which);
             mishap.palle = what.palle;
             player->second += what.palle;
-            switch (what.boon) {
-            case Boon::balloon:
-                if (find_entry(state.balloons, name) == state.balloons.end()) {
-                    state.balloons[name] = 0;
-                }
-                break;
-            case Boon::boost:
-                state.boosts[name] = boost;
-                break;
-            case Boon::teleport:
-                state.ids.erase(name);
-                static_cast<void>(player_id(session, state, name));
-                break;
-            case Boon::liked:
-                static_cast<void>(simpatia_change(state, name, 1, now));
-                break;
-            case Boon::disliked:
-                static_cast<void>(simpatia_change(state, name, -1, now));
-                break;
-            case Boon::forgiven:
-                state.cooldowns.erase(name);
-                break;
-            case Boon::grandfather:
-            case Boon::halved:
-            case Boon::none:
-                break;
-            }
+            grant_boon(session, state, name, what.boon, now, boost);
             return mishap;
         });
 
