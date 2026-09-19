@@ -852,16 +852,11 @@ std::optional<FlipperResult> flipper_hit(
             hit.which = session.random_index(flippers.size());
             const Mishap &what = flippers.at(hit.which);
             const std::int64_t before = counter(state.scores, username);
-            hit.palle = what.palle;
-            hit.score = before + what.palle;
+            hit.score = flipper_score_after(before, what);
+            hit.palle = hit.score - before;
             switch (what.boon) {
-            case Boon::doubled:
-                hit.score = before * 2;
-                hit.palle = hit.score - before;
-                break;
+            case Boon::grandfather:
             case Boon::halved:
-                hit.score = before / 2;
-                hit.palle = hit.score - before;
                 break;
             case Boon::balloon:
                 if (find_entry(state.balloons, username) == state.balloons.end()) {
@@ -1178,7 +1173,7 @@ std::optional<MishapResult> mishap_strike(Storage &storage, std::int64_t now, st
             case Boon::forgiven:
                 state.cooldowns.erase(name);
                 break;
-            case Boon::doubled:
+            case Boon::grandfather:
             case Boon::halved:
             case Boon::none:
                 break;

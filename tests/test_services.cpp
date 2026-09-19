@@ -773,6 +773,24 @@ TEST_CASE("something small happens to somebody, and it is always small") {
     CHECK(conquister_user(storage, "bob")->score > -2000);
 }
 
+TEST_CASE("the jackpot brings the famous grandfather and his three palle") {
+    const Mishap *jackpot = nullptr;
+    std::size_t grandfathers = 0;
+    for (const Mishap &target : flippers) {
+        if (target.boon == Boon::grandfather) {
+            jackpot = &target;
+            ++grandfathers;
+        }
+    }
+
+    REQUIRE(grandfathers == 1);
+    REQUIRE(jackpot != nullptr);
+    CHECK(jackpot->palle == 3);
+    CHECK(jackpot->text.contains("JACKPOT"));
+    CHECK(jackpot->text.contains("NONNO"));
+    CHECK(flipper_score_after(10, *jackpot) == 23);
+}
+
 TEST_CASE("nothing happens while nobody is playing") {
     const TestPaths paths{"mishap-empty-test"};
     Storage storage{paths.conquister, paths.quotes};
@@ -868,4 +886,3 @@ TEST_CASE("the rules themselves can be drawn again") {
     CHECK(after.raid_share == drawn.raid_share);
     CHECK(after.attack_cost == drawn.attack_cost);
 }
-

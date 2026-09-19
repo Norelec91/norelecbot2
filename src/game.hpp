@@ -336,7 +336,8 @@ struct FlipperResult {
     std::int64_t score = 0;
 };
 
-/* One message in odds hits the pinball table under the chat; nothing the rest of the time. */
+/* One message in odds hits the pinball table under the chat; a jackpot doubles and brings the
+ * famous grandfather's three palle along. Nothing happens the rest of the time. */
 [[nodiscard]] std::optional<FlipperResult> flipper_hit(
     Storage &storage,
     const std::string &username,
