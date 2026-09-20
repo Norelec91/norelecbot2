@@ -535,9 +535,6 @@ std::string raid_event_reply(const RaidEvent &event, const zodiac::Overrides &si
         mention,
         event.target
     );
-    if (event.distance > 0) {
-        reply += std::format(", una per ogni unità delle {} di strada", event.distance);
-    }
     if (event.undefended) {
         reply += ", che era in giro";
     } else if (event.balloon_popped) {
