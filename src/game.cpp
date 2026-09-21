@@ -574,8 +574,9 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                     event.distance = position::distance(from, to);
                     event.raider_percent = zodiac::percent_for(raid.raider, now, rules.signs);
                     event.target_percent = zodiac::percent_for(raid.target, now, rules.signs);
-                    const std::int64_t carried =
-                        event.distance * event.raider_percent / event.target_percent;
+                    const std::int64_t walked =
+                        rules.loot_divisor > 0 ? event.distance / rules.loot_divisor : event.distance;
+                    const std::int64_t carried = walked * event.raider_percent / event.target_percent;
                     /* The road says what could be taken, the ceiling what may be: no single
                        raid leaves anybody at nothing. */
                     const std::int64_t most =

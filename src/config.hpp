@@ -18,6 +18,9 @@ struct AppConfig {
     static constexpr int default_furniture_cost = 10000;
     /* What share of the middle player's wealth a thing costs, and how many times the list price
        it may never pass. Zero per cent leaves the prices fixed. */
+    /* How much road buys a palla: the distance between the two is divided by this before it
+       becomes loot, so a journey is worth a few minutes of holding the place, not a day of it. */
+    static constexpr int default_loot_divisor = 50;
     /* A raid takes at most this fraction of what the target owns: three means a third. Zero
        lifts the ceiling and lets a raid clean him out. */
     static constexpr int default_raid_share = 3;
@@ -48,6 +51,7 @@ struct AppConfig {
     /* What a shelf of emoji costs, and how many of them a name can carry. */
     int furniture_cost = default_furniture_cost;
     int furniture_limit = default_furniture_limit;
+    int loot_divisor = default_loot_divisor;
     int raid_share = default_raid_share;
     int price_percent = default_price_percent;
     int price_ceiling = default_price_ceiling;

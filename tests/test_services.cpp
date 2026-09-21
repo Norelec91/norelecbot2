@@ -360,7 +360,7 @@ namespace {
 
 /* Far enough apart that every ride is the shortest one, so the tests do not depend on where ids land. */
 RaidRules quick_rides() {
-    return RaidRules{.loot_share = 3, .travel_divisor = 1000000, .attack_cost = 100, .signs = {}};
+    return RaidRules{.loot_divisor = 50, .loot_share = 3, .travel_divisor = 1000000, .attack_cost = 100, .signs = {}};
 }
 
 }
@@ -391,8 +391,8 @@ TEST_CASE("a raid takes a quarter of what the target has, and carries it home") 
     /* A palla for every unit of road, but never more than a third of what the target owns: one
        raid alone leaves nobody at nothing. */
     CHECK(arrival[0].distance > 0);
-    const std::int64_t carried =
-        arrival[0].distance * zodiac::percent_for("bob", 5) / zodiac::percent_for("alice", 5);
+    const std::int64_t carried = (arrival[0].distance / 50) *
+        zodiac::percent_for("bob", 5) / zodiac::percent_for("alice", 5);
     const std::int64_t loot = std::min(carried, std::int64_t{1000} / 3);
     CHECK(arrival[0].loot == loot);
     CHECK(conquister_user(storage, "alice")->score > 0);

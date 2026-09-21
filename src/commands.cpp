@@ -171,6 +171,7 @@ std::string failed_attempt_toll(const ClaimResult &result) {
 
 RaidRules raid_rules(const CommandContext &context) {
     return {
+        .loot_divisor = context.config.loot_divisor,
         .loot_share = context.config.raid_share,
         .travel_divisor = context.config.travel_divisor,
         .attack_cost = context.config.attack_cost,

@@ -69,6 +69,8 @@ struct BoostResult {
 enum class RaidStatus { started, already_travelling, holding_place, unknown_target, left_place, coming_home, home_already };
 
 struct RaidRules {
+    /* How much road buys a palla. */
+    int loot_divisor = 50;
     /* At most this fraction of what the target owns is taken; zero means all of it. */
     int loot_share = 3;
     /* Seconds of travel per unit of distance, and the share of the loot: a quarter by default. */
