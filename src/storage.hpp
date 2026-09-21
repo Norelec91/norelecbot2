@@ -52,6 +52,8 @@ struct Raid {
 };
 
 struct ConquisterState {
+    /* Col debug acceso gli acquisti non costano niente: serve a provare le cose in gruppo. */
+    bool debug = false;
     std::optional<Holder> current;
     Counters scores;
     Counters quotes_added;

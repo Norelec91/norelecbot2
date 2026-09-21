@@ -54,6 +54,11 @@ ParsedCommand parse_command(std::string_view message) {
 }
 
 /* What made this hold worth more or less than the seconds it lasted. */
+/* Quanto si paga davvero: col debug acceso, niente. */
+int price(const CommandContext &context, int cost) {
+    return debug_on(context.storage) ? 0 : cost;
+}
+
 /* Il nome come va mostrato: quello vero, più i soprammobili che ci ha appeso. */
 std::string dressed(const Authors &furniture, std::string_view username) {
     const auto mine = std::ranges::find_if(furniture, [username](const Authors::value_type &entry) {
@@ -338,7 +343,7 @@ std::string handle_add_quote(const CommandContext &context, std::string_view arg
     if (context.username.empty()) {
         return missing_username_reply();
     }
-    const int cost = context.config.quote_cost;
+    const int cost = price(context, context.config.quote_cost);
     if (argument.empty()) {
         return std::format("Uso: /addquote <testo>. Costa {} palle.", cost);
     }
@@ -376,7 +381,7 @@ std::string handle_buy_furniture(const CommandContext &context, std::string_view
         return missing_username_reply();
     }
     const std::string username{context.username};
-    const int cost = context.config.furniture_cost;
+    const int cost = price(context, context.config.furniture_cost);
     const auto limit = static_cast<std::size_t>(context.config.furniture_limit);
     const std::string emoji{text::trim(argument)};
     if (emoji.empty()) {
@@ -418,7 +423,7 @@ std::string handle_buy_balloon(const CommandContext &context, std::string_view) 
         return missing_username_reply();
     }
     const std::string username{context.username};
-    const int cost = context.config.balloon_cost;
+    const int cost = price(context, context.config.balloon_cost);
     const std::int64_t shield_seconds = is_shielded(context, username) ? context.config.shield_seconds : 0;
     const BalloonResult result = balloon_buy(context.storage, username, cost, seconds_now(), shield_seconds);
     if (result.status == BalloonStatus::already_owned) {
@@ -501,6 +506,23 @@ std::string handle_quotes(const CommandContext &context, std::string_view argume
     return reply;
 }
 
+std::string handle_debug(const CommandContext &context, std::string_view argument) {
+    if (!context.owner) {
+        return "Solo il proprietario può accendere il debug.";
+    }
+    const std::string_view wanted = text::trim(argument);
+    if (wanted != "0" && wanted != "1") {
+        return std::format(
+            "Uso: /debug 1 per accendere, /debug 0 per spegnere. Adesso è {}.",
+            debug_on(context.storage) ? "acceso" : "spento"
+        );
+    }
+    const bool on = wanted == "1";
+    debug_set(context.storage, on);
+    return on ? "🔧 Debug acceso: gli acquisti non costano niente."
+              : "🔧 Debug spento: gli acquisti tornano a costare.";
+}
+
 std::string handle_delete_quote(const CommandContext &context, std::string_view argument) {
     if (!context.owner) {
         return "Solo il proprietario può eliminare le citazioni.";
@@ -517,7 +539,7 @@ std::string handle_buy_boost(const CommandContext &context, std::string_view) {
         return missing_username_reply();
     }
     const std::string username{context.username};
-    const int cost = context.config.boost_cost;
+    const int cost = price(context, context.config.boost_cost);
     const BoostResult result =
         boost_buy(context.storage, username, cost, context.config.boost_multiplier, seconds_now());
     if (result.status == BoostStatus::already_owned) {
@@ -552,6 +574,7 @@ constexpr std::array commands{
     CommandDefinition{"/buyfurniture", handle_buy_furniture},
     CommandDefinition{"/quotes", handle_quotes},
     CommandDefinition{"/delquote", handle_delete_quote},
+    CommandDefinition{"/debug", handle_debug},
 };
 
 const CommandDefinition *find_command(std::string_view name) {

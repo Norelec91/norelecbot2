@@ -175,6 +175,10 @@ struct ClaimRules {
 /* One balloon per user: it survives 4 attempts at most, then has to be bought again. */
 /* With shield_seconds the balloon cannot be popped until it deflates, instead of lasting until an
    attempt pops it. */
+/* Il debug: con quello acceso gli acquisti non costano niente. */
+void debug_set(Storage &storage, bool wanted);
+[[nodiscard]] bool debug_on(Storage &storage);
+
 /* Attacca al nome le emoji comprate, se ci stanno e se le palle bastano. */
 [[nodiscard]] FurnitureResult furniture_buy(
     Storage &storage,

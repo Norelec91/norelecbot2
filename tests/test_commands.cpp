@@ -415,3 +415,63 @@ TEST_CASE("a bought emoji follows the name everywhere") {
     REQUIRE(claimed);
     CHECK(claimed->contains("alice (🎈🍕) sei in"));
 }
+
+TEST_CASE("the owner can make everything free, and put the prices back") {
+    const TestPaths paths{"debug-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":500},"quotes_added":{}})";
+    }
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    config.balloon_cost = 1000;
+    Storage storage{config.conquister_path, config.quotes_path};
+
+    const CommandContext player{
+        .storage = storage,
+        .config = config,
+        .user_id = 1,
+        .username = "alice",
+        .claims_allowed = true,
+        .owner = false,
+    };
+    const CommandContext owner{
+        .storage = storage,
+        .config = config,
+        .user_id = 2,
+        .username = "norelec",
+        .claims_allowed = true,
+        .owner = true,
+    };
+
+    /* Chi non è owner non lo accende nemmeno. */
+    const std::optional<std::string> refused = command_dispatch(player, "/debug 1");
+    REQUIRE(refused);
+    CHECK(refused->contains("Solo il proprietario"));
+    CHECK_FALSE(debug_on(storage));
+
+    /* Con cinquecento palle il palloncino da mille non si compra. */
+    const std::optional<std::string> broke = command_dispatch(player, "/buyballoon");
+    REQUIRE(broke);
+    CHECK(broke->contains("ti servono"));
+
+    /* Acceso il debug, si compra lo stesso e non costa niente. */
+    REQUIRE(command_dispatch(owner, "/debug 1"));
+    CHECK(debug_on(storage));
+    const std::optional<std::string> bought = command_dispatch(player, "/buyballoon");
+    REQUIRE(bought);
+    CHECK(bought->contains("palloncino"));
+    CHECK(conquister_user(storage, "alice")->score == 500);
+
+    /* Spento, si torna a pagare. */
+    const std::optional<std::string> off = command_dispatch(owner, "/debug 0");
+    REQUIRE(off);
+    CHECK(off->contains("tornano a costare"));
+    CHECK_FALSE(debug_on(storage));
+
+    /* Senza argomento dice solo com'è messo. */
+    const std::optional<std::string> asked = command_dispatch(owner, "/debug");
+    REQUIRE(asked);
+    CHECK(asked->contains("spento"));
+}
