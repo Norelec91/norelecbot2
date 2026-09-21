@@ -54,6 +54,17 @@ ParsedCommand parse_command(std::string_view message) {
 }
 
 /* What made this hold worth more or less than the seconds it lasted. */
+/* Il nome come va mostrato: quello vero, più i soprammobili che ci ha appeso. */
+std::string dressed(const Authors &furniture, std::string_view username) {
+    const auto mine = std::ranges::find_if(furniture, [username](const Authors::value_type &entry) {
+        return text::equals_ignore_case(entry.first, username);
+    });
+    if (mine == furniture.end() || mine->second.empty()) {
+        return std::string{username};
+    }
+    return std::format("{} ({})", username, mine->second);
+}
+
 std::string hold_note(
     const CommandContext &context,
     const std::string &holder,
@@ -234,13 +245,14 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
     if (result.status == ClaimStatus::already_held) {
         return std::format("{} sei già in {}!", username, conquister_place);
     }
+    const Authors furniture = furniture_all(context.storage);
     if (result.status == ClaimStatus::defended) {
         const std::string toll = failed_attempt_toll(result);
         if (result.shield_seconds > 0) {
             return std::format(
                 "🎈 {} il palloncino di {} ha resistito{}. Resiste ancora per {}.",
-                username,
-                result.previous_username,
+                dressed(furniture, username),
+                dressed(furniture, result.previous_username),
                 toll,
                 format_wait(result.shield_seconds)
             );
@@ -248,8 +260,8 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
         return std::format(
             "🎈 {} il palloncino di {} ha resistito{}. "
             "Ora il palloncino ha il {}% di probabilità di essere bucato.",
-            username,
-            result.previous_username,
+            dressed(furniture, username),
+            dressed(furniture, result.previous_username),
             toll,
             result.next_chance
         );
@@ -258,23 +270,23 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
     if (result.balloon_popped) {
         reply = std::format(
             "💥 {} hai bucato il palloncino di {}{}!\n",
-            username,
+            dressed(furniture, username),
             mention,
-            result.previous_username
+            dressed(furniture, result.previous_username)
         );
     }
     if (!result.previous_username.empty()) {
         reply += std::format(
             "{0} hai cacciato {4}{1} da {2}.\n{1} hai guadagnato {3} palle{5}!\n",
-            username,
-            result.previous_username,
+            dressed(furniture, username),
+            dressed(furniture, result.previous_username),
             conquister_place,
             result.earned,
             mention,
             hold_note(context, result.previous_username, result.boost_multiplier, result.zodiac_percent, now)
         );
     }
-    reply += std::format("🪐 {} sei in {}!", username, conquister_place);
+    reply += std::format("🪐 {} sei in {}!", dressed(furniture, username), conquister_place);
     if (const std::optional<std::string> quote = optional_random_quote(context.storage)) {
         reply += std::format("\n\n{}", *quote);
     }
@@ -290,6 +302,7 @@ std::string handle_leaderboard(const CommandContext &context, std::string_view) 
             conquister_place
         );
     }
+    const Authors furniture = furniture_all(context.storage);
     std::string reply = std::format(
         "🏆 Classifica {}\nOggi è giorno di {}.\n",
         conquister_place,
@@ -300,7 +313,7 @@ std::string handle_leaderboard(const CommandContext &context, std::string_view) 
             "\n{}) {} {} — {} palle",
             position++,
             zodiac::sign_of(entry.username, context.config.zodiac_signs).symbol,
-            entry.username,
+            dressed(furniture, entry.username),
             entry.score
         );
         if (entry.quotes_added > 0) {
@@ -312,7 +325,11 @@ std::string handle_leaderboard(const CommandContext &context, std::string_view) 
         }
     }
     if (leaderboard.current) {
-        reply += std::format("\n\n🪐 In {} ora: {}", conquister_place, leaderboard.current->username);
+        reply += std::format(
+            "\n\n🪐 In {} ora: {}",
+            conquister_place,
+            dressed(furniture, leaderboard.current->username)
+        );
     }
     return reply;
 }
@@ -351,6 +368,48 @@ std::string handle_add_quote(const CommandContext &context, std::string_view arg
         username,
         cost,
         quote
+    );
+}
+
+std::string handle_buy_furniture(const CommandContext &context, std::string_view argument) {
+    if (context.username.empty()) {
+        return missing_username_reply();
+    }
+    const std::string username{context.username};
+    const int cost = context.config.furniture_cost;
+    const auto limit = static_cast<std::size_t>(context.config.furniture_limit);
+    const std::string emoji{text::trim(argument)};
+    if (emoji.empty()) {
+        return std::format("Uso: /buyfurniture <emoji>. Costa {} palle.", cost);
+    }
+    const std::optional<std::size_t> howmany = text::emoji_count(emoji);
+    if (!howmany) {
+        return std::format("{} al nome si attaccano solo emoji: nessun addebito.", username);
+    }
+    const FurnitureResult result = furniture_buy(context.storage, username, emoji, cost, limit);
+    if (result.status == FurnitureStatus::too_many) {
+        return std::format(
+            "{} ne hai già {} su {}: non ci stanno anche queste, nessun addebito.",
+            username,
+            result.howmany,
+            limit
+        );
+    }
+    if (result.status == FurnitureStatus::insufficient_score) {
+        return std::format(
+            "{} ti servono {} palle per un soprammobile (ne hai {}).",
+            username,
+            cost,
+            result.available_score
+        );
+    }
+    return std::format(
+        "🛋️ {} ({}) hai speso {} palle: {} su {} appesi al nome.",
+        username,
+        result.shown,
+        cost,
+        result.howmany,
+        limit
     );
 }
 
@@ -490,6 +549,7 @@ constexpr std::array commands{
     CommandDefinition{"/addquote", handle_add_quote},
     CommandDefinition{"/buyballoon", handle_buy_balloon},
     CommandDefinition{"/buyboost", handle_buy_boost},
+    CommandDefinition{"/buyfurniture", handle_buy_furniture},
     CommandDefinition{"/quotes", handle_quotes},
     CommandDefinition{"/delquote", handle_delete_quote},
 };
@@ -512,17 +572,23 @@ bool command_is_for_bot(std::string_view text) {
 std::string raid_event_reply(const RaidEvent &event, const zodiac::Overrides &signs) {
     const std::string_view mention = event.target_on_telegram ? "@" : "";
     const std::string home = std::format("{}{}", event.raider_on_telegram ? "@" : "", event.raider);
+    /* Il nome nudo per chi parla, quello vestito quando si nomina qualcuno. */
+    const auto with_emoji = [](std::string_view name, std::string_view emoji) {
+        return emoji.empty() ? std::string{name} : std::format("{} ({})", name, emoji);
+    };
+    const std::string raider = with_emoji(event.raider, event.raider_emoji);
+    const std::string target = with_emoji(event.target, event.target_emoji);
     if (event.kind == RaidEvent::Kind::returned) {
         if (event.loot > 0) {
-            return std::format("🪐 {} sei tornato in {} con {} palle.", event.raider, home, event.loot);
+            return std::format("🪐 {} sei tornato in {} con {} palle.", raider, home, event.loot);
         }
-        return std::format("🪐 {} sei tornato in {} a mani vuote.", event.raider, home);
+        return std::format("🪐 {} sei tornato in {} a mani vuote.", raider, home);
     }
     if (event.kind == RaidEvent::Kind::defended) {
         return std::format(
             "🎈 {} il palloncino di {} ha resistito{}. Torni in {} a mani vuote tra {}.",
-            event.raider,
-            event.target,
+            raider,
+            target,
             event.cost > 0 ? std::format(" e ti costa {} palle", event.cost) : "",
             home,
             format_wait(event.seconds)
@@ -530,10 +596,10 @@ std::string raid_event_reply(const RaidEvent &event, const zodiac::Overrides &si
     }
     std::string reply = std::format(
         "💰 {} hai rubato {} palle a {}{}",
-        event.raider,
+        raider,
         event.loot,
         mention,
-        event.target
+        target
     );
     if (event.undefended) {
         reply += ", che era in giro";
@@ -541,14 +607,14 @@ std::string raid_event_reply(const RaidEvent &event, const zodiac::Overrides &si
         reply += ", bucandogli il palloncino";
     }
     if (event.raider_percent != event.target_percent) {
-        const zodiac::Sign raider = zodiac::sign_of(event.raider, signs);
-        const zodiac::Sign target = zodiac::sign_of(event.target, signs);
+        const zodiac::Sign raider_sign = zodiac::sign_of(event.raider, signs);
+        const zodiac::Sign target_sign = zodiac::sign_of(event.target, signs);
         reply += std::format(
             " ({} {} contro {} {}: {}/{})",
-            raider.symbol,
-            raider.name,
-            target.symbol,
-            target.name,
+            raider_sign.symbol,
+            raider_sign.name,
+            target_sign.symbol,
+            target_sign.name,
             event.raider_percent,
             event.target_percent
         );

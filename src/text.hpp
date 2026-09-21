@@ -18,6 +18,10 @@ namespace norelecbot::text {
 [[nodiscard]] std::string strip_mentions(std::string_view text);
 /* Invalid UTF-8 bytes count as one codepoint each. */
 [[nodiscard]] std::size_t utf8_prefix_bytes(std::string_view text, std::size_t max_codepoints);
+/* Quante emoji sono davvero, tenendo unito quello che si attacca: una famiglia con gli ZWJ è una,
+   un pollice col tono di pelle è uno, una bandiera è una. Niente se là dentro c'è qualcosa che
+   emoji non è. */
+[[nodiscard]] std::optional<std::size_t> emoji_count(std::string_view text);
 
 }
 

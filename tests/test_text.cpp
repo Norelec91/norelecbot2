@@ -59,3 +59,35 @@ TEST_CASE("a piece of word is found whatever the spelling") {
     CHECK_FALSE(text::contains_ignore_case("", "frod"));
 }
 
+
+TEST_CASE("counting emoji, with everything that sticks to them") {
+    using norelecbot::text::emoji_count;
+
+    /* Una faccina è una. */
+    CHECK(emoji_count("🎈") == std::optional<std::size_t>{1});
+    CHECK(emoji_count("🎈🍕🐟") == std::optional<std::size_t>{3});
+
+    /* Quello che si attacca non conta a parte: una famiglia, un pollice con il tono di pelle,
+       una bandiera, un keycap. */
+    CHECK(emoji_count("👨‍👩‍👧") == std::optional<std::size_t>{1});
+    CHECK(emoji_count("👍🏽") == std::optional<std::size_t>{1});
+    CHECK(emoji_count("🇮🇹") == std::optional<std::size_t>{1});
+    CHECK(emoji_count("1️⃣") == std::optional<std::size_t>{1});
+    CHECK(emoji_count("❤️") == std::optional<std::size_t>{1});
+    CHECK(emoji_count("👨‍👩‍👧🇮🇹👍🏽") == std::optional<std::size_t>{3});
+
+    /* Dieci di fila restano dieci. */
+    CHECK(emoji_count("🎈🍕🐟🚀🎲🧀🐝🌊🪐🎺") == std::optional<std::size_t>{10});
+
+    /* Quello che emoji non è, non passa. */
+    CHECK(emoji_count("") == std::nullopt);
+    CHECK(emoji_count("   ") == std::nullopt);
+    CHECK(emoji_count("ciao") == std::nullopt);
+    CHECK(emoji_count("🎈 ciao") == std::nullopt);
+    CHECK(emoji_count("🎈 🍕") == std::nullopt);
+    CHECK(emoji_count("7") == std::nullopt);
+    CHECK(emoji_count("🎈7") == std::nullopt);
+
+    /* Gli spazi intorno si possono perdonare. */
+    CHECK(emoji_count("  🎈🍕  ") == std::optional<std::size_t>{2});
+}

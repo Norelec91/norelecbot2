@@ -71,6 +71,8 @@ struct ConquisterState {
     std::vector<Raid> raids;
     /* Who added each quote, for the ones added since the bot started writing it down. */
     Authors quote_authors;
+    /* Le emoji che ognuno si è comprato da appendere al nome. */
+    Authors furniture;
 
     bool operator==(const ConquisterState &) const = default;
 };

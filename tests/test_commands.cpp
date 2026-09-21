@@ -291,7 +291,10 @@ TEST_CASE("We @someone sends the player out to rob them") {
 
 TEST_CASE("the raids tell what happened") {
     const zodiac::Overrides none;
-    RaidEvent event{.kind = RaidEvent::Kind::stolen, .raider = "bob", .target = "alice"};
+    RaidEvent event;
+    event.kind = RaidEvent::Kind::stolen;
+    event.raider = "bob";
+    event.target = "alice";
     event.loot = 250;
     event.seconds = 52;
     CHECK(raid_event_reply(event, none) == "💰 bob hai rubato 250 palle a alice! Torni in bob tra 52 secondi.");
@@ -314,6 +317,8 @@ TEST_CASE("the raids tell what happened") {
         .target = "alice",
         .loot = 0,
         .cost = 100,
+        .raider_emoji = {},
+        .target_emoji = {},
         .seconds = 52,
     };
     CHECK(raid_event_reply(defended, none) ==
@@ -326,7 +331,10 @@ TEST_CASE("the raids tell what happened") {
           "🎈 bob il palloncino di alice ha resistito e ti costa 100 palle. "
           "Torni in @bob a mani vuote tra 52 secondi.");
 
-    RaidEvent home{.kind = RaidEvent::Kind::returned, .raider = "bob", .target = "alice"};
+    RaidEvent home;
+    home.kind = RaidEvent::Kind::returned;
+    home.raider = "bob";
+    home.target = "alice";
     home.loot = 250;
     CHECK(raid_event_reply(home, none) == "🪐 bob sei tornato in bob con 250 palle.");
     home.raider_on_telegram = true;
@@ -362,3 +370,48 @@ TEST_CASE("a quote about what the owner has banned is turned away") {
     CHECK(quote_page_load(storage, 1).total == 1);
 }
 
+
+TEST_CASE("a bought emoji follows the name everywhere") {
+    const TestPaths paths{"dressed-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":30000,"bob":500},"quotes_added":{}})";
+    }
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{config.conquister_path, config.quotes_path};
+
+    const CommandContext context{
+        .storage = storage,
+        .config = config,
+        .user_id = 1,
+        .username = "alice",
+        .claims_allowed = true,
+        .owner = false,
+    };
+
+    /* Si compra, e la risposta mostra già il nome vestito. */
+    const std::optional<std::string> bought = command_dispatch(context, "/buyfurniture 🎈🍕");
+    REQUIRE(bought);
+    CHECK(bought->contains("alice (🎈🍕)"));
+    CHECK(bought->contains("2 su 10"));
+
+    /* Quello che emoji non è viene rifiutato senza addebito. */
+    const std::int64_t before = conquister_user(storage, "alice")->score;
+    const std::optional<std::string> refused = command_dispatch(context, "/buyfurniture ciao");
+    REQUIRE(refused);
+    CHECK(refused->contains("solo emoji"));
+    CHECK(conquister_user(storage, "alice")->score == before);
+
+    /* Nella classifica il nome è vestito, e chi non ha comprato niente resta nudo. */
+    const std::optional<std::string> board = command_dispatch(context, "/leaderboard");
+    REQUIRE(board);
+    CHECK(board->contains("alice (🎈🍕)"));
+    CHECK(board->contains("bob —"));
+
+    /* E anche prendendo il posto. */
+    const std::optional<std::string> claimed = command_dispatch(context, conquister_trigger);
+    REQUIRE(claimed);
+    CHECK(claimed->contains("alice (🎈🍕) sei in"));
+}

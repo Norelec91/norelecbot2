@@ -84,6 +84,12 @@ constexpr std::array settings{
     Setting{"NORELECBOT_BALLOON_COST", [](AppConfig &config, std::string_view value) {
         return set_number(config.balloon_cost, value, AppConfig::default_balloon_cost, 0);
     }},
+    Setting{"NORELECBOT_FURNITURE_COST", [](AppConfig &config, std::string_view value) {
+        return set_number(config.furniture_cost, value, AppConfig::default_furniture_cost, 0);
+    }},
+    Setting{"NORELECBOT_FURNITURE_LIMIT", [](AppConfig &config, std::string_view value) {
+        return set_number(config.furniture_limit, value, AppConfig::default_furniture_limit, 1);
+    }},
     Setting{"NORELECBOT_COOLDOWN_SECONDS", [](AppConfig &config, std::string_view value) {
         return set_number(config.cooldown_seconds, value, AppConfig::default_cooldown_seconds, 0);
     }},

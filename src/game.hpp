@@ -43,6 +43,16 @@ enum class BalloonStatus { bought, already_owned, has_boost, insufficient_score 
 
 enum class BoostStatus { bought, already_owned, has_balloon, insufficient_score };
 
+enum class FurnitureStatus { bought, too_many, insufficient_score };
+
+struct FurnitureResult {
+    FurnitureStatus status = FurnitureStatus::bought;
+    std::int64_t available_score = 0;
+    /* Come sta il nome adesso, e quanti soprammobili ci sono appesi. */
+    std::string shown;
+    std::size_t howmany = 0;
+};
+
 struct BalloonResult {
     BalloonStatus status = BalloonStatus::bought;
     std::int64_t available_score = 0;
@@ -86,6 +96,9 @@ struct RaidEvent {
     std::string target;
     std::int64_t loot = 0;
     std::int64_t cost = 0;
+    /* I soprammobili appesi ai due nomi, da mostrare insieme a loro. */
+    std::string raider_emoji;
+    std::string target_emoji;
     /* Quanta strada c'era fra i due: è anche quanto si può portare via. */
     std::int64_t distance = 0;
     /* The ride home. */
@@ -162,6 +175,17 @@ struct ClaimRules {
 /* One balloon per user: it survives 4 attempts at most, then has to be bought again. */
 /* With shield_seconds the balloon cannot be popped until it deflates, instead of lasting until an
    attempt pops it. */
+/* Attacca al nome le emoji comprate, se ci stanno e se le palle bastano. */
+[[nodiscard]] FurnitureResult furniture_buy(
+    Storage &storage,
+    const std::string &username,
+    const std::string &emoji,
+    int cost,
+    std::size_t limit
+);
+/* I soprammobili di tutti, per chi deve solo scrivere i nomi. */
+[[nodiscard]] Authors furniture_all(Storage &storage);
+
 [[nodiscard]] BalloonResult balloon_buy(
     Storage &storage,
     const std::string &username,

@@ -15,6 +15,8 @@ namespace norelecbot {
 struct AppConfig {
     static constexpr int default_quote_cost = 1000;
     static constexpr int default_balloon_cost = 1000;
+    static constexpr int default_furniture_cost = 10000;
+    static constexpr int default_furniture_limit = 10;
     static constexpr int default_cooldown_seconds = 300;
     static constexpr int default_attack_cost = 100;
     static constexpr int default_travel_divisor = 350;
@@ -36,6 +38,9 @@ struct AppConfig {
     /* Pieces of word a quote may not contain, whatever the spelling. */
     std::vector<std::string> quote_banned;
     int balloon_cost = default_balloon_cost;
+    /* Quanto costa appendersi al nome un soprammobile, e quanti se ne possono tenere. */
+    int furniture_cost = default_furniture_cost;
+    int furniture_limit = default_furniture_limit;
     int cooldown_seconds = default_cooldown_seconds;
     int attack_cost = default_attack_cost;
     /* Seconds of travel per unit of distance, and the share of a raid's loot. */

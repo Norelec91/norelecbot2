@@ -42,6 +42,20 @@ Counters::iterator find_entry(Counters &counters, const std::string &username) {
     });
 }
 
+/* Quello che uno si è appeso al nome, o niente. */
+std::string furniture_of(const ConquisterState &state, const std::string &username) {
+    const auto mine = std::ranges::find_if(state.furniture, [&username](const Authors::value_type &entry) {
+        return entry.first == username;
+    });
+    return mine == state.furniture.end() ? std::string{} : mine->second;
+}
+
+Authors::iterator find_entry(Authors &authors, const std::string &username) {
+    return std::ranges::find_if(authors, [&username](const Authors::value_type &entry) {
+        return entry.first == username;
+    });
+}
+
 }
 
 namespace {
@@ -307,6 +321,49 @@ std::optional<ConquisterUser> conquister_user(Storage &storage, std::string_view
     });
 }
 
+FurnitureResult furniture_buy(
+    Storage &storage,
+    const std::string &username,
+    const std::string &emoji,
+    int cost,
+    std::size_t limit
+) {
+    const FurnitureResult result = storage.transaction([&](StorageSession &session) {
+        ConquisterState &state = session.state();
+        const std::int64_t score = counter(state.scores, username);
+        const auto mine = find_entry(state.furniture, username);
+        const std::string kept = mine == state.furniture.end() ? std::string{} : mine->second;
+        const std::size_t had = text::emoji_count(kept).value_or(0);
+        const std::size_t asked = text::emoji_count(emoji).value_or(0);
+        if (had + asked > limit) {
+            return FurnitureResult{FurnitureStatus::too_many, score, kept, had};
+        }
+        if (score < cost) {
+            return FurnitureResult{FurnitureStatus::insufficient_score, score, kept, had};
+        }
+        state.scores[username] = score - cost;
+        const std::string shown = kept + emoji;
+        if (mine != state.furniture.end()) {
+            mine->second = shown;
+        } else {
+            state.furniture[username] = shown;
+        }
+        return FurnitureResult{FurnitureStatus::bought, score - cost, shown, had + asked};
+    });
+
+    log_info(
+        "furniture user={} status={} howmany={}",
+        username,
+        static_cast<int>(result.status),
+        result.howmany
+    );
+    return result;
+}
+
+Authors furniture_all(Storage &storage) {
+    return storage.transaction([](StorageSession &session) { return session.state().furniture; });
+}
+
 BalloonResult balloon_buy(
     Storage &storage,
     const std::string &username,
@@ -441,10 +498,15 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
         for (Raid &raid : state.raids) {
             if (!raid.arrived && now >= raid.arrive) {
                 raid.arrived = true;
-                RaidEvent event{.kind = RaidEvent::Kind::stolen, .raider = raid.raider, .target = raid.target};
+                RaidEvent event;
+                event.kind = RaidEvent::Kind::stolen;
+                event.raider = raid.raider;
+                event.target = raid.target;
                 event.seconds = std::max<std::int64_t>(raid.back - now, 0);
                 event.target_on_telegram = counter(state.telegram_ids, raid.target) != 0;
                 event.raider_on_telegram = counter(state.telegram_ids, raid.raider) != 0;
+                event.raider_emoji = furniture_of(state, raid.raider);
+                event.target_emoji = furniture_of(state, raid.target);
                 const bool guarded = !is_away(state, raid.target);
                 event.undefended = !guarded;
                 const auto shield = find_entry(state.shields, raid.target);
@@ -491,6 +553,8 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                     .raider = raid.raider,
                     .target = raid.target,
                     .loot = raid.loot,
+                    .raider_emoji = furniture_of(state, raid.raider),
+                    .target_emoji = furniture_of(state, raid.target),
                     .raider_on_telegram = counter(state.telegram_ids, raid.raider) != 0,
                 });
             }

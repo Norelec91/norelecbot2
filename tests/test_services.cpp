@@ -629,3 +629,45 @@ TEST_CASE("a quote remembers who added it") {
     CHECK(page.authors[1] == "bob");
 }
 
+
+TEST_CASE("furniture is bought, piles up and stops at the limit") {
+    const TestPaths paths{"furniture-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":25000,"bob":100},"quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+
+    /* Il primo acquisto toglie il costo e appende le emoji. */
+    const FurnitureResult first = furniture_buy(storage, "alice", "🎈🍕", 10000, 10);
+    CHECK(first.status == FurnitureStatus::bought);
+    CHECK(first.shown == "🎈🍕");
+    CHECK(first.howmany == 2);
+    CHECK(conquister_user(storage, "alice")->score == 15000);
+
+    /* Il secondo si accoda invece di sostituire. */
+    const FurnitureResult second = furniture_buy(storage, "alice", "🐟", 10000, 10);
+    CHECK(second.status == FurnitureStatus::bought);
+    CHECK(second.shown == "🎈🍕🐟");
+    CHECK(second.howmany == 3);
+    CHECK(conquister_user(storage, "alice")->score == 5000);
+
+    /* Oltre il limite si rifiuta senza addebitare. */
+    const FurnitureResult too_many = furniture_buy(storage, "alice", "🚀🎲🧀🐝🌊🪐🎺🐕", 10000, 10);
+    CHECK(too_many.status == FurnitureStatus::too_many);
+    CHECK(too_many.howmany == 3);
+    CHECK(conquister_user(storage, "alice")->score == 5000);
+
+    /* Senza palle non si compra, e niente resta appeso. */
+    const FurnitureResult broke = furniture_buy(storage, "bob", "🎈", 10000, 10);
+    CHECK(broke.status == FurnitureStatus::insufficient_score);
+    CHECK(conquister_user(storage, "bob")->score == 100);
+    const Authors hung = furniture_all(storage);
+    CHECK(hung.find("bob") == hung.end());
+
+    /* E quello che si è comprato sopravvive alla rilettura del file. */
+    Storage again{paths.conquister, paths.quotes};
+    const Authors kept = furniture_all(again);
+    REQUIRE(kept.find("alice") != kept.end());
+    CHECK(kept.find("alice")->second == "🎈🍕🐟");
+}
