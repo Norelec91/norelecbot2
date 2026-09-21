@@ -16,10 +16,10 @@ struct AppConfig {
     static constexpr int default_quote_cost = 1000;
     static constexpr int default_balloon_cost = 1000;
     static constexpr int default_furniture_cost = 10000;
-    /* Quanto di quello che ha un giocatore mediano costa una cosa, e quante volte il prezzo di
-       listino non può superare. Zero per cento spegne l'inflazione e lascia i prezzi fissi. */
-    /* Una razzia non porta via più di questa frazione di quello che ha il derubato: con tre, un
-       terzo. Zero toglie il tetto e lascia che si prenda tutto. */
+    /* What share of the middle player's wealth a thing costs, and how many times the list price
+       it may never pass. Zero per cent leaves the prices fixed. */
+    /* A raid takes at most this fraction of what the target owns: three means a third. Zero
+       lifts the ceiling and lets a raid clean him out. */
     static constexpr int default_raid_share = 3;
     static constexpr int default_price_percent = 20;
     static constexpr int default_price_ceiling = 50;
@@ -45,7 +45,7 @@ struct AppConfig {
     /* Pieces of word a quote may not contain, whatever the spelling. */
     std::vector<std::string> quote_banned;
     int balloon_cost = default_balloon_cost;
-    /* Quanto costa appendersi al nome un soprammobile, e quanti se ne possono tenere. */
+    /* What a shelf of emoji costs, and how many of them a name can carry. */
     int furniture_cost = default_furniture_cost;
     int furniture_limit = default_furniture_limit;
     int raid_share = default_raid_share;

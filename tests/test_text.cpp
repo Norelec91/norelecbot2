@@ -63,12 +63,12 @@ TEST_CASE("a piece of word is found whatever the spelling") {
 TEST_CASE("counting emoji, with everything that sticks to them") {
     using norelecbot::text::emoji_count;
 
-    /* Una faccina è una. */
+    /* One face is one. */
     CHECK(emoji_count("🎈") == std::optional<std::size_t>{1});
     CHECK(emoji_count("🎈🍕🐟") == std::optional<std::size_t>{3});
 
-    /* Quello che si attacca non conta a parte: una famiglia, un pollice con il tono di pelle,
-       una bandiera, un keycap. */
+    /* What sticks to an emoji is not counted apart: a family, a thumb with a skin tone, a flag,
+       a keycap. */
     CHECK(emoji_count("👨‍👩‍👧") == std::optional<std::size_t>{1});
     CHECK(emoji_count("👍🏽") == std::optional<std::size_t>{1});
     CHECK(emoji_count("🇮🇹") == std::optional<std::size_t>{1});
@@ -76,10 +76,10 @@ TEST_CASE("counting emoji, with everything that sticks to them") {
     CHECK(emoji_count("❤️") == std::optional<std::size_t>{1});
     CHECK(emoji_count("👨‍👩‍👧🇮🇹👍🏽") == std::optional<std::size_t>{3});
 
-    /* Dieci di fila restano dieci. */
+    /* Ten in a row stay ten. */
     CHECK(emoji_count("🎈🍕🐟🚀🎲🧀🐝🌊🪐🎺") == std::optional<std::size_t>{10});
 
-    /* Quello che emoji non è, non passa. */
+    /* What is not an emoji does not get through. */
     CHECK(emoji_count("") == std::nullopt);
     CHECK(emoji_count("   ") == std::nullopt);
     CHECK(emoji_count("ciao") == std::nullopt);
@@ -88,6 +88,6 @@ TEST_CASE("counting emoji, with everything that sticks to them") {
     CHECK(emoji_count("7") == std::nullopt);
     CHECK(emoji_count("🎈7") == std::nullopt);
 
-    /* Gli spazi intorno si possono perdonare. */
+    /* Spaces around them are forgiven. */
     CHECK(emoji_count("  🎈🍕  ") == std::optional<std::size_t>{2});
 }

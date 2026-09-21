@@ -48,7 +48,7 @@ enum class FurnitureStatus { bought, too_many, insufficient_score };
 struct FurnitureResult {
     FurnitureStatus status = FurnitureStatus::bought;
     std::int64_t available_score = 0;
-    /* Come sta il nome adesso, e quanti soprammobili ci sono appesi. */
+    /* How the name reads now, and how many pieces hang from it. */
     std::string shown;
     std::size_t howmany = 0;
 };
@@ -69,7 +69,7 @@ struct BoostResult {
 enum class RaidStatus { started, already_travelling, holding_place, unknown_target, left_place, coming_home, home_already };
 
 struct RaidRules {
-    /* Al massimo si porta via questa frazione di quello che ha il derubato; zero, tutto. */
+    /* At most this fraction of what the target owns is taken; zero means all of it. */
     int loot_share = 3;
     /* Seconds of travel per unit of distance, and the share of the loot: a quarter by default. */
     int travel_divisor = 1000;
@@ -101,7 +101,7 @@ struct RaidEvent {
     /* I soprammobili appesi ai due nomi, da mostrare insieme a loro. */
     std::string raider_emoji;
     std::string target_emoji;
-    /* Quanta strada c'era fra i due: è anche quanto si può portare via. */
+    /* The road between the two, which is also what can be carried off. */
     std::int64_t distance = 0;
     /* The ride home. */
     std::int64_t seconds = 0;
@@ -177,22 +177,22 @@ struct ClaimRules {
 /* One balloon per user: it survives 4 attempts at most, then has to be bought again. */
 /* With shield_seconds the balloon cannot be popped until it deflates, instead of lasting until an
    attempt pops it. */
-/* Quanto gira in giro: serve a tenere i prezzi al passo con la ricchezza del gruppo. */
+/* What is going around, so the prices can keep up with it. */
 struct Wealth {
     std::int64_t total = 0;
-    /* La mediana, non la media: un solo giocatore che tiene il posto per un giorno non deve
-       decidere i prezzi per tutti. */
+    /* The median, not the average: one player sitting on the seat all day should not set the
+       prices for everybody else. */
     std::int64_t middle = 0;
     std::size_t players = 0;
 };
 
 [[nodiscard]] Wealth wealth_now(Storage &storage);
 
-/* Il debug vale per una persona sola: i suoi acquisti non costano niente, gli altri pagano. */
+/* The debug switch frees one person only: his purchases are free, everyone else pays. */
 void debug_set(Storage &storage, const std::string &username, bool wanted);
 [[nodiscard]] bool debug_on(Storage &storage, const std::string &username);
 
-/* Attacca al nome le emoji comprate, se ci stanno e se le palle bastano. */
+/* Hangs the bought emoji on the name, if they fit and the palle are enough. */
 [[nodiscard]] FurnitureResult furniture_buy(
     Storage &storage,
     const std::string &username,
@@ -200,7 +200,7 @@ void debug_set(Storage &storage, const std::string &username, bool wanted);
     int cost,
     std::size_t limit
 );
-/* I soprammobili di tutti, per chi deve solo scrivere i nomi. */
+/* Everybody's emoji, for whoever only has names to write. */
 [[nodiscard]] Authors furniture_all(Storage &storage);
 
 [[nodiscard]] BalloonResult balloon_buy(

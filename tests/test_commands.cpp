@@ -391,26 +391,26 @@ TEST_CASE("a bought emoji follows the name everywhere") {
         .owner = false,
     };
 
-    /* Si compra, e la risposta mostra già il nome vestito. */
+    /* Bought, and the reply already shows the name dressed. */
     const std::optional<std::string> bought = command_dispatch(context, "/buyfurniture 🎈🍕");
     REQUIRE(bought);
     CHECK(bought->contains("alice (🎈🍕)"));
     CHECK(bought->contains("2 su 10"));
 
-    /* Quello che emoji non è viene rifiutato senza addebito. */
+    /* Anything that is not an emoji is turned away without a charge. */
     const std::int64_t before = conquister_user(storage, "alice")->score;
     const std::optional<std::string> refused = command_dispatch(context, "/buyfurniture ciao");
     REQUIRE(refused);
     CHECK(refused->contains("solo emoji"));
     CHECK(conquister_user(storage, "alice")->score == before);
 
-    /* Nella classifica il nome è vestito, e chi non ha comprato niente resta nudo. */
+    /* The leaderboard shows the dressed name, and whoever bought nothing stays bare. */
     const std::optional<std::string> board = command_dispatch(context, "/leaderboard");
     REQUIRE(board);
     CHECK(board->contains("alice (🎈🍕)"));
     CHECK(board->contains("bob —"));
 
-    /* E anche prendendo il posto. */
+    /* And taking the seat, too. */
     const std::optional<std::string> claimed = command_dispatch(context, conquister_trigger);
     REQUIRE(claimed);
     CHECK(claimed->contains("alice (🎈🍕) sei in"));
@@ -445,18 +445,18 @@ TEST_CASE("the owner turns the prices off for himself, not for everyone") {
         .owner = true,
     };
 
-    /* Chi non è owner non lo accende nemmeno. */
+    /* Anyone who is not an owner cannot even turn it on. */
     const std::optional<std::string> refused = command_dispatch(player, "/debug 1");
     REQUIRE(refused);
     CHECK(refused->contains("Solo il proprietario"));
     CHECK_FALSE(debug_on(storage, "alice"));
 
-    /* Con cinquecento palle il palloncino da mille non si compra. */
+    /* Five hundred palle do not buy a balloon that costs a thousand. */
     const std::optional<std::string> broke = command_dispatch(player, "/buyballoon");
     REQUIRE(broke);
     CHECK(broke->contains("ti servono"));
 
-    /* L'owner lo accende per sé: lui compra gratis. */
+    /* The owner turns it on for himself: he buys for nothing. */
     const std::optional<std::string> on = command_dispatch(owner, "/debug 1");
     REQUIRE(on);
     CHECK(on->contains("per te"));
@@ -466,20 +466,20 @@ TEST_CASE("the owner turns the prices off for himself, not for everyone") {
     CHECK(bought->contains("palloncino"));
     CHECK(conquister_user(storage, "norelec")->score == 500);
 
-    /* Gli altri continuano a pagare come prima. */
+    /* Everybody else goes on paying as before. */
     CHECK_FALSE(debug_on(storage, "alice"));
     const std::optional<std::string> still_broke = command_dispatch(player, "/buyballoon");
     REQUIRE(still_broke);
     CHECK(still_broke->contains("ti servono"));
     CHECK(conquister_user(storage, "alice")->score == 500);
 
-    /* Spento, torna a pagare anche lui. */
+    /* Switched off, he pays again like the rest. */
     const std::optional<std::string> off = command_dispatch(owner, "/debug 0");
     REQUIRE(off);
     CHECK(off->contains("tornano a costare"));
     CHECK_FALSE(debug_on(storage, "norelec"));
 
-    /* Senza argomento dice solo com'è messo per chi chiede. */
+    /* With no argument it only says how things stand for whoever asked. */
     const std::optional<std::string> asked = command_dispatch(owner, "/debug");
     REQUIRE(asked);
     CHECK(asked->contains("spento"));
@@ -489,7 +489,7 @@ TEST_CASE("prices follow how rich the group has become") {
     const TestPaths paths{"prices-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
-        /* Cinque giocatori: il mediano ne ha diecimila. */
+        /* Five players: the middle one holds ten thousand. */
         file << R"({"current":null,"scores":{"a":100,"b":5000,"c":10000,"d":40000,"e":900000},)"
                 R"("quotes_added":{}})";
     }
@@ -505,27 +505,24 @@ TEST_CASE("prices follow how rich the group has become") {
         .storage = storage,
         .config = config,
         .user_id = 1,
-        .username = "a",
+        .username = "d",
         .claims_allowed = true,
         .owner = true,
     };
 
-    /* La mediana è diecimila: il palloncino costa il venti per cento, non il prezzo di listino. */
     const Wealth wealth = wealth_now(storage);
     CHECK(wealth.players == 5);
     CHECK(wealth.middle == 10000);
     CHECK(wealth.total == 955100);
 
-    const std::optional<std::string> list = command_dispatch(context, "/prezzi");
-    REQUIRE(list);
-    CHECK(list->contains("🎈 Palloncino — 2000 palle"));
-    CHECK(list->contains("il giocatore di mezzo ne ha 10000"));
+    /* The median is ten thousand, so a balloon costs a fifth of it, not the list price. */
+    REQUIRE(command_dispatch(context, "/buyballoon"));
+    CHECK(conquister_user(storage, "d")->score == 38000);
 
-    /* Col debug acceso il listino, per chi lo ha acceso, è tutto a zero. */
+    /* With the debug switch on, whoever threw it pays nothing. */
     REQUIRE(command_dispatch(context, "/debug 1"));
-    const std::optional<std::string> free = command_dispatch(context, "/prezzi");
-    REQUIRE(free);
-    CHECK(free->contains("🎈 Palloncino — 0 palle"));
+    REQUIRE(command_dispatch(context, "/addquote una citazione qualunque"));
+    CHECK(conquister_user(storage, "d")->score == 38000);
     REQUIRE(command_dispatch(context, "/debug 0"));
 }
 
@@ -533,7 +530,7 @@ TEST_CASE("a poor group pays the list price, and a rich one stops at the ceiling
     const TestPaths paths{"prices-edges-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":null,"scores":{"a":0,"b":10,"c":30},"quotes_added":{}})";
+        file << R"({"current":null,"scores":{"a":2000,"b":10,"c":30},"quotes_added":{}})";
     }
     AppConfig config;
     config.conquister_path = paths.conquister;
@@ -548,15 +545,14 @@ TEST_CASE("a poor group pays the list price, and a rich one stops at the ceiling
         .config = config,
         .user_id = 1,
         .username = "a",
-        .claims_allowed = false,
+        .claims_allowed = true,
         .owner = false,
     };
-    /* Gruppo in miseria: si paga il prezzo di listino. */
-    const std::optional<std::string> cheap = command_dispatch(context, "/prezzi");
-    REQUIRE(cheap);
-    CHECK(cheap->contains("🎈 Palloncino — 1000 palle"));
+    /* A group with nothing pays the list price. */
+    REQUIRE(command_dispatch(context, "/buyballoon"));
+    CHECK(conquister_user(storage, "a")->score == 1000);
 
-    /* Gruppo pieno di palle: il prezzo si ferma al tetto, cinquanta volte il listino. */
+    /* A group swimming in palle stops at the ceiling, fifty times the list price. */
     {
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":null,"scores":{"a":90000000,"b":90000000,"c":90000000},"quotes_added":{}})";
@@ -567,10 +563,9 @@ TEST_CASE("a poor group pays the list price, and a rich one stops at the ceiling
         .config = config,
         .user_id = 1,
         .username = "a",
-        .claims_allowed = false,
+        .claims_allowed = true,
         .owner = false,
     };
-    const std::optional<std::string> dear = command_dispatch(loaded, "/prezzi");
-    REQUIRE(dear);
-    CHECK(dear->contains("🎈 Palloncino — 50000 palle"));
+    REQUIRE(command_dispatch(loaded, "/buyballoon"));
+    CHECK(conquister_user(rich, "a")->score == 90000000 - 50000);
 }

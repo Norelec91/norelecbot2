@@ -388,8 +388,8 @@ TEST_CASE("a raid takes a quarter of what the target has, and carries it home") 
     CHECK(arrival[0].kind == RaidEvent::Kind::stolen);
     CHECK(arrival[0].raider == "bob");
     CHECK(arrival[0].target == "alice");
-    /* Si porta via una palla per ogni unità di strada, ma mai più di un terzo di quello che il
-       derubato possiede: una razzia sola non lascia nessuno a zero. */
+    /* A palla for every unit of road, but never more than a third of what the target owns: one
+       raid alone leaves nobody at nothing. */
     CHECK(arrival[0].distance > 0);
     const std::int64_t carried =
         arrival[0].distance * zodiac::percent_for("bob", 5) / zodiac::percent_for("alice", 5);
@@ -639,34 +639,34 @@ TEST_CASE("furniture is bought, piles up and stops at the limit") {
     }
     Storage storage{paths.conquister, paths.quotes};
 
-    /* Il primo acquisto toglie il costo e appende le emoji. */
+    /* The first purchase takes the cost and hangs the emoji. */
     const FurnitureResult first = furniture_buy(storage, "alice", "🎈🍕", 10000, 10);
     CHECK(first.status == FurnitureStatus::bought);
     CHECK(first.shown == "🎈🍕");
     CHECK(first.howmany == 2);
     CHECK(conquister_user(storage, "alice")->score == 15000);
 
-    /* Il secondo si accoda invece di sostituire. */
+    /* The second one is added to them instead of replacing them. */
     const FurnitureResult second = furniture_buy(storage, "alice", "🐟", 10000, 10);
     CHECK(second.status == FurnitureStatus::bought);
     CHECK(second.shown == "🎈🍕🐟");
     CHECK(second.howmany == 3);
     CHECK(conquister_user(storage, "alice")->score == 5000);
 
-    /* Oltre il limite si rifiuta senza addebitare. */
+    /* Past the limit it refuses without charging. */
     const FurnitureResult too_many = furniture_buy(storage, "alice", "🚀🎲🧀🐝🌊🪐🎺🐕", 10000, 10);
     CHECK(too_many.status == FurnitureStatus::too_many);
     CHECK(too_many.howmany == 3);
     CHECK(conquister_user(storage, "alice")->score == 5000);
 
-    /* Senza palle non si compra, e niente resta appeso. */
+    /* With no palle nothing is bought and nothing is left hanging. */
     const FurnitureResult broke = furniture_buy(storage, "bob", "🎈", 10000, 10);
     CHECK(broke.status == FurnitureStatus::insufficient_score);
     CHECK(conquister_user(storage, "bob")->score == 100);
     const Authors hung = furniture_all(storage);
     CHECK(hung.find("bob") == hung.end());
 
-    /* E quello che si è comprato sopravvive alla rilettura del file. */
+    /* And what was bought survives a trip through the file. */
     Storage again{paths.conquister, paths.quotes};
     const Authors kept = furniture_all(again);
     REQUIRE(kept.find("alice") != kept.end());

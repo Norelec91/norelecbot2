@@ -42,7 +42,7 @@ Counters::iterator find_entry(Counters &counters, const std::string &username) {
     });
 }
 
-/* Quello che uno si è appeso al nome, o niente. */
+/* What somebody hung beside his name, or nothing. */
 std::string furniture_of(const ConquisterState &state, const std::string &username) {
     const auto mine = std::ranges::find_if(state.furniture, [&username](const Authors::value_type &entry) {
         return entry.first == username;
@@ -567,8 +567,8 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 }
                 if (event.kind == RaidEvent::Kind::stolen) {
                     const std::int64_t theirs = counter(state.scores, raid.target);
-                    /* Si porta via una palla per ogni unità di strada fatta per arrivare fin lì:
-                       i vicini rubano poco, chi viene da lontano si ripaga il viaggio. */
+                    /* A palla for every unit of road walked to get there: neighbours take
+                       little, whoever comes from far away pays for the journey. */
                     const position::Point from = position::coordinates_of(player_id(session, state, raid.raider));
                     const position::Point to = position::coordinates_of(player_id(session, state, raid.target));
                     event.distance = position::distance(from, to);
@@ -576,8 +576,8 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                     event.target_percent = zodiac::percent_for(raid.target, now, rules.signs);
                     const std::int64_t carried =
                         event.distance * event.raider_percent / event.target_percent;
-                    /* La strada dice quanto si potrebbe prendere, il tetto quanto si può davvero:
-                       nessuno resta a zero per una razzia sola. */
+                    /* The road says what could be taken, the ceiling what may be: no single
+                       raid leaves anybody at nothing. */
                     const std::int64_t most =
                         rules.loot_share > 0 ? theirs / rules.loot_share : theirs;
                     event.loot = std::min({theirs, carried, most});

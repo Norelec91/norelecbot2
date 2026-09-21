@@ -113,7 +113,7 @@ std::size_t utf8_prefix_bytes(std::string_view text, std::size_t max_codepoints)
 
 namespace {
 
-/* Il codepoint che comincia a questo byte, e quanti byte occupa. */
+/* The codepoint starting at this byte, and how many bytes it takes. */
 struct Letter {
     char32_t code = 0;
     std::size_t width = 0;
@@ -146,13 +146,13 @@ Letter letter_at(std::string_view text, std::size_t at) {
     return Letter{code, width};
 }
 
-/* Quello che non sta in piedi da solo: si attacca all'emoji che lo precede. */
+/* What cannot stand on its own: it belongs to the emoji before it. */
 bool sticks_to_the_one_before(char32_t code) {
-    return code == 0x200D ||                        /* lo zero width joiner */
-           code == 0xFE0F || code == 0xFE0E ||      /* i selettori di variante */
-           code == 0x20E3 ||                        /* il quadratino dei keycap */
-           (code >= 0x1F3FB && code <= 0x1F3FF) ||  /* i toni di pelle */
-           (code >= 0xE0020 && code <= 0xE007F);    /* i tag delle bandiere regionali */
+    return code == 0x200D ||                        /* the zero width joiner */
+           code == 0xFE0F || code == 0xFE0E ||      /* the variation selectors */
+           code == 0x20E3 ||                        /* the keycap square */
+           (code >= 0x1F3FB && code <= 0x1F3FF) ||  /* the skin tones */
+           (code >= 0xE0020 && code <= 0xE007F);    /* the tags of regional flags */
 }
 
 bool is_regional(char32_t code) { return code >= 0x1F1E6 && code <= 0x1F1FF; }
@@ -169,8 +169,8 @@ std::optional<std::size_t> emoji_count(std::string_view text) {
     for (std::size_t at = 0; at < emoji.size();) {
         const Letter letter = letter_at(emoji, at);
         at += letter.width;
-        /* Una lettera, uno spazio: non è un soprammobile. Una cifra lo è solo se ha addosso il
-           quadratino dei keycap, come in 1️⃣. */
+        /* A letter or a space is not an ornament. A digit is one only when it wears the keycap
+           square, as in 1️⃣. */
         if (letter.code < 0x80) {
             const bool could_be_keycap =
                 (letter.code >= '0' && letter.code <= '9') || letter.code == '#' || letter.code == '*';
@@ -197,7 +197,7 @@ std::optional<std::size_t> emoji_count(std::string_view text) {
             continue;
         }
         if (joined) {
-            /* Segue uno ZWJ: fa parte dell'emoji precedente. */
+            /* It follows a zero width joiner: it is part of the emoji before it. */
             joined = false;
             continue;
         }
