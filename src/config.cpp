@@ -90,6 +90,9 @@ constexpr std::array settings{
     Setting{"NORELECBOT_FURNITURE_LIMIT", [](AppConfig &config, std::string_view value) {
         return set_number(config.furniture_limit, value, AppConfig::default_furniture_limit, 1);
     }},
+    Setting{"NORELECBOT_RAID_SHARE", [](AppConfig &config, std::string_view value) {
+        return set_number(config.raid_share, value, AppConfig::default_raid_share, 0);
+    }},
     Setting{"NORELECBOT_PRICE_PERCENT", [](AppConfig &config, std::string_view value) {
         return set_number(config.price_percent, value, AppConfig::default_price_percent, 0);
     }},

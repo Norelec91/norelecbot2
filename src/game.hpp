@@ -69,6 +69,8 @@ struct BoostResult {
 enum class RaidStatus { started, already_travelling, holding_place, unknown_target, left_place, coming_home, home_already };
 
 struct RaidRules {
+    /* Al massimo si porta via questa frazione di quello che ha il derubato; zero, tutto. */
+    int loot_share = 3;
     /* Seconds of travel per unit of distance, and the share of the loot: a quarter by default. */
     int travel_divisor = 1000;
     /* What a raid the balloon turns back costs the raider. */

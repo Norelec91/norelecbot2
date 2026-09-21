@@ -18,6 +18,9 @@ struct AppConfig {
     static constexpr int default_furniture_cost = 10000;
     /* Quanto di quello che ha un giocatore mediano costa una cosa, e quante volte il prezzo di
        listino non può superare. Zero per cento spegne l'inflazione e lascia i prezzi fissi. */
+    /* Una razzia non porta via più di questa frazione di quello che ha il derubato: con tre, un
+       terzo. Zero toglie il tetto e lascia che si prenda tutto. */
+    static constexpr int default_raid_share = 3;
     static constexpr int default_price_percent = 20;
     static constexpr int default_price_ceiling = 50;
     static constexpr int default_furniture_limit = 10;
@@ -45,6 +48,7 @@ struct AppConfig {
     /* Quanto costa appendersi al nome un soprammobile, e quanti se ne possono tenere. */
     int furniture_cost = default_furniture_cost;
     int furniture_limit = default_furniture_limit;
+    int raid_share = default_raid_share;
     int price_percent = default_price_percent;
     int price_ceiling = default_price_ceiling;
     int cooldown_seconds = default_cooldown_seconds;
