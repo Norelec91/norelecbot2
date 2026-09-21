@@ -321,16 +321,23 @@ std::optional<ConquisterUser> conquister_user(Storage &storage, std::string_view
     });
 }
 
-void debug_set(Storage &storage, bool wanted) {
-    storage.transaction([wanted](StorageSession &session) {
-        session.state().debug = wanted;
+void debug_set(Storage &storage, const std::string &username, bool wanted) {
+    storage.transaction([&username, wanted](StorageSession &session) {
+        ConquisterState &state = session.state();
+        if (wanted) {
+            state.debugging[username] = 1;
+        } else {
+            state.debugging.erase(username);
+        }
         return 0;
     });
-    log_info("debug {}", wanted ? "on" : "off");
+    log_info("debug user={} {}", username, wanted ? "on" : "off");
 }
 
-bool debug_on(Storage &storage) {
-    return storage.transaction([](StorageSession &session) { return session.state().debug; });
+bool debug_on(Storage &storage, const std::string &username) {
+    return storage.transaction([&username](StorageSession &session) {
+        return counter(session.state().debugging, username) != 0;
+    });
 }
 
 FurnitureResult furniture_buy(

@@ -416,11 +416,11 @@ TEST_CASE("a bought emoji follows the name everywhere") {
     CHECK(claimed->contains("alice (🎈🍕) sei in"));
 }
 
-TEST_CASE("the owner can make everything free, and put the prices back") {
+TEST_CASE("the owner turns the prices off for himself, not for everyone") {
     const TestPaths paths{"debug-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":null,"scores":{"alice":500},"quotes_added":{}})";
+        file << R"({"current":null,"scores":{"alice":500,"norelec":500},"quotes_added":{}})";
     }
     AppConfig config;
     config.conquister_path = paths.conquister;
@@ -449,28 +449,37 @@ TEST_CASE("the owner can make everything free, and put the prices back") {
     const std::optional<std::string> refused = command_dispatch(player, "/debug 1");
     REQUIRE(refused);
     CHECK(refused->contains("Solo il proprietario"));
-    CHECK_FALSE(debug_on(storage));
+    CHECK_FALSE(debug_on(storage, "alice"));
 
     /* Con cinquecento palle il palloncino da mille non si compra. */
     const std::optional<std::string> broke = command_dispatch(player, "/buyballoon");
     REQUIRE(broke);
     CHECK(broke->contains("ti servono"));
 
-    /* Acceso il debug, si compra lo stesso e non costa niente. */
-    REQUIRE(command_dispatch(owner, "/debug 1"));
-    CHECK(debug_on(storage));
-    const std::optional<std::string> bought = command_dispatch(player, "/buyballoon");
+    /* L'owner lo accende per sé: lui compra gratis. */
+    const std::optional<std::string> on = command_dispatch(owner, "/debug 1");
+    REQUIRE(on);
+    CHECK(on->contains("per te"));
+    CHECK(debug_on(storage, "norelec"));
+    const std::optional<std::string> bought = command_dispatch(owner, "/buyballoon");
     REQUIRE(bought);
     CHECK(bought->contains("palloncino"));
+    CHECK(conquister_user(storage, "norelec")->score == 500);
+
+    /* Gli altri continuano a pagare come prima. */
+    CHECK_FALSE(debug_on(storage, "alice"));
+    const std::optional<std::string> still_broke = command_dispatch(player, "/buyballoon");
+    REQUIRE(still_broke);
+    CHECK(still_broke->contains("ti servono"));
     CHECK(conquister_user(storage, "alice")->score == 500);
 
-    /* Spento, si torna a pagare. */
+    /* Spento, torna a pagare anche lui. */
     const std::optional<std::string> off = command_dispatch(owner, "/debug 0");
     REQUIRE(off);
     CHECK(off->contains("tornano a costare"));
-    CHECK_FALSE(debug_on(storage));
+    CHECK_FALSE(debug_on(storage, "norelec"));
 
-    /* Senza argomento dice solo com'è messo. */
+    /* Senza argomento dice solo com'è messo per chi chiede. */
     const std::optional<std::string> asked = command_dispatch(owner, "/debug");
     REQUIRE(asked);
     CHECK(asked->contains("spento"));

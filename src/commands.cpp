@@ -54,9 +54,9 @@ ParsedCommand parse_command(std::string_view message) {
 }
 
 /* What made this hold worth more or less than the seconds it lasted. */
-/* Quanto si paga davvero: col debug acceso, niente. */
+/* Quanto si paga davvero: chi ha acceso il debug per sé non paga, gli altri sì. */
 int price(const CommandContext &context, int cost) {
-    return debug_on(context.storage) ? 0 : cost;
+    return debug_on(context.storage, std::string{context.username}) ? 0 : cost;
 }
 
 /* Il nome come va mostrato: quello vero, più i soprammobili che ci ha appeso. */
@@ -510,17 +510,18 @@ std::string handle_debug(const CommandContext &context, std::string_view argumen
     if (!context.owner) {
         return "Solo il proprietario può accendere il debug.";
     }
+    const std::string username{context.username};
     const std::string_view wanted = text::trim(argument);
     if (wanted != "0" && wanted != "1") {
         return std::format(
-            "Uso: /debug 1 per accendere, /debug 0 per spegnere. Adesso è {}.",
-            debug_on(context.storage) ? "acceso" : "spento"
+            "Uso: /debug 1 per accendere, /debug 0 per spegnere. Per te adesso è {}.",
+            debug_on(context.storage, username) ? "acceso" : "spento"
         );
     }
     const bool on = wanted == "1";
-    debug_set(context.storage, on);
-    return on ? "🔧 Debug acceso: gli acquisti non costano niente."
-              : "🔧 Debug spento: gli acquisti tornano a costare.";
+    debug_set(context.storage, username, on);
+    return on ? "🔧 Debug acceso per te: i tuoi acquisti non costano niente. Gli altri pagano."
+              : "🔧 Debug spento: i tuoi acquisti tornano a costare.";
 }
 
 std::string handle_delete_quote(const CommandContext &context, std::string_view argument) {

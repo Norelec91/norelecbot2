@@ -52,8 +52,6 @@ struct Raid {
 };
 
 struct ConquisterState {
-    /* Col debug acceso gli acquisti non costano niente: serve a provare le cose in gruppo. */
-    bool debug = false;
     std::optional<Holder> current;
     Counters scores;
     Counters quotes_added;
@@ -75,6 +73,8 @@ struct ConquisterState {
     Authors quote_authors;
     /* Le emoji che ognuno si è comprato da appendere al nome. */
     Authors furniture;
+    /* Chi ha acceso il debug per sé: i suoi acquisti non costano niente. */
+    Counters debugging;
 
     bool operator==(const ConquisterState &) const = default;
 };

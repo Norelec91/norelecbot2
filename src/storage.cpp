@@ -111,9 +111,7 @@ ConquisterState parse_state(const Json &json) {
             .since = integer(current->at("since")),
         };
     }
-    const auto debug = json.find("debug");
     return ConquisterState{
-        debug != json.end() && debug->is_boolean() && debug->get<bool>(),
         std::move(holder),
         parse_counters(json, "scores"),
         parse_counters(json, "quotes_added"),
@@ -126,6 +124,7 @@ ConquisterState parse_state(const Json &json) {
         parse_raids(json),
         parse_authors(json, "quote_authors"),
         parse_authors(json, "furniture"),
+        parse_counters(json, "debugging"),
     };
 }
 
@@ -150,7 +149,6 @@ Json state_to_json(const ConquisterState &state) {
         };
     }
     return Json{
-        {"debug", state.debug},
         {"current", std::move(current)},
         {"scores", state.scores},
         {"quotes_added", state.quotes_added},
@@ -163,6 +161,7 @@ Json state_to_json(const ConquisterState &state) {
         {"raids", std::move(raids)},
         {"quote_authors", state.quote_authors},
         {"furniture", state.furniture},
+        {"debugging", state.debugging},
     };
 }
 
