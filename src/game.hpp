@@ -175,6 +175,17 @@ struct ClaimRules {
 /* One balloon per user: it survives 4 attempts at most, then has to be bought again. */
 /* With shield_seconds the balloon cannot be popped until it deflates, instead of lasting until an
    attempt pops it. */
+/* Quanto gira in giro: serve a tenere i prezzi al passo con la ricchezza del gruppo. */
+struct Wealth {
+    std::int64_t total = 0;
+    /* La mediana, non la media: un solo giocatore che tiene il posto per un giorno non deve
+       decidere i prezzi per tutti. */
+    std::int64_t middle = 0;
+    std::size_t players = 0;
+};
+
+[[nodiscard]] Wealth wealth_now(Storage &storage);
+
 /* Il debug vale per una persona sola: i suoi acquisti non costano niente, gli altri pagano. */
 void debug_set(Storage &storage, const std::string &username, bool wanted);
 [[nodiscard]] bool debug_on(Storage &storage, const std::string &username);

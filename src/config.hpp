@@ -16,6 +16,10 @@ struct AppConfig {
     static constexpr int default_quote_cost = 1000;
     static constexpr int default_balloon_cost = 1000;
     static constexpr int default_furniture_cost = 10000;
+    /* Quanto di quello che ha un giocatore mediano costa una cosa, e quante volte il prezzo di
+       listino non può superare. Zero per cento spegne l'inflazione e lascia i prezzi fissi. */
+    static constexpr int default_price_percent = 20;
+    static constexpr int default_price_ceiling = 50;
     static constexpr int default_furniture_limit = 10;
     static constexpr int default_cooldown_seconds = 300;
     static constexpr int default_attack_cost = 100;
@@ -41,6 +45,8 @@ struct AppConfig {
     /* Quanto costa appendersi al nome un soprammobile, e quanti se ne possono tenere. */
     int furniture_cost = default_furniture_cost;
     int furniture_limit = default_furniture_limit;
+    int price_percent = default_price_percent;
+    int price_ceiling = default_price_ceiling;
     int cooldown_seconds = default_cooldown_seconds;
     int attack_cost = default_attack_cost;
     /* Seconds of travel per unit of distance, and the share of a raid's loot. */

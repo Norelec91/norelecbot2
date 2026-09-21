@@ -484,3 +484,93 @@ TEST_CASE("the owner turns the prices off for himself, not for everyone") {
     REQUIRE(asked);
     CHECK(asked->contains("spento"));
 }
+
+TEST_CASE("prices follow how rich the group has become") {
+    const TestPaths paths{"prices-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        /* Cinque giocatori: il mediano ne ha diecimila. */
+        file << R"({"current":null,"scores":{"a":100,"b":5000,"c":10000,"d":40000,"e":900000},)"
+                R"("quotes_added":{}})";
+    }
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    config.balloon_cost = 1000;
+    config.price_percent = 20;
+    config.price_ceiling = 50;
+    Storage storage{config.conquister_path, config.quotes_path};
+
+    const CommandContext context{
+        .storage = storage,
+        .config = config,
+        .user_id = 1,
+        .username = "a",
+        .claims_allowed = true,
+        .owner = true,
+    };
+
+    /* La mediana è diecimila: il palloncino costa il venti per cento, non il prezzo di listino. */
+    const Wealth wealth = wealth_now(storage);
+    CHECK(wealth.players == 5);
+    CHECK(wealth.middle == 10000);
+    CHECK(wealth.total == 955100);
+
+    const std::optional<std::string> list = command_dispatch(context, "/prezzi");
+    REQUIRE(list);
+    CHECK(list->contains("🎈 Palloncino — 2000 palle"));
+    CHECK(list->contains("il giocatore di mezzo ne ha 10000"));
+
+    /* Col debug acceso il listino, per chi lo ha acceso, è tutto a zero. */
+    REQUIRE(command_dispatch(context, "/debug 1"));
+    const std::optional<std::string> free = command_dispatch(context, "/prezzi");
+    REQUIRE(free);
+    CHECK(free->contains("🎈 Palloncino — 0 palle"));
+    REQUIRE(command_dispatch(context, "/debug 0"));
+}
+
+TEST_CASE("a poor group pays the list price, and a rich one stops at the ceiling") {
+    const TestPaths paths{"prices-edges-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"a":0,"b":10,"c":30},"quotes_added":{}})";
+    }
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    config.balloon_cost = 1000;
+    config.price_percent = 20;
+    config.price_ceiling = 50;
+    Storage storage{config.conquister_path, config.quotes_path};
+
+    const CommandContext context{
+        .storage = storage,
+        .config = config,
+        .user_id = 1,
+        .username = "a",
+        .claims_allowed = false,
+        .owner = false,
+    };
+    /* Gruppo in miseria: si paga il prezzo di listino. */
+    const std::optional<std::string> cheap = command_dispatch(context, "/prezzi");
+    REQUIRE(cheap);
+    CHECK(cheap->contains("🎈 Palloncino — 1000 palle"));
+
+    /* Gruppo pieno di palle: il prezzo si ferma al tetto, cinquanta volte il listino. */
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"a":90000000,"b":90000000,"c":90000000},"quotes_added":{}})";
+    }
+    Storage rich{paths.conquister, paths.quotes};
+    const CommandContext loaded{
+        .storage = rich,
+        .config = config,
+        .user_id = 1,
+        .username = "a",
+        .claims_allowed = false,
+        .owner = false,
+    };
+    const std::optional<std::string> dear = command_dispatch(loaded, "/prezzi");
+    REQUIRE(dear);
+    CHECK(dear->contains("🎈 Palloncino — 50000 palle"));
+}

@@ -54,9 +54,20 @@ ParsedCommand parse_command(std::string_view message) {
 }
 
 /* What made this hold worth more or less than the seconds it lasted. */
-/* Quanto si paga davvero: chi ha acceso il debug per sé non paga, gli altri sì. */
+/* Quanto si paga davvero. Chi ha acceso il debug per sé non paga; per gli altri il prezzo segue
+   la ricchezza del gruppo: è una quota di quello che ha il giocatore mediano, mai sotto il prezzo
+   di listino e mai oltre il tetto. */
 int price(const CommandContext &context, int cost) {
-    return debug_on(context.storage, std::string{context.username}) ? 0 : cost;
+    if (debug_on(context.storage, std::string{context.username})) {
+        return 0;
+    }
+    if (context.config.price_percent <= 0) {
+        return cost;
+    }
+    const Wealth wealth = wealth_now(context.storage);
+    const std::int64_t asked = wealth.middle * context.config.price_percent / 100;
+    const std::int64_t ceiling = static_cast<std::int64_t>(cost) * context.config.price_ceiling;
+    return static_cast<int>(std::clamp(asked, static_cast<std::int64_t>(cost), ceiling));
 }
 
 /* Il nome come va mostrato: quello vero, più i soprammobili che ci ha appeso. */
@@ -506,6 +517,30 @@ std::string handle_quotes(const CommandContext &context, std::string_view argume
     return reply;
 }
 
+/* Il listino di adesso, che cambia da solo con la ricchezza del gruppo. */
+std::string handle_prices(const CommandContext &context, std::string_view) {
+    const Wealth wealth = wealth_now(context.storage);
+    std::string reply = std::format(
+        "🏷️ Listino di adesso\n\nIn giro ci sono {} palle fra {} giocatori, e il giocatore di mezzo "
+        "ne ha {}.\n",
+        wealth.total,
+        wealth.players,
+        wealth.middle
+    );
+    reply += std::format("\n📜 Citazione — {} palle", price(context, context.config.quote_cost));
+    reply += std::format("\n🎈 Palloncino — {} palle", price(context, context.config.balloon_cost));
+    reply += std::format("\n⚡ Boost — {} palle", price(context, context.config.boost_cost));
+    reply += std::format("\n🛋️ Soprammobile — {} palle", price(context, context.config.furniture_cost));
+    if (context.config.price_percent > 0) {
+        reply += std::format(
+            "\n\nOgni cosa costa il {}% di quello che ha il giocatore di mezzo, mai meno del prezzo "
+            "di listino.",
+            context.config.price_percent
+        );
+    }
+    return reply;
+}
+
 std::string handle_debug(const CommandContext &context, std::string_view argument) {
     if (!context.owner) {
         return "Solo il proprietario può accendere il debug.";
@@ -576,6 +611,7 @@ constexpr std::array commands{
     CommandDefinition{"/quotes", handle_quotes},
     CommandDefinition{"/delquote", handle_delete_quote},
     CommandDefinition{"/debug", handle_debug},
+    CommandDefinition{"/prezzi", handle_prices},
 };
 
 const CommandDefinition *find_command(std::string_view name) {

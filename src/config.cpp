@@ -90,6 +90,12 @@ constexpr std::array settings{
     Setting{"NORELECBOT_FURNITURE_LIMIT", [](AppConfig &config, std::string_view value) {
         return set_number(config.furniture_limit, value, AppConfig::default_furniture_limit, 1);
     }},
+    Setting{"NORELECBOT_PRICE_PERCENT", [](AppConfig &config, std::string_view value) {
+        return set_number(config.price_percent, value, AppConfig::default_price_percent, 0);
+    }},
+    Setting{"NORELECBOT_PRICE_CEILING", [](AppConfig &config, std::string_view value) {
+        return set_number(config.price_ceiling, value, AppConfig::default_price_ceiling, 1);
+    }},
     Setting{"NORELECBOT_COOLDOWN_SECONDS", [](AppConfig &config, std::string_view value) {
         return set_number(config.cooldown_seconds, value, AppConfig::default_cooldown_seconds, 0);
     }},

@@ -321,6 +321,27 @@ std::optional<ConquisterUser> conquister_user(Storage &storage, std::string_view
     });
 }
 
+Wealth wealth_now(Storage &storage) {
+    return storage.transaction([](StorageSession &session) {
+        const ConquisterState &state = session.state();
+        Wealth wealth;
+        std::vector<std::int64_t> scores;
+        scores.reserve(state.scores.size());
+        for (const Counters::value_type &entry : state.scores) {
+            wealth.total += entry.second;
+            scores.push_back(entry.second);
+        }
+        wealth.players = scores.size();
+        if (scores.empty()) {
+            return wealth;
+        }
+        const auto middle = scores.begin() + static_cast<std::ptrdiff_t>(scores.size() / 2);
+        std::ranges::nth_element(scores, middle);
+        wealth.middle = *middle;
+        return wealth;
+    });
+}
+
 void debug_set(Storage &storage, const std::string &username, bool wanted) {
     storage.transaction([&username, wanted](StorageSession &session) {
         ConquisterState &state = session.state();
