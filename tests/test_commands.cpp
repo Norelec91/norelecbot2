@@ -236,7 +236,8 @@ TEST_CASE("We @someone sends the player out to rob them") {
     const TestPaths paths{"raid-command-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":null,"scores":{"alice":1000},"quotes_added":{}})";
+        file << R"({"current":null,"scores":{"alice":1000},"quotes_added":{},)"
+             << R"("telegram_ids":{"alice":1}})";
     }
     AppConfig config;
     config.conquister_path = paths.conquister;
@@ -256,7 +257,7 @@ TEST_CASE("We @someone sends the player out to rob them") {
     context.user_id = 3;
     CHECK(reply("We @carol") == "🪐 carol sei già in @carol!");
     CHECK(reply("We @CAROL") == "🪐 carol sei già in @carol!");
-    CHECK(reply("We @nessuno") == "🚀 carol non conosco nessun giocatore di nome nessuno.");
+    CHECK(reply("We @nessuno") == "🚀 carol non conosco nessun giocatore di nome @nessuno.");
     context.username = "bob";
     context.user_id = 2;
 
@@ -284,10 +285,94 @@ TEST_CASE("We @someone sends the player out to rob them") {
     context.user_id = 2;
 
     CHECK(command_is_for_bot("We @alice"));
+    CHECK(command_is_for_bot("We alice"));
     CHECK_FALSE(command_is_for_bot("We @"));
+    CHECK_FALSE(command_is_for_bot("We "));
 
     context.claims_allowed = false;
     CHECK_FALSE(command_dispatch(context, "We @alice").has_value());
+}
+
+TEST_CASE("the @ prefix selects Telegram names and bare names select IRC nicks") {
+    const TestPaths paths{"irc-raid-target-command-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"Lucy":1000},"quotes_added":{}})";
+    }
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{config.conquister_path, config.quotes_path};
+
+    CommandContext context{.storage = storage, .config = config, .user_id = 2, .username = "Giangiui"};
+    CHECK(command_dispatch(context, "We @Lucy") ==
+          "🚀 Giangiui non conosco nessun giocatore di nome @Lucy.");
+    CHECK(command_dispatch(context, "We Giangiui") ==
+          "🚀 Giangiui non conosco nessun giocatore di nome Giangiui.");
+    CHECK(command_dispatch(context, "We Lucy")->contains("Giangiui parti per Lucy"));
+
+    /* The same prefix rule applies when the command comes from IRC. */
+    context.user_id = 0;
+    context.username = "Lucy";
+    CHECK(command_dispatch(context, "We Lucy") == "🪐 Lucy sei già in Lucy!");
+    context.username = "Marco";
+    CHECK(command_dispatch(context, "We @Lucy") ==
+          "🚀 Marco non conosco nessun giocatore di nome @Lucy.");
+    CHECK(command_dispatch(context, "We Lucy")->contains("Marco parti per Lucy"));
+
+    /* A later Telegram command adds that platform without removing her IRC identity. */
+    context.user_id = 9;
+    context.username = "Lucy";
+    CHECK(command_dispatch(context, "/leaderboard").has_value());
+    const Json lucy_saved = Json::parse(std::ifstream{paths.conquister});
+    CHECK(lucy_saved.at("telegram_ids").at("Lucy") == 9);
+    CHECK(lucy_saved.at("irc_names").at("Lucy") == 1);
+    context.username = "Nina";
+    CHECK(command_dispatch(context, "We @Lucy")->contains("Nina parti per Lucy"));
+    context.username = "Paolo";
+    CHECK(command_dispatch(context, "We Lucy")->contains("Paolo parti per Lucy"));
+
+    const TestPaths telegram_paths{"telegram-raid-target-command-test"};
+    {
+        std::ofstream file{telegram_paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"Alice":1000},"telegram_ids":{"Alice":7}})";
+    }
+    config.conquister_path = telegram_paths.conquister;
+    config.quotes_path = telegram_paths.quotes;
+    Storage telegram_storage{config.conquister_path, config.quotes_path};
+    CommandContext irc_context{.storage = telegram_storage, .config = config, .user_id = 0, .username = "Marco"};
+    CHECK(command_dispatch(irc_context, "We Alice") ==
+          "🚀 Marco non conosco nessun giocatore di nome Alice.");
+    CHECK(command_dispatch(irc_context, "We @Alice")->contains("Marco parti per Alice"));
+
+    /* Alice also plays from IRC: both spellings now find the same stored player. */
+    irc_context.username = "Alice";
+    CHECK(command_dispatch(irc_context, "/leaderboard").has_value());
+    CHECK(command_dispatch(irc_context, "We Alice") == "🪐 Alice sei già in Alice!");
+    const Json saved = Json::parse(std::ifstream{telegram_paths.conquister});
+    CHECK(saved.at("telegram_ids").at("Alice") == 7);
+    CHECK(saved.at("irc_names").at("Alice") == 1);
+
+    Storage reopened{config.conquister_path, config.quotes_path};
+    CommandContext from_telegram{.storage = reopened, .config = config, .user_id = 8, .username = "Bob"};
+    CHECK(command_dispatch(from_telegram, "We Alice")->contains("Bob parti per Alice"));
+    irc_context.username = "Nina";
+    CHECK(command_dispatch(irc_context, "We @Alice")->contains("Nina parti per Alice"));
+}
+
+TEST_CASE("an old IRC holder can still be targeted by bare nick after playing on Telegram") {
+    const TestPaths paths{"legacy-dual-target-command-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":0,"username":"Alice","since":0},)"
+             << R"("scores":{"Alice":1000},"telegram_ids":{"Alice":7}})";
+    }
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{config.conquister_path, config.quotes_path};
+    const CommandContext context{.storage = storage, .config = config, .user_id = 8, .username = "Bob"};
+    CHECK(command_dispatch(context, "We Alice")->contains("Bob parti per Alice"));
 }
 
 TEST_CASE("the raids tell what happened") {

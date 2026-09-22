@@ -67,6 +67,8 @@ struct ConquisterState {
     Counters ids;
     /* Players known to be on Telegram, mapped to their id there, so a message can reach them. */
     Counters telegram_ids;
+    /* Players seen on IRC, independently of whether they also play on Telegram. */
+    Counters irc_names;
     /* The raids under way, in the order they left. */
     std::vector<Raid> raids;
     /* Who added each quote, for the ones added since the bot started writing it down. */

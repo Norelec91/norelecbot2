@@ -144,6 +144,20 @@ void remember_telegram(ConquisterState &state, const std::string &username, std:
     }
 }
 
+void remember_irc(ConquisterState &state, const std::string &username) {
+    if (find_ignore_case(state.irc_names, username) == nullptr) {
+        state.irc_names[username] = 1;
+    }
+}
+
+void remember_platform(ConquisterState &state, const std::string &username, std::int64_t user_id) {
+    if (user_id == 0) {
+        remember_irc(state, username);
+    } else {
+        remember_telegram(state, username, user_id);
+    }
+}
+
 /* The name as it is written on file, whatever spelling the message used. */
 std::optional<std::string> known_player(const ConquisterState &state, std::string_view name) {
     for (const Counters *counters : {&state.scores, &state.quotes_added, &state.ids}) {
@@ -159,6 +173,13 @@ std::optional<std::string> known_player(const ConquisterState &state, std::strin
 
 }
 
+void player_seen(Storage &storage, std::int64_t user_id, const std::string &username) {
+    storage.transaction([&](StorageSession &session) {
+        remember_platform(session.state(), username, user_id);
+        return 0;
+    });
+}
+
 ClaimResult conquister_claim(
     Storage &storage,
     std::int64_t user_id,
@@ -168,7 +189,7 @@ ClaimResult conquister_claim(
 ) {
     const ClaimResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
-        remember_telegram(state, username, user_id);
+        remember_platform(state, username, user_id);
         ClaimResult outcome;
         /* A place is held by standing in it, not from the road. */
         if (const Raid *travelling = raid_of(state, username); travelling != nullptr) {
@@ -456,13 +477,30 @@ RaidResult raid_start(
     const std::string &username,
     std::string_view target,
     std::int64_t now,
-    const RaidRules &rules
+    const RaidRules &rules,
+    RaidTargetKind target_kind
 ) {
     const RaidResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
-        remember_telegram(state, username, user_id);
+        remember_platform(state, username, user_id);
         RaidResult outcome;
         const bool homewards = text::equals_ignore_case(username, target);
+        const std::optional<std::string> known = known_player(state, target);
+        const Counters::value_type *telegram = known ? find_ignore_case(state.telegram_ids, *known) : nullptr;
+        const bool on_telegram = telegram != nullptr && telegram->second != 0;
+        /* Older saves lack irc_names; a bare name without a Telegram id was an IRC nick. */
+        const bool old_irc_holder = state.current && state.current->user_id == 0 &&
+            text::equals_ignore_case(state.current->username, target);
+        const bool on_irc = known &&
+            (find_ignore_case(state.irc_names, *known) != nullptr || !on_telegram || old_irc_holder);
+        const bool self_on_requested_platform = homewards &&
+            ((target_kind == RaidTargetKind::telegram && user_id != 0) ||
+             (target_kind == RaidTargetKind::irc && user_id == 0));
+        if (target_kind != RaidTargetKind::any && !self_on_requested_platform &&
+            (target_kind == RaidTargetKind::telegram ? !on_telegram : !on_irc)) {
+            outcome.status = RaidStatus::unknown_target;
+            return outcome;
+        }
         const bool holds_place = state.current && text::equals_ignore_case(state.current->username, username);
         Raid *travelling = raid_of(state, username);
         /* Naming yourself is the way home. */
@@ -507,7 +545,6 @@ RaidResult raid_start(
             outcome.status = RaidStatus::holding_place;
             return outcome;
         }
-        const std::optional<std::string> known = known_player(state, target);
         if (!known) {
             outcome.status = RaidStatus::unknown_target;
             return outcome;

@@ -31,13 +31,15 @@ struct ParsedCommand {
     std::string_view argument;
 };
 
-/* The name in "We @someone", or nothing when the message is not a raid. */
+/* The name after "We ", including its optional Telegram @, or nothing if invalid. */
 std::string_view raid_target(std::string_view message) {
     if (!message.starts_with(raid_trigger) || message == conquister_trigger) {
         return {};
     }
     const std::string_view target = message.substr(raid_trigger.size());
-    const bool one_name = !target.empty() && target.find_first_of(" \t\r\n@") == std::string_view::npos;
+    const bool one_name = !target.empty() && target != "@" &&
+                          target.find_first_of(" \t\r\n", 0) == std::string_view::npos &&
+                          target.find('@', target.starts_with('@') ? 1 : 0) == std::string_view::npos;
     return one_name ? target : std::string_view{};
 }
 
@@ -187,8 +189,17 @@ std::string handle_raid(const CommandContext &context, std::string_view target) 
     /* His own place is named after him, with the mention only where it reaches him. */
     const std::string home =
         std::format("{}{}", context.user_id != 0 ? "@" : "", username);
-    const RaidResult result =
-        raid_start(context.storage, context.user_id, username, target, seconds_now(), raid_rules(context));
+    const bool telegram_target = target.starts_with('@');
+    const std::string_view name = telegram_target ? target.substr(1) : target;
+    const RaidResult result = raid_start(
+        context.storage,
+        context.user_id,
+        username,
+        name,
+        seconds_now(),
+        raid_rules(context),
+        telegram_target ? RaidTargetKind::telegram : RaidTargetKind::irc
+    );
     switch (result.status) {
     case RaidStatus::already_travelling:
         return std::format("🚀 {} sei già in viaggio, torni tra {}.", username, format_wait(result.seconds));
@@ -663,16 +674,23 @@ std::string raid_event_reply(const RaidEvent &event, const zodiac::Overrides &si
 std::optional<std::string> command_dispatch(const CommandContext &context, std::string_view text) {
     try {
         const std::string_view message = text::trim(text);
+        const auto remember_sender = [&context] {
+            if (!context.username.empty()) {
+                player_seen(context.storage, context.user_id, std::string{context.username});
+            }
+        };
         if (message == conquister_trigger) {
             if (!context.claims_allowed) {
                 return std::nullopt;
             }
+            remember_sender();
             return handle_claim(context, {});
         }
         if (const std::string_view target = raid_target(message); !target.empty()) {
             if (!context.claims_allowed) {
                 return std::nullopt;
             }
+            remember_sender();
             return handle_raid(context, target);
         }
         if (message.empty()) {
@@ -683,6 +701,7 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
         if (definition == nullptr) {
             return std::nullopt;
         }
+        remember_sender();
         return definition->handler(context, command.argument);
     } catch (const std::exception &) {
         return std::string{internal_error_reply};

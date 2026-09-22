@@ -66,7 +66,17 @@ struct BoostResult {
     std::int64_t multiplier = 0;
 };
 
-enum class RaidStatus { started, already_travelling, holding_place, unknown_target, left_place, coming_home, home_already };
+enum class RaidStatus {
+    started,
+    already_travelling,
+    holding_place,
+    unknown_target,
+    left_place,
+    coming_home,
+    home_already
+};
+
+enum class RaidTargetKind { any, telegram, irc };
 
 struct RaidRules {
     /* How much road buys a palla. */
@@ -176,6 +186,8 @@ struct ClaimRules {
 [[nodiscard]] Leaderboard conquister_leaderboard(Storage &storage, std::size_t limit);
 /* Case-insensitive lookup; rank is 0 when the user has no score yet. */
 [[nodiscard]] std::optional<ConquisterUser> conquister_user(Storage &storage, std::string_view username);
+/* Record each platform on which a player has used a command. */
+void player_seen(Storage &storage, std::int64_t user_id, const std::string &username);
 /* One balloon per user: it survives 4 attempts at most, then has to be bought again. */
 /* With shield_seconds the balloon cannot be popped until it deflates, instead of lasting until an
    attempt pops it. */
@@ -222,7 +234,8 @@ void debug_set(Storage &storage, const std::string &username, bool wanted);
     const std::string &username,
     std::string_view target,
     std::int64_t now,
-    const RaidRules &rules
+    const RaidRules &rules,
+    RaidTargetKind target_kind = RaidTargetKind::any
 );
 
 /* Settles the raids that have reached the target or come home by now. */

@@ -14,8 +14,8 @@ namespace norelecbot {
 
 inline constexpr std::string_view conquister_place = "@TheConquister37";
 inline constexpr std::string_view conquister_trigger = "We @TheConquister37";
-/* "We @someone" sends the player to rob them instead. */
-inline constexpr std::string_view raid_trigger = "We @";
+/* "We @someone" names a Telegram player; "We someone" names an IRC player. */
+inline constexpr std::string_view raid_trigger = "We ";
 
 struct CommandContext {
     Storage &storage;
