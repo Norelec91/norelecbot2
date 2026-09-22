@@ -567,17 +567,17 @@ TEST_CASE("naming yourself is the way home") {
         CHECK(raid_start(storage, 1, "alice", "bob", 401, quick_rides()).status == RaidStatus::started);
     }
 
-    SUBCASE("on the road it calls the raid off and takes the rest of the ride") {
+    SUBCASE("on the road it calls the raid off and rides back the way it came") {
         static_cast<void>(raid_start(storage, 0, "bob", "alice", 0, quick_rides()));
+        /* Two seconds out, so two seconds back. */
         const RaidResult back = raid_start(storage, 0, "bob", "bob", 2, quick_rides());
         CHECK(back.status == RaidStatus::coming_home);
-        CHECK(back.seconds == 8);
+        CHECK(back.seconds == 2);
 
         /* Nothing is stolen at the hour he would have arrived. */
-        CHECK(raid_due(storage, 5, quick_rides()).empty());
         CHECK(conquister_user(storage, "alice")->score == 1000);
 
-        const std::vector<RaidEvent> home = raid_due(storage, 10, quick_rides());
+        const std::vector<RaidEvent> home = raid_due(storage, 4, quick_rides());
         REQUIRE(home.size() == 1);
         CHECK(home[0].kind == RaidEvent::Kind::returned);
         CHECK(home[0].loot == 0);
@@ -671,4 +671,38 @@ TEST_CASE("furniture is bought, piles up and stops at the limit") {
     const Authors kept = furniture_all(again);
     REQUIRE(kept.find("alice") != kept.end());
     CHECK(kept.find("alice")->second == "🎈🍕🐟");
+}
+
+TEST_CASE("turning back mid journey only costs the road already walked") {
+    const TestPaths paths{"turnback-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":9000,"bob":9000},"quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    /* A divisor of one turns the distance itself into seconds, so the legs are long enough to
+       turn back in the middle of one. */
+    const RaidRules slow{.loot_divisor = 50, .loot_share = 0, .travel_divisor = 1, .attack_cost = 100, .signs = {}};
+
+    const RaidResult left = raid_start(storage, 7, "bob", "alice", 0, slow);
+    REQUIRE(left.status == RaidStatus::started);
+    const std::int64_t leg = left.seconds;
+    REQUIRE(leg > 10);
+
+    /* A third of the way there, he changes his mind. */
+    const std::int64_t third = leg / 3;
+    const RaidResult back = raid_start(storage, 7, "bob", "bob", third, slow);
+    CHECK(back.status == RaidStatus::coming_home);
+    CHECK(back.seconds == third);
+
+    /* Nothing is stolen, and he is home after exactly the road he had walked. */
+    CHECK(raid_due(storage, third + third - 1, slow).empty());
+    const std::vector<RaidEvent> home = raid_due(storage, third + third, slow);
+    REQUIRE(home.size() == 1);
+    CHECK(home[0].kind == RaidEvent::Kind::returned);
+    CHECK(home[0].loot == 0);
+    CHECK(conquister_user(storage, "alice")->score == 9000);
+
+    /* And once home he can leave again. */
+    CHECK(raid_start(storage, 7, "bob", "alice", third + third, slow).status == RaidStatus::started);
 }

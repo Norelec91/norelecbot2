@@ -267,12 +267,13 @@ TEST_CASE("We @someone sends the player out to rob them") {
     CHECK_FALSE(command_dispatch(context, "We @alice ora").has_value());
     CHECK_FALSE(command_dispatch(context, "we @alice").has_value());
 
-    /* On the road, naming yourself turns you round. */
-    CHECK(reply("We @bob") == "🚀 bob lasci perdere e torni in @bob: arrivi tra 10 secondi.");
-    CHECK(reply("We @alice") == "🚀 bob sei già in viaggio, torni tra 10 secondi.");
+    /* On the road, naming yourself turns you round, and the way back is the road already
+       walked: he turned round the moment he left, so he is home at once. */
+    CHECK(reply("We @bob") == "🚀 bob lasci perdere e torni in @bob: arrivi tra 0 secondi.");
+    CHECK(reply("We @alice") == "🚀 bob sei già in viaggio, torni tra 0 secondi.");
 
     CHECK(reply("We @TheConquister37") ==
-          "🚀 bob sei per strada: non puoi entrare in @TheConquister37 prima di tornare in @bob, tra 10 secondi.");
+          "🚀 bob sei per strada: non puoi entrare in @TheConquister37 prima di tornare in @bob, tra 0 secondi.");
 
     /* The one holding the place stays in it. */
     static_cast<void>(conquister_claim(storage, 9, "erin", seconds_now_for_test()));

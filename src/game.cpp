@@ -468,10 +468,18 @@ RaidResult raid_start(
         /* Naming yourself is the way home. */
         if (homewards) {
             if (travelling != nullptr) {
-                /* He turns his back on the raid and rides the rest of the way home. */
+                /* He turns his back on the raid and rides home the way he came: what is left is
+                   the road already walked, not the one he had planned. Both legs are the same
+                   length, so the departure was as far before the arrival as the arrival is
+                   before the return. */
                 travelling->arrived = true;
+                const std::int64_t leg = travelling->back - travelling->arrive;
+                const std::int64_t left = now < travelling->arrive
+                    ? std::max<std::int64_t>(now - (travelling->arrive - leg), 0)
+                    : std::max<std::int64_t>(travelling->back - now, 0);
+                travelling->back = now + left;
                 outcome.status = RaidStatus::coming_home;
-                outcome.seconds = std::max<std::int64_t>(travelling->back - now, 0);
+                outcome.seconds = left;
                 return outcome;
             }
             if (holds_place) {
