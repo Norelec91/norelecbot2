@@ -6,6 +6,8 @@
 #include "zodiac.hpp"
 
 #include <algorithm>
+#include <array>
+#include <cctype>
 #include <iterator>
 #include <limits>
 #include <ranges>
@@ -15,6 +17,7 @@ namespace norelecbot {
 namespace {
 
 constexpr std::size_t quotes_page_size = 30;
+std::string display_name(const ConquisterState &state, const std::string &key);
 
 /* Higher score first, then username in byte order. */
 constexpr auto ranks_before = [](const auto &first, const auto &second) {
@@ -24,6 +27,14 @@ constexpr auto ranks_before = [](const auto &first, const auto &second) {
 std::int64_t counter(const Counters &counters, const std::string &username) {
     const auto found = counters.find(username);
     return found != counters.end() ? found->second : 0;
+}
+
+std::string lower_name(std::string_view name) {
+    std::string lowered{name};
+    std::ranges::transform(lowered, lowered.begin(), [](unsigned char character) {
+        return static_cast<char>(std::tolower(character));
+    });
+    return lowered;
 }
 
 const Counters::value_type *find_ignore_case(const Counters &counters, std::string_view username) {
@@ -106,7 +117,7 @@ Settlement settle_hold(
         settled.earned *= settled.boost_multiplier;
         state.boosts.erase(holder);
     }
-    settled.zodiac_percent = zodiac::percent_for(holder, now, signs);
+    settled.zodiac_percent = zodiac::percent_for(display_name(state, holder), now, signs);
     settled.earned = settled.earned / 100 * settled.zodiac_percent +
                      settled.earned % 100 * settled.zodiac_percent / 100;
     std::int64_t &score = state.scores[holder];
@@ -174,9 +185,73 @@ void remember_platform(ConquisterState &state, const std::string &username, std:
     }
 }
 
+std::string platform_key(std::int64_t user_id, std::string_view username, std::string_view account_name) {
+    return user_id != 0 ? "tg:" + std::to_string(user_id)
+                        : "irc:" + lower_name(account_name.empty() ? username : account_name);
+}
+
+std::string display_name(const ConquisterState &state, const std::string &key) {
+    const auto found = state.display_names.find(key);
+    return found != state.display_names.end() ? found->second : key;
+}
+
+std::optional<std::string> known_player(const ConquisterState &state, std::string_view name);
+
+bool ambiguous_legacy(const ConquisterState &state, std::string_view key) {
+    if (state.display_names.find(std::string{key}) != state.display_names.end()) {
+        return false;
+    }
+    const bool current = state.current && text::equals_ignore_case(state.current->username, key);
+    const bool telegram = find_ignore_case(state.telegram_ids, key) != nullptr ||
+        (current && state.current->user_id != 0);
+    const bool irc = find_ignore_case(state.irc_names, key) != nullptr ||
+        (current && state.current->user_id == 0);
+    return telegram && irc;
+}
+
+/* Never give a historical name to a different Telegram ID or to an IRC namesake. */
+std::optional<std::string> legacy_owner(const ConquisterState &state, std::int64_t user_id,
+                                        std::string_view username, std::string_view account_name) {
+    std::optional<std::string> candidate;
+    if (user_id != 0) {
+        for (const auto &[name, id] : state.telegram_ids) {
+            if (id == user_id) {
+                if (candidate && *candidate != name) {
+                    return std::nullopt;
+                }
+                candidate = name;
+            }
+        }
+        if (!candidate && state.current && state.current->user_id == user_id) {
+            candidate = state.current->username;
+        }
+    } else {
+        const auto known = known_player(state, username);
+        if (known && find_ignore_case(state.telegram_ids, *known) == nullptr &&
+            (find_ignore_case(state.irc_names, *known) != nullptr ||
+             (state.current && state.current->user_id == 0 && state.current->username == *known))) {
+            candidate = *known;
+        }
+    }
+    if (!candidate) {
+        return std::nullopt;
+    }
+    if (ambiguous_legacy(state, *candidate)) {
+        return std::nullopt;
+    }
+    for (const auto &[account, key] : state.accounts) {
+        if (key == *candidate && account != platform_key(user_id, username, account_name)) {
+            return std::nullopt;
+        }
+    }
+    return candidate;
+}
+
 /* The name as it is written on file, whatever spelling the message used. */
 std::optional<std::string> known_player(const ConquisterState &state, std::string_view name) {
-    for (const Counters *counters : {&state.scores, &state.quotes_added, &state.ids}) {
+    for (const Counters *counters : {&state.scores, &state.quotes_added, &state.ids,
+                                     &state.balloons, &state.cooldowns, &state.shields,
+                                     &state.boosts, &state.raid_shields}) {
         if (const Counters::value_type *found = find_ignore_case(*counters, name); found != nullptr) {
             return found->first;
         }
@@ -187,12 +262,158 @@ std::optional<std::string> known_player(const ConquisterState &state, std::strin
     return std::nullopt;
 }
 
+std::optional<std::string> player_by_name(const ConquisterState &state, std::string_view name,
+                                          RaidTargetKind platform) {
+    if (platform != RaidTargetKind::any) {
+        const Authors &names = platform == RaidTargetKind::telegram ? state.telegram_names : state.irc_nicks;
+        const auto found = names.find(lower_name(name));
+        if (found != names.end()) {
+            return found->second;
+        }
+        /* Read-only compatibility for players in pre-identity saves who have not spoken yet. */
+        auto legacy = known_player(state, name);
+        if (!legacy || state.display_names.find(*legacy) != state.display_names.end() ||
+            ambiguous_legacy(state, *legacy)) {
+            return std::nullopt;
+        }
+        if (platform == RaidTargetKind::telegram && find_ignore_case(state.telegram_ids, *legacy)) {
+            return legacy;
+        }
+        if (platform == RaidTargetKind::irc && find_ignore_case(state.telegram_ids, *legacy) == nullptr &&
+            (find_ignore_case(state.irc_names, *legacy) ||
+             (state.current && state.current->user_id == 0 && state.current->username == *legacy))) {
+            return legacy;
+        }
+        return std::nullopt;
+    }
+    if (const auto tg = state.telegram_names.find(lower_name(name)); tg != state.telegram_names.end()) {
+        return tg->second;
+    }
+    if (const auto irc = state.irc_nicks.find(lower_name(name)); irc != state.irc_nicks.end()) {
+        return irc->second;
+    }
+    return known_player(state, name);
 }
 
-void player_seen(Storage &storage, std::int64_t user_id, const std::string &username) {
-    storage.transaction([&](StorageSession &session) {
-        remember_platform(session.state(), username, user_id);
-        return 0;
+}
+
+std::string player_seen(Storage &storage, std::int64_t user_id, const std::string &username,
+                        std::string_view account_name) {
+    return storage.transaction([&](StorageSession &session) {
+        ConquisterState &state = session.state();
+        const std::string account = platform_key(user_id, username, account_name);
+        auto binding = state.accounts.find(account);
+        if (binding == state.accounts.end()) {
+            const std::string key = legacy_owner(state, user_id, username, account_name).value_or(account);
+            state.accounts[account] = key;
+            binding = state.accounts.find(account);
+        }
+        const std::string key = binding->second;
+        Authors &names = user_id != 0 ? state.telegram_names : state.irc_nicks;
+        for (auto entry = names.begin(); entry != names.end();) {
+            if (entry->second == key) {
+                entry = names.erase(entry);
+            } else {
+                ++entry;
+            }
+        }
+        names[lower_name(username)] = key;
+        if (user_id != 0 || counter(state.telegram_ids, key) == 0) {
+            state.display_names[key] = username;
+        }
+        remember_platform(state, key, user_id);
+        return key;
+    });
+}
+
+LinkStatus player_link(Storage &storage, std::int64_t user_id, const std::string &username,
+                       std::string_view other_name, std::string_view account_name) {
+    return storage.transaction([&](StorageSession &session) {
+        ConquisterState &state = session.state();
+        const std::string mine = platform_key(user_id, username, account_name);
+        const Authors &names = user_id != 0 ? state.irc_nicks : state.telegram_names;
+        const auto other = names.find(lower_name(other_name));
+        if (other == names.end()) {
+            return LinkStatus::unknown_account;
+        }
+        std::string theirs;
+        for (const auto &[account, key] : state.accounts) {
+            if (key == other->second && account.starts_with(user_id != 0 ? "irc:" : "tg:")) {
+                theirs = account;
+                break;
+            }
+        }
+        if (theirs.empty()) {
+            return LinkStatus::unknown_account;
+        }
+        if (state.accounts.at(mine) == state.accounts.at(theirs)) {
+            return LinkStatus::self;
+        }
+        const auto reciprocal = state.link_requests.find(theirs);
+        if (reciprocal == state.link_requests.end() || reciprocal->second != mine) {
+            state.link_requests[mine] = theirs;
+            return LinkStatus::pending;
+        }
+        const std::string mine_key = state.accounts.at(mine);
+        const std::string other_key = state.accounts.at(theirs);
+        for (const auto &[account, key] : state.accounts) {
+            if ((key == mine_key && account != mine && account.starts_with(user_id != 0 ? "irc:" : "tg:")) ||
+                (key == other_key && account != theirs && account.starts_with(user_id != 0 ? "tg:" : "irc:"))) {
+                return LinkStatus::already_linked;
+            }
+        }
+        const auto has_assets = [&state](const std::string &key) {
+            const std::array items{&state.scores, &state.quotes_added, &state.balloons,
+                                   &state.cooldowns, &state.shields, &state.boosts,
+                                   &state.raid_shields, &state.ids, &state.debugging};
+            return std::ranges::any_of(items, [&key](const Counters *entries) {
+                return entries->find(key) != entries->end();
+            }) || (state.current && state.current->username == key) ||
+                state.furniture.find(key) != state.furniture.end() ||
+                std::ranges::any_of(state.raids, [&key](const Raid &raid) {
+                    return raid.raider == key || raid.target == key;
+                }) ||
+                std::ranges::any_of(state.quote_authors, [&key](const Authors::value_type &entry) {
+                    return entry.second == key;
+                });
+        };
+        if (has_assets(mine_key) && has_assets(other_key)) {
+            return LinkStatus::conflict;
+        }
+        const std::string primary = has_assets(other_key) ? other_key : mine_key;
+        const std::string secondary = primary == mine_key ? other_key : mine_key;
+        const std::string telegram_display = counter(state.telegram_ids, primary) != 0
+            ? display_name(state, primary)
+            : counter(state.telegram_ids, secondary) != 0 ? display_name(state, secondary) : std::string{};
+        for (auto &[account, key] : state.accounts) {
+            if (key == secondary) {
+                key = primary;
+            }
+        }
+        for (auto &[name, key] : state.telegram_names) {
+            if (key == secondary) {
+                key = primary;
+            }
+        }
+        for (auto &[name, key] : state.irc_nicks) {
+            if (key == secondary) {
+                key = primary;
+            }
+        }
+        if (const auto id = state.telegram_ids.find(secondary); id != state.telegram_ids.end()) {
+            state.telegram_ids[primary] = id->second;
+            state.telegram_ids.erase(secondary);
+        }
+        if (state.irc_names.erase(secondary) > 0) {
+            state.irc_names[primary] = 1;
+        }
+        state.display_names.erase(secondary);
+        if (!telegram_display.empty()) {
+            state.display_names[primary] = telegram_display;
+        }
+        state.link_requests.erase(mine);
+        state.link_requests.erase(theirs);
+        return LinkStatus::linked;
     });
 }
 
@@ -227,7 +448,9 @@ ClaimResult conquister_claim(
         }
         if (state.current && !state.current->username.empty()) {
             const std::string holder = state.current->username;
-            outcome.previous_user_id = state.current->user_id;
+            outcome.previous_user_id = !ambiguous_legacy(state, holder) &&
+                counter(state.telegram_ids, holder) != 0
+                ? counter(state.telegram_ids, holder) : state.current->user_id;
             if (const auto shield = find_entry(state.shields, holder); shield != state.shields.end()) {
                 if (shield->second > now && rules.ignores_shield) {
                     state.shields.erase(holder);
@@ -239,7 +462,8 @@ ClaimResult conquister_claim(
                     }
                     outcome.attack_cost = charge_attacker(state, username, rules.attack_cost);
                     outcome.status = ClaimStatus::defended;
-                    outcome.previous_username = holder;
+                    outcome.previous_username = display_name(state, holder);
+                    outcome.previous_key = holder;
                     outcome.shield_seconds = shield->second - now;
                     return outcome;
                 }
@@ -255,7 +479,8 @@ ClaimResult conquister_claim(
                     }
                     outcome.attack_cost = charge_attacker(state, username, rules.attack_cost);
                     outcome.status = ClaimStatus::defended;
-                    outcome.previous_username = holder;
+                    outcome.previous_username = display_name(state, holder);
+                    outcome.previous_key = holder;
                     outcome.next_chance =
                         static_cast<int>((attempt + 1) * 100 / static_cast<std::int64_t>(balloon_attempts));
                     return outcome;
@@ -263,7 +488,8 @@ ClaimResult conquister_claim(
                 state.balloons.erase(holder);
                 outcome.balloon_popped = true;
             }
-            outcome.previous_username = holder;
+            outcome.previous_username = display_name(state, holder);
+            outcome.previous_key = holder;
             const Settlement settled = settle_hold(state, holder, state.current->since, now, rules.signs);
             outcome.earned = settled.earned;
             outcome.boost_multiplier = settled.boost_multiplier;
@@ -317,32 +543,41 @@ Leaderboard conquister_leaderboard(Storage &storage, std::size_t limit) {
         }
         Leaderboard leaderboard;
         std::ranges::transform(ranked, std::back_inserter(leaderboard.entries), [&state](const auto &entry) {
-            return LeaderboardEntry{entry.first, entry.second, counter(state.quotes_added, entry.first)};
+            return LeaderboardEntry{display_name(state, entry.first), entry.first, entry.second,
+                                    counter(state.quotes_added, entry.first)};
         });
         if (state.current && !state.current->username.empty()) {
             leaderboard.current = state.current;
+            leaderboard.current_key = state.current->username;
+            leaderboard.current->username = display_name(state, state.current->username);
         }
         return leaderboard;
     });
 }
 
-std::optional<ConquisterUser> conquister_user(Storage &storage, std::string_view username) {
-    return storage.transaction([username](StorageSession &session) -> std::optional<ConquisterUser> {
+std::optional<ConquisterUser> conquister_user(Storage &storage, std::string_view username,
+                                             RaidTargetKind platform) {
+    return storage.transaction([username, platform](StorageSession &session) -> std::optional<ConquisterUser> {
         const ConquisterState &state = session.state();
+        const auto known = player_by_name(state, username, platform);
+        if (!known) {
+            return std::nullopt;
+        }
+        const std::string &key = *known;
         ConquisterUser user;
         if (state.current && !state.current->username.empty() &&
-            text::equals_ignore_case(state.current->username, username)) {
-            user.username = state.current->username;
+            state.current->username == key) {
+            user.username = display_name(state, key);
             user.in_conquister = true;
             user.since = state.current->since;
         }
-        const Counters::value_type *score = find_ignore_case(state.scores, username);
-        const Counters::value_type *added = find_ignore_case(state.quotes_added, username);
+        const Counters::value_type *score = find_ignore_case(state.scores, key);
+        const Counters::value_type *added = find_ignore_case(state.quotes_added, key);
         if (!user.in_conquister) {
             if (score == nullptr && added == nullptr) {
                 return std::nullopt;
             }
-            user.username = score != nullptr ? score->first : added->first;
+            user.username = display_name(state, key);
         }
         if (score != nullptr) {
             const auto ahead = std::ranges::count_if(state.scores, [score](const Counters::value_type &other) {
@@ -533,20 +768,13 @@ RaidResult raid_start(
         ConquisterState &state = session.state();
         remember_platform(state, username, user_id);
         RaidResult outcome;
-        const bool homewards = text::equals_ignore_case(username, target);
-        const std::optional<std::string> known = known_player(state, target);
-        const Counters::value_type *telegram = known ? find_ignore_case(state.telegram_ids, *known) : nullptr;
-        const bool on_telegram = telegram != nullptr && telegram->second != 0;
-        /* Older saves lack irc_names; a bare name without a Telegram id was an IRC nick. */
-        const bool old_irc_holder = state.current && state.current->user_id == 0 &&
-            text::equals_ignore_case(state.current->username, target);
-        const bool on_irc = known &&
-            (find_ignore_case(state.irc_names, *known) != nullptr || !on_telegram || old_irc_holder);
-        const bool self_on_requested_platform = homewards &&
-            ((target_kind == RaidTargetKind::telegram && user_id != 0) ||
-             (target_kind == RaidTargetKind::irc && user_id == 0));
-        if (target_kind != RaidTargetKind::any && !self_on_requested_platform &&
-            (target_kind == RaidTargetKind::telegram ? !on_telegram : !on_irc)) {
+        const bool self_on_requested_platform = target_kind == RaidTargetKind::any ||
+            (target_kind == RaidTargetKind::telegram ? user_id != 0 : user_id == 0);
+        const bool homewards = self_on_requested_platform &&
+            text::equals_ignore_case(display_name(state, username), target);
+        const std::optional<std::string> known = homewards ? std::optional<std::string>{username}
+            : player_by_name(state, target, target_kind);
+        if (!known) {
             outcome.status = RaidStatus::unknown_target;
             return outcome;
         }
@@ -594,11 +822,7 @@ RaidResult raid_start(
             outcome.status = RaidStatus::holding_place;
             return outcome;
         }
-        if (!known) {
-            outcome.status = RaidStatus::unknown_target;
-            return outcome;
-        }
-        outcome.target = *known;
+        outcome.target = display_name(state, *known);
         const position::Point home = position::coordinates_of(player_id(session, state, username));
         const position::Point theirs = position::coordinates_of(player_id(session, state, *known));
         outcome.seconds = position::travel_seconds(position::distance(home, theirs), rules.travel_divisor);
@@ -634,8 +858,8 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 raid.arrived = true;
                 RaidEvent event;
                 event.kind = RaidEvent::Kind::stolen;
-                event.raider = raid.raider;
-                event.target = raid.target;
+                event.raider = display_name(state, raid.raider);
+                event.target = display_name(state, raid.target);
                 event.seconds = std::max<std::int64_t>(raid.back - now, 0);
                 event.target_on_telegram = counter(state.telegram_ids, raid.target) != 0;
                 event.raider_on_telegram = counter(state.telegram_ids, raid.raider) != 0;
@@ -666,8 +890,8 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                     const position::Point from = position::coordinates_of(player_id(session, state, raid.raider));
                     const position::Point to = position::coordinates_of(player_id(session, state, raid.target));
                     event.distance = position::distance(from, to);
-                    event.raider_percent = zodiac::percent_for(raid.raider, now, rules.signs);
-                    event.target_percent = zodiac::percent_for(raid.target, now, rules.signs);
+                    event.raider_percent = zodiac::percent_for(event.raider, now, rules.signs);
+                    event.target_percent = zodiac::percent_for(event.target, now, rules.signs);
                     const std::int64_t walked =
                         rules.loot_divisor > 0 ? event.distance / rules.loot_divisor : event.distance;
                     const std::int64_t carried = walked * event.raider_percent / event.target_percent;
@@ -697,8 +921,8 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 }
                 settled.push_back(RaidEvent{
                     .kind = RaidEvent::Kind::returned,
-                    .raider = raid.raider,
-                    .target = raid.target,
+                    .raider = display_name(state, raid.raider),
+                    .target = display_name(state, raid.target),
                     .loot = raid.loot,
                     .raider_emoji = furniture_of(state, raid.raider),
                     .target_emoji = furniture_of(state, raid.target),
@@ -829,10 +1053,11 @@ QuotePage quote_page_load(Storage &storage, int requested_page) {
         page.first_number = offset + 1;
         page.items = quotes | std::views::drop(offset) | std::views::take(quotes_page_size) |
                      std::ranges::to<std::vector<std::string>>();
-        const Authors &authors = session.state().quote_authors;
-        std::ranges::transform(page.items, std::back_inserter(page.authors), [&authors](const std::string &quote) {
+        const ConquisterState &state = session.state();
+        const Authors &authors = state.quote_authors;
+        std::ranges::transform(page.items, std::back_inserter(page.authors), [&authors, &state](const std::string &quote) {
             const auto found = authors.find(quote);
-            return found != authors.end() ? found->second : std::string{};
+            return found != authors.end() ? display_name(state, found->second) : std::string{};
         });
         return page;
     });

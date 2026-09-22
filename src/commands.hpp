@@ -22,6 +22,9 @@ struct CommandContext {
     const AppConfig &config;
     std::int64_t user_id = 0;
     std::string_view username;
+    /* Bound by command_dispatch; never supplied by a client. */
+    std::string_view player_key = {};
+    std::string_view account_name = {};
     /* The front end decides both: the chat or channel where the game is played, and who owns the bot. */
     bool claims_allowed = true;
     bool owner = false;

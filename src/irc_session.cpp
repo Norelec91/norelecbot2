@@ -54,9 +54,10 @@ void Session::say(std::string_view text, std::vector<std::string> &lines) const 
     });
 }
 
-void Session::answer(std::string_view nick, std::string_view text, std::vector<std::string> &lines) {
+void Session::answer(std::string_view nick, std::string_view account, std::string_view text,
+                     std::vector<std::string> &lines) {
     const bool owner = !config_.owner_nick.empty() && same_name(nick, config_.owner_nick);
-    if (const std::optional<std::string> reply = responder_(nick, owner, with_slash(text))) {
+    if (const std::optional<std::string> reply = responder_(nick, account, owner, with_slash(text))) {
         say(*reply, lines);
     }
 }
@@ -64,11 +65,13 @@ void Session::answer(std::string_view nick, std::string_view text, std::vector<s
 void Session::release(
     const std::string &lowered,
     bool registered,
+    std::string_view account,
     std::int64_t now,
     std::vector<std::string> &lines
 ) {
     Registration &entry = registrations_[lowered];
     entry.registered = registered;
+    entry.account = account.empty() ? lowered : std::string{account};
     entry.expires = now + config_.registration_seconds;
     for (auto waiting = waiting_.begin(); waiting != waiting_.end();) {
         if (to_lower(waiting->nick) != lowered) {
@@ -76,7 +79,7 @@ void Session::release(
             continue;
         }
         if (registered) {
-            answer(waiting->nick, waiting->text, lines);
+            answer(waiting->nick, entry.account, waiting->text, lines);
         } else if (entry.told + config_.registration_seconds <= now) {
             entry.told = now;
             say(std::vformat(unregistered_reply, std::make_format_args(waiting->nick)), lines);
@@ -125,16 +128,24 @@ std::vector<std::string> Session::handle(const Message &message, std::int64_t no
     }
     if (command == "307") {
         if (const auto asked = asked_.find(to_lower(message.param(1))); asked != asked_.end()) {
-            asked->second = true;
+            asked->second.registered = true;
+        }
+        return lines;
+    }
+    if (command == "330") {
+        if (const auto asked = asked_.find(to_lower(message.param(1))); asked != asked_.end() &&
+            !message.param(2).empty()) {
+            asked->second.registered = true;
+            asked->second.account = message.param(2);
         }
         return lines;
     }
     if (command == "318") {
         const std::string lowered = to_lower(message.param(1));
         if (const auto asked = asked_.find(lowered); asked != asked_.end()) {
-            const bool registered = asked->second;
+            const Identity identity = asked->second;
             asked_.erase(asked);
-            release(lowered, registered, now, lines);
+            release(lowered, identity.registered, identity.account, now, lines);
         }
         return lines;
     }
@@ -164,7 +175,7 @@ std::vector<std::string> Session::handle(const Message &message, std::int64_t no
     if (const auto known = registrations_.find(lowered);
         known != registrations_.end() && known->second.expires > now) {
         if (known->second.registered) {
-            answer(sender, text, lines);
+            answer(sender, known->second.account, text, lines);
         } else if (known->second.told + config_.registration_seconds <= now) {
             known->second.told = now;
             say(std::vformat(unregistered_reply, std::make_format_args(sender)), lines);
@@ -172,7 +183,7 @@ std::vector<std::string> Session::handle(const Message &message, std::int64_t no
         return lines;
     }
     waiting_.push_back({std::string{sender}, std::string{text}, now + config_.whois_seconds});
-    if (asked_.emplace(lowered, false).second) {
+    if (asked_.emplace(lowered, Identity{}).second) {
         lines.push_back(line("WHOIS", {sender}));
     }
     return lines;

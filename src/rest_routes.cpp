@@ -79,7 +79,8 @@ RestResponse handle_user(Storage &storage, std::string_view argument) {
     if (username.empty() || username.contains('/')) {
         return text_response(404, "{\"error\":\"not found\"}\n");
     }
-    const std::optional<ConquisterUser> user = conquister_user(storage, username);
+    const std::optional<ConquisterUser> user = conquister_user(
+        storage, username, argument.starts_with('@') ? RaidTargetKind::telegram : RaidTargetKind::any);
     if (!user) {
         return text_response(404, "{\"error\":\"user not found\"}\n");
     }

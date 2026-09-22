@@ -19,6 +19,7 @@ struct ClaimResult {
     ClaimStatus status = ClaimStatus::taken;
     /* The holder who was kicked, or the one whose balloon held. */
     std::string previous_username;
+    std::string previous_key;
     /* Their Telegram id, zero when they played from IRC: only a Telegram name may be written as a mention. */
     std::int64_t previous_user_id = 0;
     std::int64_t earned = 0;
@@ -138,6 +139,7 @@ struct RaidEvent {
 
 struct LeaderboardEntry {
     std::string username;
+    std::string player_key;
     std::int64_t score = 0;
     std::int64_t quotes_added = 0;
 };
@@ -145,6 +147,7 @@ struct LeaderboardEntry {
 struct Leaderboard {
     std::vector<LeaderboardEntry> entries;
     std::optional<Holder> current;
+    std::string current_key;
 };
 
 struct ConquisterUser {
@@ -194,9 +197,14 @@ struct ClaimRules {
 /* limit 0 returns every entry. */
 [[nodiscard]] Leaderboard conquister_leaderboard(Storage &storage, std::size_t limit);
 /* Case-insensitive lookup; rank is 0 when the user has no score yet. */
-[[nodiscard]] std::optional<ConquisterUser> conquister_user(Storage &storage, std::string_view username);
-/* Record each platform on which a player has used a command. */
-void player_seen(Storage &storage, std::int64_t user_id, const std::string &username);
+[[nodiscard]] std::optional<ConquisterUser> conquister_user(Storage &storage, std::string_view username,
+                                                           RaidTargetKind platform = RaidTargetKind::any);
+/* Bind a verified platform account to its player, recording its current public name. */
+[[nodiscard]] std::string player_seen(Storage &storage, std::int64_t user_id, const std::string &username,
+                                      std::string_view account_name = {});
+enum class LinkStatus { pending, linked, unknown_account, conflict, self, already_linked };
+[[nodiscard]] LinkStatus player_link(Storage &storage, std::int64_t user_id, const std::string &username,
+                                     std::string_view other_name, std::string_view account_name = {});
 /* One balloon per user: it survives 4 attempts at most, then has to be bought again. */
 /* With shield_seconds the balloon cannot be popped until it deflates, instead of lasting until an
    attempt pops it. */

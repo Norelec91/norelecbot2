@@ -27,7 +27,8 @@ struct SessionConfig {
 };
 
 /* Answers a player who is registered with NickServ, or nothing when there is nothing to say. */
-using Responder = std::function<std::optional<std::string>(std::string_view nick, bool owner, std::string_view text)>;
+using Responder = std::function<std::optional<std::string>(std::string_view nick, std::string_view account,
+                                                           bool owner, std::string_view text)>;
 
 /* The protocol side of the bot: it turns incoming messages into the lines to send back. */
 class Session {
@@ -46,6 +47,7 @@ public:
 private:
     struct Registration {
         bool registered = false;
+        std::string account;
         std::int64_t expires = 0;
         std::int64_t told = 0;
     };
@@ -55,8 +57,10 @@ private:
         std::int64_t deadline = 0;
     };
 
-    void answer(std::string_view nick, std::string_view text, std::vector<std::string> &lines);
-    void release(const std::string &lowered, bool registered, std::int64_t now, std::vector<std::string> &lines);
+    void answer(std::string_view nick, std::string_view account, std::string_view text,
+                std::vector<std::string> &lines);
+    void release(const std::string &lowered, bool registered, std::string_view account,
+                 std::int64_t now, std::vector<std::string> &lines);
     void say(std::string_view text, std::vector<std::string> &lines) const;
 
     SessionConfig config_;
@@ -65,7 +69,8 @@ private:
     bool joined_ = false;
     std::unordered_map<std::string, Registration> registrations_;
     /* Nicks with a WHOIS in flight, mapped to whether numeric 307 has arrived. */
-    std::unordered_map<std::string, bool> asked_;
+    struct Identity { bool registered = false; std::string account; };
+    std::unordered_map<std::string, Identity> asked_;
     std::deque<Waiting> waiting_;
 };
 

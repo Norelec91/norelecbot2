@@ -261,12 +261,6 @@ std::int64_t seconds_now() {
     ).count();
 }
 
-/* An IRC nick and a Telegram username are the same player, so the spelling already on file wins. */
-std::string known_spelling(Storage &storage, std::string_view nick) {
-    const std::optional<ConquisterUser> user = conquister_user(storage, nick);
-    return user ? user->username : std::string{nick};
-}
-
 irc::SessionConfig session_config(const AppConfig &config) {
     return {
         .nick = config.irc_nick,
@@ -362,13 +356,15 @@ void irc_run(Storage &storage, const AppConfig &config, const std::atomic<bool> 
     }
     irc::Session session{
         session_config(config),
-        [&storage, &config](std::string_view nick, bool owner, std::string_view text) {
-            const std::string username = known_spelling(storage, nick);
+        [&storage, &config](std::string_view nick, std::string_view account, bool owner,
+                            std::string_view text) {
+            const std::string username{nick};
             const CommandContext command{
                 .storage = storage,
                 .config = config,
                 .user_id = 0,
                 .username = username,
+                .account_name = account,
                 .claims_allowed = true,
                 .owner = owner,
             };

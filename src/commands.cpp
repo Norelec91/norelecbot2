@@ -60,7 +60,7 @@ ParsedCommand parse_command(std::string_view message) {
    price follows the wealth of the group: a share of what the middle player owns, never under the
    list price and never over the ceiling. */
 int price(const CommandContext &context, int cost) {
-    if (debug_on(context.storage, std::string{context.username})) {
+    if (debug_on(context.storage, std::string{context.player_key})) {
         return 0;
     }
     if (context.config.price_percent <= 0) {
@@ -73,9 +73,9 @@ int price(const CommandContext &context, int cost) {
 }
 
 /* The name as it is shown: the real one, plus whatever he hung beside it. */
-std::string dressed(const Authors &furniture, std::string_view username) {
-    const auto mine = std::ranges::find_if(furniture, [username](const Authors::value_type &entry) {
-        return text::equals_ignore_case(entry.first, username);
+std::string dressed(const Authors &furniture, std::string_view key, std::string_view username) {
+    const auto mine = std::ranges::find_if(furniture, [key](const Authors::value_type &entry) {
+        return text::equals_ignore_case(entry.first, key);
     });
     if (mine == furniture.end() || mine->second.empty()) {
         return std::string{username};
@@ -194,7 +194,7 @@ std::string handle_raid(const CommandContext &context, std::string_view target) 
     const RaidResult result = raid_start(
         context.storage,
         context.user_id,
-        username,
+        std::string{context.player_key},
         name,
         seconds_now(),
         raid_rules(context),
@@ -247,7 +247,7 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
         conquister_claim(
             context.storage,
             context.user_id,
-            username,
+            std::string{context.player_key},
             now,
             ClaimRules{
                 .cooldown_seconds = context.config.cooldown_seconds,
@@ -280,8 +280,8 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
         if (result.shield_seconds > 0) {
             return std::format(
                 "🎈 {} il palloncino di {} ha resistito{}. Resiste ancora per {}.",
-                dressed(furniture, username),
-                dressed(furniture, result.previous_username),
+                dressed(furniture, context.player_key, username),
+                dressed(furniture, result.previous_key, result.previous_username),
                 toll,
                 format_wait(result.shield_seconds)
             );
@@ -289,8 +289,8 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
         return std::format(
             "🎈 {} il palloncino di {} ha resistito{}. "
             "Ora il palloncino ha il {}% di probabilità di essere bucato.",
-            dressed(furniture, username),
-            dressed(furniture, result.previous_username),
+            dressed(furniture, context.player_key, username),
+            dressed(furniture, result.previous_key, result.previous_username),
             toll,
             result.next_chance
         );
@@ -299,23 +299,23 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
     if (result.balloon_popped) {
         reply = std::format(
             "💥 {} hai bucato il palloncino di {}{}!\n",
-            dressed(furniture, username),
+            dressed(furniture, context.player_key, username),
             mention,
-            dressed(furniture, result.previous_username)
+            dressed(furniture, result.previous_key, result.previous_username)
         );
     }
     if (!result.previous_username.empty()) {
         reply += std::format(
             "{0} hai cacciato {4}{1} da {2}.\n{1} hai guadagnato {3} palle{5}!\n",
-            dressed(furniture, username),
-            dressed(furniture, result.previous_username),
+            dressed(furniture, context.player_key, username),
+            dressed(furniture, result.previous_key, result.previous_username),
             conquister_place,
             result.earned,
             mention,
             hold_note(context, result.previous_username, result.boost_multiplier, result.zodiac_percent, now)
         );
     }
-    reply += std::format("🪐 {} sei in {}!", dressed(furniture, username), conquister_place);
+    reply += std::format("🪐 {} sei in {}!", dressed(furniture, context.player_key, username), conquister_place);
     if (const std::optional<std::string> quote = optional_random_quote(context.storage)) {
         reply += std::format("\n\n{}", *quote);
     }
@@ -342,7 +342,7 @@ std::string handle_leaderboard(const CommandContext &context, std::string_view) 
             "\n{}) {} {} — {} palle",
             position++,
             zodiac::sign_of(entry.username, context.config.zodiac_signs).symbol,
-            dressed(furniture, entry.username),
+            dressed(furniture, entry.player_key, entry.username),
             entry.score
         );
         if (entry.quotes_added > 0) {
@@ -357,7 +357,7 @@ std::string handle_leaderboard(const CommandContext &context, std::string_view) 
         reply += std::format(
             "\n\n🪐 In {} ora: {}",
             conquister_place,
-            dressed(furniture, leaderboard.current->username)
+            dressed(furniture, leaderboard.current_key, leaderboard.current->username)
         );
     }
     return reply;
@@ -380,7 +380,7 @@ std::string handle_add_quote(const CommandContext &context, std::string_view arg
     if (banned != context.config.quote_banned.end()) {
         return std::format("{} questa citazione non si può aggiungere: nessun addebito.", username);
     }
-    const QuoteAddResult result = quote_add(context.storage, username, quote, cost);
+    const QuoteAddResult result = quote_add(context.storage, std::string{context.player_key}, quote, cost);
     if (result.status == QuoteAddStatus::insufficient_score) {
         return std::format(
             "{} ti servono {} palle per aggiungere una citazione (ne hai {}).",
@@ -415,7 +415,7 @@ std::string handle_buy_furniture(const CommandContext &context, std::string_view
     if (!howmany) {
         return std::format("{} al nome si attaccano solo emoji: nessun addebito.", username);
     }
-    const FurnitureResult result = furniture_buy(context.storage, username, emoji, cost, limit);
+    const FurnitureResult result = furniture_buy(context.storage, std::string{context.player_key}, emoji, cost, limit);
     if (result.status == FurnitureStatus::too_many) {
         return std::format(
             "{} ne hai già {} su {}: non ci stanno anche queste, nessun addebito.",
@@ -449,7 +449,7 @@ std::string handle_buy_balloon(const CommandContext &context, std::string_view) 
     const std::string username{context.username};
     const int cost = price(context, context.config.balloon_cost);
     const std::int64_t shield_seconds = is_shielded(context, username) ? context.config.shield_seconds : 0;
-    const BalloonResult result = balloon_buy(context.storage, username, cost, seconds_now(), shield_seconds);
+    const BalloonResult result = balloon_buy(context.storage, std::string{context.player_key}, cost, seconds_now(), shield_seconds);
     if (result.status == BalloonStatus::already_owned) {
         if (result.shield_seconds > 0) {
             return std::format(
@@ -534,16 +534,15 @@ std::string handle_debug(const CommandContext &context, std::string_view argumen
     if (!context.owner) {
         return "Solo il proprietario può accendere il debug.";
     }
-    const std::string username{context.username};
     const std::string_view wanted = text::trim(argument);
     if (wanted != "0" && wanted != "1") {
         return std::format(
             "Uso: /debug 1 per accendere, /debug 0 per spegnere. Per te adesso è {}.",
-            debug_on(context.storage, username) ? "acceso" : "spento"
+            debug_on(context.storage, std::string{context.player_key}) ? "acceso" : "spento"
         );
     }
     const bool on = wanted == "1";
-    debug_set(context.storage, username, on);
+    debug_set(context.storage, std::string{context.player_key}, on);
     return on ? "🔧 Debug acceso per te: i tuoi acquisti non costano niente. Gli altri pagano."
               : "🔧 Debug spento: i tuoi acquisti tornano a costare.";
 }
@@ -566,7 +565,7 @@ std::string handle_buy_boost(const CommandContext &context, std::string_view) {
     const std::string username{context.username};
     const int cost = price(context, context.config.boost_cost);
     const BoostResult result =
-        boost_buy(context.storage, username, cost, context.config.boost_multiplier, seconds_now());
+        boost_buy(context.storage, std::string{context.player_key}, cost, context.config.boost_multiplier, seconds_now());
     if (result.status == BoostStatus::already_owned) {
         return std::format("{} hai già un boost x{} pronto.", username, result.multiplier);
     }
@@ -604,7 +603,7 @@ std::string handle_buy_shield(const CommandContext &context, std::string_view) {
     }
     const std::string username{context.username};
     const int cost = price(context, context.config.raid_shield_cost);
-    const RaidShieldResult result = raid_shield_buy(context.storage, username, cost, seconds_now());
+    const RaidShieldResult result = raid_shield_buy(context.storage, std::string{context.player_key}, cost, seconds_now());
     if (result.status == RaidShieldStatus::already_owned) {
         return std::format("{} hai già uno scudo pronto.", username);
     }
@@ -625,6 +624,36 @@ std::string handle_buy_shield(const CommandContext &context, std::string_view) {
     );
 }
 
+std::string handle_link(const CommandContext &context, std::string_view argument) {
+    if (context.username.empty()) {
+        return missing_username_reply();
+    }
+    const bool telegram = context.user_id != 0;
+    const bool valid = telegram ? !argument.empty() && !argument.starts_with('@')
+                                : argument.starts_with('@') && argument.size() > 1;
+    if (!valid || argument.find_first_of(" \t\r\n") != std::string_view::npos) {
+        return telegram ? "Uso: /link <nick IRC>. L'utente IRC deve confermare con !link @tuoUsername."
+                        : "Uso: !link @usernameTelegram. L'utente Telegram deve confermare con /link tuoNick.";
+    }
+    const std::string_view other = telegram ? argument : argument.substr(1);
+    switch (player_link(context.storage, context.user_id, std::string{context.username}, other,
+                        context.account_name)) {
+    case LinkStatus::unknown_account:
+        return "Non conosco ancora quell'account: deve prima usare un comando del gioco.";
+    case LinkStatus::self:
+        return "Questi account sono già collegati.";
+    case LinkStatus::already_linked:
+        return "Uno dei due account è già collegato a un altro account: nessun cambiamento.";
+    case LinkStatus::pending:
+        return "Richiesta registrata. L'altro account deve confermare con /link (su Telegram) o !link (su IRC).";
+    case LinkStatus::conflict:
+        return "Entrambi gli account hanno già beni: serve una fusione manuale, nessun bene è stato spostato.";
+    case LinkStatus::linked:
+        return "Account collegati: ora condividono lo stesso giocatore.";
+    }
+    return {};
+}
+
 constexpr std::array commands{
     CommandDefinition{"/leaderboard", handle_leaderboard},
     CommandDefinition{"/addquote", handle_add_quote},
@@ -632,6 +661,7 @@ constexpr std::array commands{
     CommandDefinition{"/buyboost", handle_buy_boost},
     CommandDefinition{"/buyshield", handle_buy_shield},
     CommandDefinition{"/buyfurniture", handle_buy_furniture},
+    CommandDefinition{"/link", handle_link},
     CommandDefinition{"/quotes", handle_quotes},
     CommandDefinition{"/delquote", handle_delete_quote},
     CommandDefinition{"/debug", handle_debug},
@@ -711,9 +741,13 @@ std::string raid_event_reply(const RaidEvent &event, const zodiac::Overrides &si
 std::optional<std::string> command_dispatch(const CommandContext &context, std::string_view text) {
     try {
         const std::string_view message = text::trim(text);
-        const auto remember_sender = [&context] {
+        CommandContext bound = context;
+        std::string bound_key;
+        const auto remember_sender = [&] {
             if (!context.username.empty()) {
-                player_seen(context.storage, context.user_id, std::string{context.username});
+                bound_key = player_seen(context.storage, context.user_id, std::string{context.username},
+                                        context.account_name);
+                bound.player_key = bound_key;
             }
         };
         if (message == conquister_trigger) {
@@ -721,14 +755,14 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
                 return std::nullopt;
             }
             remember_sender();
-            return handle_claim(context, {});
+            return handle_claim(bound, {});
         }
         if (const std::string_view target = raid_target(message); !target.empty()) {
             if (!context.claims_allowed) {
                 return std::nullopt;
             }
             remember_sender();
-            return handle_raid(context, target);
+            return handle_raid(bound, target);
         }
         if (message.empty()) {
             return std::nullopt;
@@ -739,7 +773,7 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
             return std::nullopt;
         }
         remember_sender();
-        return definition->handler(context, command.argument);
+        return definition->handler(bound, command.argument);
     } catch (const std::exception &) {
         return std::string{internal_error_reply};
     }

@@ -12,6 +12,7 @@ namespace {
 
 struct Call {
     std::string nick;
+    std::string account;
     bool owner = false;
     std::string text;
 };
@@ -31,8 +32,9 @@ struct Fixture {
                   .no_forward_prefix = "\xE2\x80\x8B",
                   .owner_nick = "Norelec",
               },
-              [this](std::string_view nick, bool owner, std::string_view text) -> std::optional<std::string> {
-                  calls.push_back({std::string{nick}, owner, std::string{text}});
+              [this](std::string_view nick, std::string_view account, bool owner,
+                     std::string_view text) -> std::optional<std::string> {
+                  calls.push_back({std::string{nick}, std::string{account}, owner, std::string{text}});
                   return text == "/leaderboard" ? std::optional<std::string>{"Classifica vuota."} : std::nullopt;
               }
           } {}
@@ -100,6 +102,7 @@ TEST_CASE("only a nick identified with NickServ plays") {
         CHECK(released.empty());
         REQUIRE(fixture.calls.size() == 1);
         CHECK(fixture.calls[0].nick == "Marco189");
+        CHECK(fixture.calls[0].account == "marco189");
         CHECK(fixture.calls[0].text == "We @TheConquister37");
         CHECK_FALSE(fixture.calls[0].owner);
 
@@ -125,6 +128,16 @@ TEST_CASE("only a nick identified with NickServ plays") {
             REQUIRE(after.size() == 1);
             CHECK(after[0] == "WHOIS Marco189\r\n");
         }
+    }
+
+    SUBCASE("numeric 330 supplies the stable NickServ account") {
+        CHECK(fixture.feed(":server 330 NorelecBot Marco189 MarcoAccount :is logged in as", 1001).empty());
+        static_cast<void>(fixture.feed(":server 318 NorelecBot Marco189 :End of /WHOIS list.", 1001));
+        REQUIRE(fixture.calls.size() == 1);
+        CHECK(fixture.calls[0].account == "MarcoAccount");
+        static_cast<void>(fixture.feed(":Marco189!~m@host PRIVMSG #regno :!leaderboard", 1002));
+        REQUIRE(fixture.calls.size() == 2);
+        CHECK(fixture.calls[1].account == "MarcoAccount");
     }
 
     SUBCASE("without 307 the player is told to register, once") {
@@ -209,7 +222,7 @@ TEST_CASE("a reply too long for one line is split") {
             .no_forward_prefix = "",
             .owner_nick = "",
         },
-        [](std::string_view, bool, std::string_view) -> std::optional<std::string> {
+        [](std::string_view, std::string_view, bool, std::string_view) -> std::optional<std::string> {
             return std::string(500, 'a') + "\n\nseconda riga";
         }
     };
@@ -242,4 +255,3 @@ TEST_CASE("what the bot said on Telegram is repeated in the channel, marked for 
           "mifaisonno hai guadagnato 1471 palle!\r\n");
     CHECK(fixture.calls.empty());
 }
-

@@ -71,6 +71,15 @@ struct ConquisterState {
     Counters telegram_ids;
     /* Players seen on IRC, independently of whether they also play on Telegram. */
     Counters irc_names;
+    /* Verified platform account -> internal player key. Never infer a cross-platform link by name. */
+    Authors accounts;
+    /* Internal player key -> most recently seen public name. */
+    Authors display_names;
+    /* Current public names used to resolve platform-specific raid targets. */
+    Authors telegram_names;
+    Authors irc_nicks;
+    /* Both authenticated accounts must request each other before they share a player. */
+    Authors link_requests;
     /* The raids under way, in the order they left. */
     std::vector<Raid> raids;
     /* Who added each quote, for the ones added since the bot started writing it down. */
