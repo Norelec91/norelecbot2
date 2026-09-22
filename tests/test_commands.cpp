@@ -127,7 +127,7 @@ TEST_CASE("the bot answers the commands it knows and ignores the rest") {
         context.username = "heidi";
         CHECK(reply("/buyshield") ==
               "🛡️ heidi hai comprato uno scudo spendendo 0 palle! "
-              "Ridurrà i furti mentre sei a casa, finché non compri un palloncino o un boost.");
+              "Ridurrà i furti mentre sei sul tuo pianeta, finché non compri un palloncino o un boost.");
         CHECK(reply("/buyshield") == "heidi hai già uno scudo pronto.");
         config.balloon_cost = 0;
         CHECK(reply("/buyballoon").contains("heidi hai comprato un palloncino"));
@@ -420,7 +420,7 @@ TEST_CASE("the raids tell what happened") {
     event.target_on_telegram = true;
     event.undefended = true;
     CHECK(raid_event_reply(event, none) ==
-          "💰 bob hai rubato 250 palle a @alice, che era in giro! Torni in bob tra 52 secondi.");
+          "💰 bob hai rubato 250 palle a @alice, che non era sul suo pianeta! Torni in bob tra 52 secondi.");
 
     event.undefended = false;
     event.balloon_popped = true;

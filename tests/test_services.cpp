@@ -458,6 +458,60 @@ TEST_CASE("a raid shield stays ready while its owner is away") {
     CHECK(read_json(paths.conquister).at("raid_shields").at("alice") == 1);
 }
 
+TEST_CASE("holding the Conquister leaves the shield on the player's own planet unguarded") {
+    const TestPaths paths{"raid-shield-holder-away-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":1,"username":"alice","since":0},)"
+             << R"("scores":{"alice":2000,"bob":0},"quotes_added":{},)"
+             << R"("raid_shields":{"alice":1},"ids":{"alice":0,"bob":5000}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    CHECK(raid_start(storage, 0, "bob", "alice", 0, shield_rides()).status == RaidStatus::started);
+    const std::vector<RaidEvent> first = raid_due(storage, 5, shield_rides());
+    REQUIRE(first.size() == 1);
+    CHECK(first[0].kind == RaidEvent::Kind::stolen);
+    CHECK(first[0].undefended);
+    CHECK(first[0].loot == 200);
+    CHECK(first[0].shield_absorbed == 0);
+    CHECK(read_json(paths.conquister).at("raid_shields").at("alice") == 1);
+
+    static_cast<void>(raid_due(storage, 10, shield_rides()));
+    CHECK(raid_start(storage, 1, "alice", "alice", 11, shield_rides()).status == RaidStatus::left_place);
+    CHECK(raid_start(storage, 0, "bob", "alice", 12, shield_rides()).status == RaidStatus::started);
+    const std::vector<RaidEvent> second = raid_due(storage, 17, shield_rides());
+    REQUIRE(second.size() == 1);
+    CHECK_FALSE(second[0].undefended);
+    CHECK(second[0].shield_absorbed > 0);
+    CHECK(read_json(paths.conquister).at("raid_shields").at("alice") == 1);
+}
+
+TEST_CASE("holding the Conquister also leaves the balloon on the player's own planet unguarded") {
+    const TestPaths paths{"raid-balloon-holder-away-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":1,"username":"alice","since":0},)"
+             << R"("scores":{"alice":2000,"bob":0},"quotes_added":{},)"
+             << R"("balloons":{"alice":3},"ids":{"alice":0,"bob":5000}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    CHECK(raid_start(storage, 0, "bob", "alice", 0, shield_rides()).status == RaidStatus::started);
+    const std::vector<RaidEvent> first = raid_due(storage, 5, shield_rides());
+    REQUIRE(first.size() == 1);
+    CHECK(first[0].kind == RaidEvent::Kind::stolen);
+    CHECK(first[0].undefended);
+    CHECK_FALSE(first[0].balloon_popped);
+    CHECK(read_json(paths.conquister).at("balloons").at("alice") == 3);
+
+    static_cast<void>(raid_due(storage, 10, shield_rides()));
+    CHECK(raid_start(storage, 1, "alice", "alice", 11, shield_rides()).status == RaidStatus::left_place);
+    CHECK(raid_start(storage, 0, "bob", "alice", 12, shield_rides()).status == RaidStatus::started);
+    const std::vector<RaidEvent> second = raid_due(storage, 17, shield_rides());
+    REQUIRE(second.size() == 1);
+    CHECK_FALSE(second[0].undefended);
+    CHECK(second[0].balloon_popped); /* The fourth attempt is certain to pop it. */
+}
+
 TEST_CASE("a raid shield rounds down and safely handles large loot") {
     SUBCASE("one potential palla is stopped completely") {
         const TestPaths paths{"raid-shield-one-test"};

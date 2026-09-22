@@ -612,7 +612,7 @@ std::string handle_buy_shield(const CommandContext &context, std::string_view) {
                            result.available_score);
     }
     return std::format(
-        "🛡️ {} hai comprato uno scudo spendendo {} palle! Ridurrà i furti mentre sei a casa, "
+        "🛡️ {} hai comprato uno scudo spendendo {} palle! Ridurrà i furti mentre sei sul tuo pianeta, "
         "finché non compri un palloncino o un boost.",
         username, cost
     );
@@ -678,7 +678,7 @@ std::string raid_event_reply(const RaidEvent &event, const zodiac::Overrides &si
         target
     );
     if (event.undefended) {
-        reply += ", che era in giro";
+        reply += ", che non era sul suo pianeta";
     } else if (event.balloon_popped) {
         reply += ", bucandogli il palloncino";
     } else if (event.shield_absorbed > 0) {

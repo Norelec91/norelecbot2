@@ -118,11 +118,17 @@ Settlement settle_hold(
     return settled;
 }
 
-/* Whoever is on the road has left his base, and everything in it, unguarded. */
+/* A raid takes the player away from their own planet until the return trip ends. */
 bool is_away(const ConquisterState &state, const std::string &username) {
     return std::ranges::any_of(state.raids, [&username](const Raid &raid) {
         return raid.raider == username;
     });
+}
+
+/* Occupying @TheConquister37 is not the same as being on one's own planet. */
+bool on_own_planet(const ConquisterState &state, const std::string &username) {
+    return !is_away(state, username) &&
+        (!state.current || !text::equals_ignore_case(state.current->username, username));
 }
 
 Raid *raid_of(ConquisterState &state, const std::string &username) {
@@ -635,14 +641,14 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 event.raider_on_telegram = counter(state.telegram_ids, raid.raider) != 0;
                 event.raider_emoji = furniture_of(state, raid.raider);
                 event.target_emoji = furniture_of(state, raid.target);
-                const bool guarded = !is_away(state, raid.target);
-                event.undefended = !guarded;
+                const bool on_home_planet = on_own_planet(state, raid.target);
+                event.undefended = !on_home_planet;
                 const auto shield = find_entry(state.shields, raid.target);
                 const auto balloon = find_entry(state.balloons, raid.target);
-                if (guarded && shield != state.shields.end() && shield->second > now) {
+                if (on_home_planet && shield != state.shields.end() && shield->second > now) {
                     event.kind = RaidEvent::Kind::defended;
                     event.cost = charge_attacker(state, raid.raider, rules.attack_cost);
-                } else if (guarded && balloon != state.balloons.end()) {
+                } else if (on_home_planet && balloon != state.balloons.end()) {
                     const std::int64_t attempt = balloon->second + 1;
                     if (static_cast<std::int64_t>(session.random_index(balloon_attempts)) >= attempt) {
                         balloon->second = attempt;
@@ -671,7 +677,7 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                         rules.loot_share > 0 ? theirs / rules.loot_share : theirs;
                     event.loot = std::min({theirs, carried, most});
                     if (event.loot > 0) {
-                        if (guarded) {
+                        if (on_home_planet) {
                             if (find_entry(state.raid_shields, raid.target) != state.raid_shields.end()) {
                                 const std::int64_t potential = event.loot;
                                 event.loot = shielded_loot(potential);
