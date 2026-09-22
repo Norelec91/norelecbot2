@@ -463,9 +463,6 @@ std::string handle_buy_balloon(const CommandContext &context, std::string_view) 
     if (result.status == BalloonStatus::has_boost) {
         return std::format("{} hai un boost attivo: il palloncino puoi comprarlo dopo.", username);
     }
-    if (result.status == BalloonStatus::has_raid_shield) {
-        return std::format("{} hai uno scudo: il palloncino puoi comprarlo dopo.", username);
-    }
     if (result.status == BalloonStatus::insufficient_score) {
         return std::format(
             "{} ti servono {} palle per un palloncino (ne hai {}).",
@@ -576,9 +573,6 @@ std::string handle_buy_boost(const CommandContext &context, std::string_view) {
     if (result.status == BoostStatus::has_balloon) {
         return std::format("{} hai un palloncino: il boost puoi comprarlo dopo.", username);
     }
-    if (result.status == BoostStatus::has_raid_shield) {
-        return std::format("{} hai uno scudo: il boost puoi comprarlo dopo.", username);
-    }
     if (result.status == BoostStatus::insufficient_score) {
         return std::format(
             "{} ti servono {} palle per un boost (ne hai {}).",
@@ -618,7 +612,8 @@ std::string handle_buy_shield(const CommandContext &context, std::string_view) {
                            result.available_score);
     }
     return std::format(
-        "🛡️ {} hai comprato uno scudo spendendo {} palle! Ridurrà il bottino del prossimo furto mentre sei a casa.",
+        "🛡️ {} hai comprato uno scudo spendendo {} palle! Ridurrà i furti mentre sei a casa, "
+        "finché non compri un palloncino o un boost.",
         username, cost
     );
 }

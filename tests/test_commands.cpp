@@ -127,10 +127,19 @@ TEST_CASE("the bot answers the commands it knows and ignores the rest") {
         context.username = "heidi";
         CHECK(reply("/buyshield") ==
               "🛡️ heidi hai comprato uno scudo spendendo 0 palle! "
-              "Ridurrà il bottino del prossimo furto mentre sei a casa.");
+              "Ridurrà i furti mentre sei a casa, finché non compri un palloncino o un boost.");
         CHECK(reply("/buyshield") == "heidi hai già uno scudo pronto.");
-        CHECK(reply("/buyballoon") == "heidi hai uno scudo: il palloncino puoi comprarlo dopo.");
-        CHECK(reply("/buyboost") == "heidi hai uno scudo: il boost puoi comprarlo dopo.");
+        config.balloon_cost = 0;
+        CHECK(reply("/buyballoon").contains("heidi hai comprato un palloncino"));
+        CHECK(reply("/buyshield") == "heidi hai un palloncino: lo scudo puoi comprarlo dopo.");
+        config.balloon_cost = 1000;
+        context.user_id = 10;
+        context.username = "jane";
+        CHECK(reply("/buyshield").contains("jane hai comprato uno scudo"));
+        config.boost_cost = 0;
+        CHECK(reply("/buyboost").contains("jane hai comprato un boost"));
+        CHECK(reply("/buyshield") == "jane hai un boost attivo: lo scudo puoi comprarlo dopo.");
+        config.boost_cost = 1500;
         config.raid_shield_cost = 1000;
         context.user_id = 9;
         context.username = "ivan";

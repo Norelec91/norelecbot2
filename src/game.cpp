@@ -454,9 +454,6 @@ BalloonResult balloon_buy(
         if (find_entry(state.balloons, username) != state.balloons.end()) {
             return BalloonResult{BalloonStatus::already_owned, score};
         }
-        if (find_entry(state.raid_shields, username) != state.raid_shields.end()) {
-            return BalloonResult{BalloonStatus::has_raid_shield, score};
-        }
         if (find_entry(state.boosts, username) != state.boosts.end()) {
             return BalloonResult{BalloonStatus::has_boost, score};
         }
@@ -464,6 +461,7 @@ BalloonResult balloon_buy(
             return BalloonResult{BalloonStatus::insufficient_score, score};
         }
         state.scores[username] = score - cost;
+        state.raid_shields.erase(username);
         if (shield_seconds > 0) {
             state.shields[username] = now + shield_seconds;
         } else {
@@ -674,12 +672,10 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                     event.loot = std::min({theirs, carried, most});
                     if (event.loot > 0) {
                         if (guarded) {
-                            if (const auto bought = find_entry(state.raid_shields, raid.target);
-                                bought != state.raid_shields.end()) {
+                            if (find_entry(state.raid_shields, raid.target) != state.raid_shields.end()) {
                                 const std::int64_t potential = event.loot;
                                 event.loot = shielded_loot(potential);
                                 event.shield_absorbed = potential - event.loot;
-                                state.raid_shields.erase(raid.target);
                             }
                         }
                         state.scores[raid.target] = theirs - event.loot;
@@ -749,9 +745,6 @@ BoostResult boost_buy(
         if (find_entry(state.balloons, username) != state.balloons.end()) {
             return BoostResult{BoostStatus::has_balloon, score};
         }
-        if (find_entry(state.raid_shields, username) != state.raid_shields.end()) {
-            return BoostResult{BoostStatus::has_raid_shield, score};
-        }
         if (const auto shield = find_entry(state.shields, username); shield != state.shields.end()) {
             if (shield->second > now) {
                 return BoostResult{BoostStatus::has_balloon, score};
@@ -762,6 +755,7 @@ BoostResult boost_buy(
             return BoostResult{BoostStatus::insufficient_score, score};
         }
         state.scores[username] = score - cost;
+        state.raid_shields.erase(username);
         state.boosts[username] = multiplier;
         return BoostResult{BoostStatus::bought, score - cost, multiplier};
     });

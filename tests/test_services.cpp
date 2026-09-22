@@ -314,7 +314,7 @@ TEST_CASE("a balloon rules out a boost") {
     CHECK(boost_buy(storage, "bob", 0, 3, 3700).status == BoostStatus::bought);
 }
 
-TEST_CASE("a raid shield costs palle and excludes balloons and boosts both ways") {
+TEST_CASE("a raid shield costs palle and is replaced only by a paid balloon or boost") {
     const TestPaths paths{"raid-shield-buy-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
@@ -328,8 +328,12 @@ TEST_CASE("a raid shield costs palle and excludes balloons and boosts both ways"
     CHECK(bought.available_score == 200);
     CHECK(conquister_user(storage, "alice")->score == 200);
     CHECK(raid_shield_buy(storage, "alice", 0, 0).status == RaidShieldStatus::already_owned);
-    CHECK(balloon_buy(storage, "alice", 0, 0, 0).status == BalloonStatus::has_raid_shield);
-    CHECK(boost_buy(storage, "alice", 0, 3, 0).status == BoostStatus::has_raid_shield);
+    CHECK(balloon_buy(storage, "alice", 201, 0, 0).status == BalloonStatus::insufficient_score);
+    CHECK(read_json(paths.conquister).at("raid_shields").at("alice") == 1);
+    CHECK(balloon_buy(storage, "alice", 200, 0, 0).status == BalloonStatus::bought);
+    CHECK(conquister_user(storage, "alice")->score == 0);
+    CHECK_FALSE(read_json(paths.conquister).at("raid_shields").contains("alice"));
+    CHECK(raid_shield_buy(storage, "alice", 0, 0).status == RaidShieldStatus::has_balloon);
 
     CHECK(balloon_buy(storage, "carol", 0, 0, 0).status == BalloonStatus::bought);
     CHECK(raid_shield_buy(storage, "carol", 0, 0).status == RaidShieldStatus::has_balloon);
@@ -338,7 +342,12 @@ TEST_CASE("a raid shield costs palle and excludes balloons and boosts both ways"
     CHECK(raid_shield_buy(storage, "dave", 0, 3700).status == RaidShieldStatus::bought);
     CHECK(boost_buy(storage, "erin", 0, 3, 0).status == BoostStatus::bought);
     CHECK(raid_shield_buy(storage, "erin", 0, 0).status == RaidShieldStatus::has_boost);
-    CHECK(read_json(paths.conquister).at("raid_shields").at("alice") == 1);
+    CHECK(raid_shield_buy(storage, "frank", 0, 0).status == RaidShieldStatus::bought);
+    CHECK(boost_buy(storage, "frank", 1, 3, 0).status == BoostStatus::insufficient_score);
+    CHECK(read_json(paths.conquister).at("raid_shields").at("frank") == 1);
+    CHECK(boost_buy(storage, "frank", 0, 3, 0).status == BoostStatus::bought);
+    CHECK_FALSE(read_json(paths.conquister).at("raid_shields").contains("frank"));
+    CHECK(raid_shield_buy(storage, "frank", 0, 0).status == RaidShieldStatus::has_boost);
 }
 
 TEST_CASE("an attempt that a balloon survives costs palle") {
@@ -396,7 +405,7 @@ RaidRules shield_rides() {
 
 }
 
-TEST_CASE("a raid shield reduces the potential loot by x/(x+1000) and is spent once") {
+TEST_CASE("a raid shield reduces the potential loot by x/(x+1000) on every raid") {
     const TestPaths paths{"raid-shield-loot-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
@@ -414,7 +423,7 @@ TEST_CASE("a raid shield reduces the potential loot by x/(x+1000) and is spent o
     CHECK(first[0].loot == 500); /* raw 1000, then floor(1000 * 1000 / (1000 + 1000)). */
     CHECK(first[0].shield_absorbed == 500);
     CHECK(conquister_user(storage, "alice")->score == 9500);
-    CHECK(read_json(paths.conquister).at("raid_shields").empty());
+    CHECK(read_json(paths.conquister).at("raid_shields").at("alice") == 1);
     const std::vector<RaidEvent> home = raid_due(storage, 10, shield_rides());
     REQUIRE(home.size() == 1);
     CHECK(home[0].loot == 500);
@@ -423,9 +432,10 @@ TEST_CASE("a raid shield reduces the potential loot by x/(x+1000) and is spent o
     CHECK(raid_start(storage, 0, "bob", "alice", 11, shield_rides()).status == RaidStatus::started);
     const std::vector<RaidEvent> second = raid_due(storage, 16, shield_rides());
     REQUIRE(second.size() == 1);
-    CHECK(second[0].loot == 950);
-    CHECK(second[0].shield_absorbed == 0);
-    CHECK(conquister_user(storage, "alice")->score == 8550);
+    CHECK(second[0].loot == 462); /* raw 950, shield applied again. */
+    CHECK(second[0].shield_absorbed == 488);
+    CHECK(conquister_user(storage, "alice")->score == 9038);
+    CHECK(read_json(paths.conquister).at("raid_shields").at("alice") == 1);
 }
 
 TEST_CASE("a raid shield stays ready while its owner is away") {
@@ -466,7 +476,7 @@ TEST_CASE("a raid shield rounds down and safely handles large loot") {
         CHECK(arrival[0].loot == 0);
         CHECK(arrival[0].shield_absorbed == 1);
         CHECK(conquister_user(storage, "alice")->score == 1);
-        CHECK(read_json(paths.conquister).at("raid_shields").empty());
+        CHECK(read_json(paths.conquister).at("raid_shields").at("alice") == 1);
     }
 
     SUBCASE("large potential loot does not overflow the multiplication") {

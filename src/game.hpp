@@ -39,9 +39,9 @@ struct ClaimResult {
     int zodiac_percent = 100;
 };
 
-enum class BalloonStatus { bought, already_owned, has_boost, has_raid_shield, insufficient_score };
+enum class BalloonStatus { bought, already_owned, has_boost, insufficient_score };
 
-enum class BoostStatus { bought, already_owned, has_balloon, has_raid_shield, insufficient_score };
+enum class BoostStatus { bought, already_owned, has_balloon, insufficient_score };
 
 enum class RaidShieldStatus { bought, already_owned, has_balloon, has_boost, insufficient_score };
 
@@ -127,7 +127,7 @@ struct RaidEvent {
     int raider_percent = 100;
     int target_percent = 100;
     bool balloon_popped = false;
-    /* A purchased shield absorbed part of this raid's potential loot and was consumed. */
+    /* A purchased shield absorbed part of this raid's potential loot. */
     std::int64_t shield_absorbed = 0;
     /* The target was away, so there was nothing to get past. */
     bool undefended = false;
