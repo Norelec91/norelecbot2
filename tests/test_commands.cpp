@@ -122,6 +122,24 @@ TEST_CASE("the bot answers the commands it knows and ignores the rest") {
         context.username = "grace";
         CHECK(reply("/buyboost") == "grace ti servono 1500 palle per un boost (ne hai 0).");
 
+        config.raid_shield_cost = 0;
+        context.user_id = 8;
+        context.username = "heidi";
+        CHECK(reply("/buyshield") ==
+              "🛡️ heidi hai comprato uno scudo spendendo 0 palle! "
+              "Ridurrà il bottino del prossimo furto mentre sei a casa.");
+        CHECK(reply("/buyshield") == "heidi hai già uno scudo pronto.");
+        CHECK(reply("/buyballoon") == "heidi hai uno scudo: il palloncino puoi comprarlo dopo.");
+        CHECK(reply("/buyboost") == "heidi hai uno scudo: il boost puoi comprarlo dopo.");
+        config.raid_shield_cost = 1000;
+        context.user_id = 9;
+        context.username = "ivan";
+        CHECK(reply("/buyshield") == "ivan ti servono 1000 palle per uno scudo (ne hai 0).");
+        context.username = "dave";
+        CHECK(reply("/buyshield") == "dave hai un palloncino: lo scudo puoi comprarlo dopo.");
+        context.username = "frank";
+        CHECK(reply("/buyshield") == "frank hai un boost attivo: lo scudo puoi comprarlo dopo.");
+
         config.quote_cost = 0;
         context.user_id = 3;
         context.username = "carol";
@@ -384,6 +402,11 @@ TEST_CASE("the raids tell what happened") {
     event.loot = 250;
     event.seconds = 52;
     CHECK(raid_event_reply(event, none) == "💰 bob hai rubato 250 palle a alice! Torni in bob tra 52 secondi.");
+
+    event.shield_absorbed = 70;
+    CHECK(raid_event_reply(event, none) ==
+          "💰 bob hai rubato 250 palle a alice, il cui scudo ha fermato 70 palle! Torni in bob tra 52 secondi.");
+    event.shield_absorbed = 0;
 
     event.target_on_telegram = true;
     event.undefended = true;

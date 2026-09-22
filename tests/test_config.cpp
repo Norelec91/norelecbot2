@@ -55,6 +55,10 @@ TEST_CASE("settings are read from the .env file") {
     REQUIRE(free_quotes);
     CHECK(free_quotes->quote_cost == 0);
 
+    const auto shield = file.load("NORELECBOT_RAID_SHIELD_COST=1250\n");
+    REQUIRE(shield);
+    CHECK(shield->raid_shield_cost == 1250);
+
     const auto chat = file.load("NORELECBOT_CONQUISTER_CHAT_ID=-1001234567890\n");
     REQUIRE(chat);
     CHECK(chat->conquister_chat_id == -1001234567890);
@@ -66,6 +70,7 @@ TEST_CASE("an empty value falls back to the default") {
     const auto config = file.load("NORELECBOT_OWNER_ID=\n");
     REQUIRE(config);
     CHECK(config->quote_cost == 1000);
+    CHECK(config->raid_shield_cost == 1000);
     CHECK(config->conquister_chat_id == 0);
     CHECK(config->api_port == 8000);
 }
@@ -75,6 +80,7 @@ TEST_CASE("an invalid value is refused") {
 
     CHECK_FALSE(file.load("NORELECBOT_CONQUISTER_CHAT_ID=gruppo\n"));
     CHECK_FALSE(file.load("NORELECBOT_QUOTE_COST=-1\n"));
+    CHECK_FALSE(file.load("NORELECBOT_RAID_SHIELD_COST=-1\n"));
     CHECK_FALSE(file.load("NORELECBOT_QUOTE_COST=tante\n"));
     CHECK_FALSE(file.load("NORELECBOT_QUOTE_COST=2147483648\n"));
 }
@@ -123,4 +129,3 @@ TEST_CASE("the bot can have more than one owner") {
 
     CHECK_FALSE(file.load("NORELECBOT_OWNER_ID=12345, tizio\n"));
 }
-

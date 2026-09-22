@@ -463,6 +463,9 @@ std::string handle_buy_balloon(const CommandContext &context, std::string_view) 
     if (result.status == BalloonStatus::has_boost) {
         return std::format("{} hai un boost attivo: il palloncino puoi comprarlo dopo.", username);
     }
+    if (result.status == BalloonStatus::has_raid_shield) {
+        return std::format("{} hai uno scudo: il palloncino puoi comprarlo dopo.", username);
+    }
     if (result.status == BalloonStatus::insufficient_score) {
         return std::format(
             "{} ti servono {} palle per un palloncino (ne hai {}).",
@@ -573,6 +576,9 @@ std::string handle_buy_boost(const CommandContext &context, std::string_view) {
     if (result.status == BoostStatus::has_balloon) {
         return std::format("{} hai un palloncino: il boost puoi comprarlo dopo.", username);
     }
+    if (result.status == BoostStatus::has_raid_shield) {
+        return std::format("{} hai uno scudo: il boost puoi comprarlo dopo.", username);
+    }
     if (result.status == BoostStatus::insufficient_score) {
         return std::format(
             "{} ti servono {} palle per un boost (ne hai {}).",
@@ -591,11 +597,38 @@ std::string handle_buy_boost(const CommandContext &context, std::string_view) {
     );
 }
 
+std::string handle_buy_shield(const CommandContext &context, std::string_view) {
+    if (context.username.empty()) {
+        return missing_username_reply();
+    }
+    const std::string username{context.username};
+    const int cost = price(context, context.config.raid_shield_cost);
+    const RaidShieldResult result = raid_shield_buy(context.storage, username, cost, seconds_now());
+    if (result.status == RaidShieldStatus::already_owned) {
+        return std::format("{} hai già uno scudo pronto.", username);
+    }
+    if (result.status == RaidShieldStatus::has_balloon) {
+        return std::format("{} hai un palloncino: lo scudo puoi comprarlo dopo.", username);
+    }
+    if (result.status == RaidShieldStatus::has_boost) {
+        return std::format("{} hai un boost attivo: lo scudo puoi comprarlo dopo.", username);
+    }
+    if (result.status == RaidShieldStatus::insufficient_score) {
+        return std::format("{} ti servono {} palle per uno scudo (ne hai {}).", username, cost,
+                           result.available_score);
+    }
+    return std::format(
+        "🛡️ {} hai comprato uno scudo spendendo {} palle! Ridurrà il bottino del prossimo furto mentre sei a casa.",
+        username, cost
+    );
+}
+
 constexpr std::array commands{
     CommandDefinition{"/leaderboard", handle_leaderboard},
     CommandDefinition{"/addquote", handle_add_quote},
     CommandDefinition{"/buyballoon", handle_buy_balloon},
     CommandDefinition{"/buyboost", handle_buy_boost},
+    CommandDefinition{"/buyshield", handle_buy_shield},
     CommandDefinition{"/buyfurniture", handle_buy_furniture},
     CommandDefinition{"/quotes", handle_quotes},
     CommandDefinition{"/delquote", handle_delete_quote},
@@ -653,6 +686,8 @@ std::string raid_event_reply(const RaidEvent &event, const zodiac::Overrides &si
         reply += ", che era in giro";
     } else if (event.balloon_popped) {
         reply += ", bucandogli il palloncino";
+    } else if (event.shield_absorbed > 0) {
+        reply += std::format(", il cui scudo ha fermato {} palle", event.shield_absorbed);
     }
     if (event.raider_percent != event.target_percent) {
         const zodiac::Sign raider_sign = zodiac::sign_of(event.raider, signs);

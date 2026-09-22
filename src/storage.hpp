@@ -63,6 +63,8 @@ struct ConquisterState {
     Counters shields;
     /* Users mapped to the multiplier their next hold earns, until someone takes the place from them. */
     Counters boosts;
+    /* One-use protection that reduces the loot of the next successful raid. */
+    Counters raid_shields;
     /* Where each player lives: an id of ours, drawn once, which spells out a point on the map. */
     Counters ids;
     /* Players known to be on Telegram, mapped to their id there, so a message can reach them. */

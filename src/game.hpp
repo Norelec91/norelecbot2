@@ -39,9 +39,16 @@ struct ClaimResult {
     int zodiac_percent = 100;
 };
 
-enum class BalloonStatus { bought, already_owned, has_boost, insufficient_score };
+enum class BalloonStatus { bought, already_owned, has_boost, has_raid_shield, insufficient_score };
 
-enum class BoostStatus { bought, already_owned, has_balloon, insufficient_score };
+enum class BoostStatus { bought, already_owned, has_balloon, has_raid_shield, insufficient_score };
+
+enum class RaidShieldStatus { bought, already_owned, has_balloon, has_boost, insufficient_score };
+
+struct RaidShieldResult {
+    RaidShieldStatus status = RaidShieldStatus::bought;
+    std::int64_t available_score = 0;
+};
 
 enum class FurnitureStatus { bought, too_many, insufficient_score };
 
@@ -120,6 +127,8 @@ struct RaidEvent {
     int raider_percent = 100;
     int target_percent = 100;
     bool balloon_popped = false;
+    /* A purchased shield absorbed part of this raid's potential loot and was consumed. */
+    std::int64_t shield_absorbed = 0;
     /* The target was away, so there was nothing to get past. */
     bool undefended = false;
     /* Whether each of them is known to be on Telegram, where a mention reaches them. */
@@ -223,6 +232,13 @@ void debug_set(Storage &storage, const std::string &username, bool wanted);
     int cost,
     std::int64_t now,
     std::int64_t shield_seconds
+);
+
+[[nodiscard]] RaidShieldResult raid_shield_buy(
+    Storage &storage,
+    const std::string &username,
+    int cost,
+    std::int64_t now
 );
 
 /* Sends a player to rob another one, if he is at home and the target is somebody the bot knows.
