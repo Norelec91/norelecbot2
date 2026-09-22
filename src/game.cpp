@@ -748,6 +748,10 @@ BoostResult boost_buy(
         if (const auto boost = find_entry(state.boosts, username); boost != state.boosts.end()) {
             return BoostResult{BoostStatus::already_owned, score, boost->second};
         }
+        /* A boost bought during a hold would multiply even the time before its purchase. */
+        if (state.current && text::equals_ignore_case(state.current->username, username)) {
+            return BoostResult{BoostStatus::holding_place, score};
+        }
         if (find_entry(state.balloons, username) != state.balloons.end()) {
             return BoostResult{BoostStatus::has_balloon, score};
         }

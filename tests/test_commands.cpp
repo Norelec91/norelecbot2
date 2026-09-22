@@ -166,6 +166,24 @@ TEST_CASE("the bot answers the commands it knows and ignores the rest") {
     CHECK(std::filesystem::exists(config.conquister_path));
 }
 
+TEST_CASE("buyboost refuses an existing hold without charging the player") {
+    const TestPaths paths{"boost-current-hold-reply-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":1,"username":"alice","since":0},)"
+             << R"("scores":{"alice":2000},"quotes_added":{}})";
+    }
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{paths.conquister, paths.quotes};
+    const CommandContext context{.storage = storage, .config = config, .user_id = 1, .username = "alice"};
+
+    CHECK(command_dispatch(context, "/buyboost") ==
+          "alice sei già in @TheConquister37: torna sul tuo pianeta prima di comprare il boost per il prossimo possesso.");
+    CHECK(conquister_user(storage, "alice")->score == 2000);
+}
+
 TEST_CASE("the balloon replies are the ones the players read") {
     const TestPaths paths{"balloon-reply-test"};
     const std::int64_t now = std::chrono::duration_cast<std::chrono::seconds>(

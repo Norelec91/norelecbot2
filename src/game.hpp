@@ -41,7 +41,7 @@ struct ClaimResult {
 
 enum class BalloonStatus { bought, already_owned, has_boost, insufficient_score };
 
-enum class BoostStatus { bought, already_owned, has_balloon, insufficient_score };
+enum class BoostStatus { bought, already_owned, holding_place, has_balloon, insufficient_score };
 
 enum class RaidShieldStatus { bought, already_owned, has_balloon, has_boost, insufficient_score };
 

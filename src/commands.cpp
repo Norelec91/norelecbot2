@@ -570,6 +570,13 @@ std::string handle_buy_boost(const CommandContext &context, std::string_view) {
     if (result.status == BoostStatus::already_owned) {
         return std::format("{} hai già un boost x{} pronto.", username, result.multiplier);
     }
+    if (result.status == BoostStatus::holding_place) {
+        return std::format(
+            "{} sei già in {}: torna sul tuo pianeta prima di comprare il boost per il prossimo possesso.",
+            username,
+            conquister_place
+        );
+    }
     if (result.status == BoostStatus::has_balloon) {
         return std::format("{} hai un palloncino: il boost puoi comprarlo dopo.", username);
     }

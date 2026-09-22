@@ -301,6 +301,35 @@ TEST_CASE("a boost multiplies what the hold earns, once") {
     }
 }
 
+TEST_CASE("a boost cannot be bought retroactively during the current hold") {
+    const TestPaths paths{"boost-current-hold-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":1,"username":"alice","since":0},)"
+             << R"("scores":{"alice":2000,"bob":0},"quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+
+    const BoostResult refused = boost_buy(storage, "alice", 1500, 3, 3599);
+    CHECK(refused.status == BoostStatus::holding_place);
+    CHECK(refused.available_score == 2000);
+    CHECK(conquister_user(storage, "alice")->score == 2000);
+    const Json saved = read_json(paths.conquister);
+    const bool has_boost = saved.contains("boosts") && !saved.at("boosts").empty();
+    CHECK_FALSE(has_boost);
+
+    const RaidResult left = raid_start(storage, 1, "alice", "alice", 3600, RaidRules{});
+    CHECK(left.status == RaidStatus::left_place);
+    CHECK(left.boost_multiplier == 0);
+    CHECK(left.earned == earnings("alice", 3600, 3600));
+
+    CHECK(boost_buy(storage, "alice", 1500, 3, 3601).status == BoostStatus::bought);
+    CHECK(conquister_claim(storage, 1, "alice", 4000).status == ClaimStatus::taken);
+    const ClaimResult next = conquister_claim(storage, 2, "bob", 4100);
+    CHECK(next.boost_multiplier == 3);
+    CHECK(next.earned == earnings("alice", 100, 4100, 3));
+}
+
 TEST_CASE("a balloon rules out a boost") {
     const TestPaths paths{"boost-balloon-test"};
     Storage storage{paths.conquister, paths.quotes};
