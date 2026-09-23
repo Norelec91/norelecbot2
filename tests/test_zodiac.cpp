@@ -62,6 +62,19 @@ TEST_CASE("the house turns every day") {
     CHECK(zodiac::element_of_day(noon) == zodiac::element_of_day(noon + (4 * day)));
 }
 
+TEST_CASE("the next zodiac day starts at local midnight") {
+    constexpr std::int64_t noon = 1789560000;
+    const std::int64_t start = zodiac::day_start(noon);
+    const std::int64_t next = zodiac::next_day_start(noon);
+    CHECK(start <= noon);
+    CHECK(zodiac::day_start(next - 1) == start);
+    CHECK(zodiac::day_start(next) == next);
+    CHECK(next > noon);
+    CHECK(next - noon <= 86400);
+    CHECK(zodiac::element_of_day(next - 1) == zodiac::element_of_day(noon));
+    CHECK(zodiac::element_of_day(next) != zodiac::element_of_day(noon));
+}
+
 TEST_CASE("fire and water are opposed, air and earth are opposed") {
     CHECK(zodiac::opposed(zodiac::Element::fire, zodiac::Element::water));
     CHECK(zodiac::opposed(zodiac::Element::water, zodiac::Element::fire));

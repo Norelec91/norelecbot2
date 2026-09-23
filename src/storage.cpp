@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <chrono>
 #include <exception>
 #include <filesystem>
 #include <format>
@@ -62,6 +63,19 @@ Counters parse_counters(const Json &state, const char *name) {
     return counters;
 }
 
+/* Retired timed balloons become ordinary balloons, preserving paid items from old saves. */
+Counters parse_balloons(const Json &state) {
+    Counters balloons = parse_counters(state, "balloons");
+    const std::int64_t now = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    for (const auto &[player, expires] : parse_counters(state, "shields")) {
+        if (expires > now && balloons.find(player) == balloons.end()) {
+            balloons[player] = 0;
+        }
+    }
+    return balloons;
+}
+
 Authors parse_authors(const Json &state, const char *name) {
     Authors authors;
     const auto section = state.find(name);
@@ -112,6 +126,7 @@ std::vector<InvestmentDeposit> parse_investments(const Json &state) {
             .player = entry.at("player").get<std::string>(),
             .amount = integer(entry.at("amount")),
             .since = integer(entry.at("since")),
+            .fixed_until = entry.contains("fixed_until") ? integer(entry.at("fixed_until")) : -1,
         };
         if (deposit.player.empty() || deposit.amount <= 0) {
             throw std::invalid_argument("invalid investment deposit");
@@ -119,6 +134,17 @@ std::vector<InvestmentDeposit> parse_investments(const Json &state) {
         deposits.push_back(std::move(deposit));
     }
     return deposits;
+}
+
+Counters parse_investment_magnitudes(const Json &state) {
+    Counters magnitudes = parse_counters(state, "investment_magnitudes");
+    for (const auto &[day, magnitude] : magnitudes) {
+        static_cast<void>(day);
+        if (magnitude < 0 || magnitude > 100) {
+            throw std::invalid_argument("investment magnitude is outside 0% to 100%");
+        }
+    }
+    return magnitudes;
 }
 
 /* Missing sections count as empty, like in the original C version. */
@@ -138,9 +164,8 @@ ConquisterState parse_state(const Json &json) {
         std::move(holder),
         parse_counters(json, "scores"),
         parse_counters(json, "quotes_added"),
-        parse_counters(json, "balloons"),
+        parse_balloons(json),
         parse_counters(json, "cooldowns"),
-        parse_counters(json, "shields"),
         parse_counters(json, "boosts"),
         parse_counters(json, "raid_shields"),
         parse_counters(json, "raid_resistance_levels"),
@@ -155,6 +180,7 @@ ConquisterState parse_state(const Json &json) {
         parse_authors(json, "link_requests"),
         parse_raids(json),
         parse_investments(json),
+        parse_investment_magnitudes(json),
         parse_authors(json, "quote_authors"),
         parse_authors(json, "furniture"),
         parse_counters(json, "debugging"),
@@ -175,7 +201,8 @@ Json state_to_json(const ConquisterState &state) {
     });
     Json investments = Json::array();
     std::ranges::transform(state.investments, std::back_inserter(investments), [](const InvestmentDeposit &deposit) {
-        return Json{{"player", deposit.player}, {"amount", deposit.amount}, {"since", deposit.since}};
+        return Json{{"player", deposit.player}, {"amount", deposit.amount}, {"since", deposit.since},
+                    {"fixed_until", deposit.fixed_until}};
     });
     Json current = nullptr;
     if (state.current) {
@@ -191,7 +218,6 @@ Json state_to_json(const ConquisterState &state) {
         {"quotes_added", state.quotes_added},
         {"balloons", state.balloons},
         {"cooldowns", state.cooldowns},
-        {"shields", state.shields},
         {"boosts", state.boosts},
         {"raid_shields", state.raid_shields},
         {"raid_resistance_levels", state.raid_resistance_levels},
@@ -206,20 +232,25 @@ Json state_to_json(const ConquisterState &state) {
         {"link_requests", state.link_requests},
         {"raids", std::move(raids)},
         {"investments", std::move(investments)},
+        {"investment_magnitudes", state.investment_magnitudes},
         {"quote_authors", state.quote_authors},
         {"furniture", state.furniture},
         {"debugging", state.debugging},
     };
 }
 
-std::optional<ConquisterState> load_state(const std::string &path) {
+std::optional<ConquisterState> load_state(const std::string &path, bool *has_legacy_shields = nullptr) {
     if (file_missing(path, "Conquister state")) {
         return ConquisterState{};
     }
     std::string error;
     if (const std::optional<Json> json = parse_file(path, error)) {
         try {
-            return parse_state(*json);
+            ConquisterState state = parse_state(*json);
+            if (has_legacy_shields != nullptr) {
+                *has_legacy_shields = json->contains("shields");
+            }
+            return state;
         } catch (const std::exception &failure) {
             error = failure.what();
         }
@@ -281,10 +312,25 @@ Storage::Storage(std::string conquister_path, std::string quotes_path)
     : conquister_path_(std::move(conquister_path)),
       quotes_path_(std::move(quotes_path)),
       random_(std::random_device{}()) {
-    const bool state_valid = load_state(conquister_path_).has_value();
+    bool has_legacy_shields = false;
+    const std::optional<ConquisterState> state = load_state(conquister_path_, &has_legacy_shields);
     const bool quotes_valid = load_quotes(quotes_path_).has_value();
-    if (!state_valid || !quotes_valid) {
+    if (!state || !quotes_valid) {
         throw StorageError("JSON storage could not be loaded");
+    }
+    ConquisterState migrated = *state;
+    bool has_legacy_investments = false;
+    const std::int64_t cutover = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    for (InvestmentDeposit &deposit : migrated.investments) {
+        if (deposit.fixed_until == -1) {
+            deposit.fixed_until = std::max(cutover, deposit.since);
+            has_legacy_investments = true;
+        }
+    }
+    if ((has_legacy_shields || has_legacy_investments) &&
+        !save_json(conquister_path_, state_to_json(migrated))) {
+        throw StorageError("Legacy game state could not be migrated");
     }
     log_info("JSON storage ready (conquister={}, quotes={})", conquister_path_, quotes_path_);
 }

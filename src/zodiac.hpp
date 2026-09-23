@@ -31,6 +31,10 @@ using Overrides = std::span<const Override>;
 [[nodiscard]] Sign sign_of(std::string_view username, Overrides overrides = {});
 /* The house of the day, which turns at midnight: water, fire, air, earth. */
 [[nodiscard]] Element element_of_day(std::int64_t now);
+/* First second of the current local day. */
+[[nodiscard]] std::int64_t day_start(std::int64_t now);
+/* First second of the next local day, accounting for daylight-saving changes. */
+[[nodiscard]] std::int64_t next_day_start(std::int64_t now);
 [[nodiscard]] std::string_view element_name(Element element);
 /* Fire against water, air against earth. */
 [[nodiscard]] bool opposed(Element first, Element second);

@@ -50,6 +50,7 @@ constexpr std::size_t balloon_attempts = 4;
 /* A successful raid halves the next loot, up to three times; one level recovers every two hours. */
 constexpr std::int64_t max_raid_resistance = 3;
 constexpr std::int64_t raid_resistance_recovery_seconds = 2 * 60 * 60;
+constexpr std::int64_t investment_day_seconds = 24 * 60 * 60;
 
 Counters::iterator find_entry(Counters &counters, const std::string &username) {
     return std::ranges::find_if(counters, [&username](const Counters::value_type &entry) {
@@ -281,7 +282,7 @@ std::optional<std::string> legacy_owner(const ConquisterState &state, std::int64
 /* The name as it is written on file, whatever spelling the message used. */
 std::optional<std::string> known_player(const ConquisterState &state, std::string_view name) {
     for (const Counters *counters : {&state.scores, &state.quotes_added, &state.ids,
-                                     &state.balloons, &state.cooldowns, &state.shields,
+                                     &state.balloons, &state.cooldowns,
                                      &state.boosts, &state.raid_shields,
                                      &state.raid_resistance_levels}) {
         if (const Counters::value_type *found = find_ignore_case(*counters, name); found != nullptr) {
@@ -330,6 +331,46 @@ std::optional<std::string> player_by_name(const ConquisterState &state, std::str
         return irc->second;
     }
     return known_player(state, name);
+}
+
+int investment_magnitude(StorageSession &session, ConquisterState &state, std::int64_t when) {
+    const std::string day = std::to_string(zodiac::day_start(when));
+    if (const auto found = state.investment_magnitudes.find(day); found != state.investment_magnitudes.end()) {
+        return static_cast<int>(found->second);
+    }
+    const int magnitude = static_cast<int>(session.random_index(101));
+    state.investment_magnitudes[day] = magnitude;
+    return magnitude;
+}
+
+int investment_daily_rate(int zodiac_percent, int magnitude) {
+    return zodiac_percent == 125 ? magnitude : zodiac_percent == 75 ? -magnitude : 0;
+}
+
+long double investment_value(StorageSession &session, ConquisterState &state, const InvestmentDeposit &deposit,
+                             std::int64_t now, zodiac::Overrides signs) {
+    long double balance = static_cast<long double>(deposit.amount);
+    const std::int64_t fixed_end = std::min(now, deposit.fixed_until);
+    if (fixed_end > deposit.since) {
+        const long double elapsed = static_cast<long double>(fixed_end) -
+                                    static_cast<long double>(deposit.since);
+        balance *= std::pow(1.03L, elapsed / static_cast<long double>(investment_day_seconds));
+    }
+    std::int64_t cursor = std::max(deposit.since, deposit.fixed_until);
+    while (cursor < now) {
+        const std::int64_t day_end = zodiac::next_day_start(cursor);
+        const std::int64_t day_seconds = day_end - zodiac::day_start(cursor);
+        const std::int64_t elapsed = std::min(now, day_end) - cursor;
+        const int percent = zodiac::percent_for(display_name(state, deposit.player), cursor, signs);
+        const int rate = investment_daily_rate(percent, investment_magnitude(session, state, cursor));
+        balance *= 1.0L + static_cast<long double>(rate) / 100.0L *
+                   static_cast<long double>(elapsed) / static_cast<long double>(day_seconds);
+        if (balance <= 0) {
+            return 0;
+        }
+        cursor += elapsed;
+    }
+    return balance;
 }
 
 }
@@ -401,7 +442,7 @@ LinkStatus player_link(Storage &storage, std::int64_t user_id, const std::string
         }
         const auto has_assets = [&state](const std::string &key) {
             const std::array items{&state.scores, &state.quotes_added, &state.balloons,
-                                   &state.cooldowns, &state.shields, &state.boosts,
+                                   &state.cooldowns, &state.boosts,
                                    &state.raid_shields, &state.raid_resistance_levels,
                                    &state.raid_resistance_since, &state.ids, &state.debugging};
             return std::ranges::any_of(items, [&key](const Counters *entries) {
@@ -497,24 +538,6 @@ ClaimResult conquister_claim(
             outcome.previous_user_id = !ambiguous_legacy(state, holder) &&
                 counter(state.telegram_ids, holder) != 0
                 ? counter(state.telegram_ids, holder) : state.current->user_id;
-            if (const auto shield = find_entry(state.shields, holder); shield != state.shields.end()) {
-                if (shield->second > now && rules.ignores_shield) {
-                    state.shields.erase(holder);
-                    outcome.balloon_popped = true;
-                } else if (shield->second > now) {
-                    if (rules.cooldown_seconds > 0) {
-                        state.cooldowns[username] = now + rules.cooldown_seconds;
-                        outcome.penalty_seconds = rules.cooldown_seconds;
-                    }
-                    outcome.attack_cost = charge_attacker(state, username, rules.attack_cost);
-                    outcome.status = ClaimStatus::defended;
-                    outcome.previous_username = display_name(state, holder);
-                    outcome.previous_key = holder;
-                    outcome.shield_seconds = shield->second - now;
-                    return outcome;
-                }
-                state.shields.erase(holder);
-            }
             if (const auto balloon = find_entry(state.balloons, holder); balloon != state.balloons.end()) {
                 const std::int64_t attempt = balloon->second + 1;
                 if (static_cast<std::int64_t>(session.random_index(balloon_attempts)) >= attempt) {
@@ -558,12 +581,11 @@ ClaimResult conquister_claim(
         break;
     case ClaimStatus::defended:
         log_info(
-            "claim defended user={} holder={} next_chance={} penalty={} shield={} cost={}",
+            "claim defended user={} holder={} next_chance={} penalty={} cost={}",
             username,
             result.previous_username,
             result.next_chance,
             result.penalty_seconds,
-            result.shield_seconds,
             result.attack_cost
         );
         break;
@@ -725,19 +747,11 @@ Authors furniture_all(Storage &storage) {
 BalloonResult balloon_buy(
     Storage &storage,
     const std::string &username,
-    int cost,
-    std::int64_t now,
-    std::int64_t shield_seconds
+    int cost
 ) {
     const BalloonResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         const std::int64_t score = counter(state.scores, username);
-        if (const auto shield = find_entry(state.shields, username); shield != state.shields.end()) {
-            if (shield->second > now) {
-                return BalloonResult{BalloonStatus::already_owned, score, shield->second - now};
-            }
-            state.shields.erase(username);
-        }
         if (find_entry(state.balloons, username) != state.balloons.end()) {
             return BalloonResult{BalloonStatus::already_owned, score};
         }
@@ -749,27 +763,22 @@ BalloonResult balloon_buy(
         }
         state.scores[username] = score - cost;
         state.raid_shields.erase(username);
-        if (shield_seconds > 0) {
-            state.shields[username] = now + shield_seconds;
-        } else {
-            state.balloons[username] = 0;
-        }
-        return BalloonResult{BalloonStatus::bought, score - cost, shield_seconds};
+        state.balloons[username] = 0;
+        return BalloonResult{BalloonStatus::bought, score - cost};
     });
 
     if (result.status == BalloonStatus::bought) {
         log_info(
-            "balloon bought user={} cost={} left={} shield={}",
+            "balloon bought user={} cost={} left={}",
             username,
             cost,
-            result.available_score,
-            result.shield_seconds
+            result.available_score
         );
     }
     return result;
 }
 
-RaidShieldResult raid_shield_buy(Storage &storage, const std::string &username, int cost, std::int64_t now) {
+RaidShieldResult raid_shield_buy(Storage &storage, const std::string &username, int cost) {
     const RaidShieldResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         const std::int64_t score = counter(state.scores, username);
@@ -778,12 +787,6 @@ RaidShieldResult raid_shield_buy(Storage &storage, const std::string &username, 
         }
         if (find_entry(state.balloons, username) != state.balloons.end()) {
             return RaidShieldResult{RaidShieldStatus::has_balloon, score};
-        }
-        if (const auto balloon = find_entry(state.shields, username); balloon != state.shields.end()) {
-            if (balloon->second > now) {
-                return RaidShieldResult{RaidShieldStatus::has_balloon, score};
-            }
-            state.shields.erase(username);
         }
         if (find_entry(state.boosts, username) != state.boosts.end()) {
             return RaidShieldResult{RaidShieldStatus::has_boost, score};
@@ -803,7 +806,7 @@ RaidShieldResult raid_shield_buy(Storage &storage, const std::string &username, 
 
 InvestmentResult investment_deposit(Storage &storage, const std::string &player,
                                     std::string_view target, RaidTargetKind platform,
-                                    std::int64_t amount, std::int64_t now) {
+                                    std::int64_t amount, std::int64_t now, zodiac::Overrides signs) {
     return storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         InvestmentResult result;
@@ -820,10 +823,13 @@ InvestmentResult investment_deposit(Storage &storage, const std::string &player,
                 result.score = score;
             } else {
                 state.scores[player] = score - amount;
-                state.investments.push_back({player, amount, now});
+                state.investments.push_back({player, amount, now, 0});
                 result.status = InvestmentStatus::deposited;
                 result.amount = amount;
                 result.score = score - amount;
+                result.zodiac_percent = zodiac::percent_for(display_name(state, player), now, signs);
+                result.daily_rate = investment_daily_rate(result.zodiac_percent,
+                    investment_magnitude(session, state, now));
             }
         }
         return result;
@@ -832,7 +838,7 @@ InvestmentResult investment_deposit(Storage &storage, const std::string &player,
 
 InvestmentResult investment_withdraw(Storage &storage, const std::string &player,
                                      std::string_view target, RaidTargetKind platform,
-                                     std::int64_t now) {
+                                     std::int64_t now, zodiac::Overrides signs) {
     return storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         InvestmentResult result;
@@ -845,29 +851,28 @@ InvestmentResult investment_withdraw(Storage &storage, const std::string &player
             return result;
         }
         long double total = 0;
-        std::int64_t principal = 0;
+        long double principal = 0;
         bool found = false;
         for (const InvestmentDeposit &deposit : state.investments) {
             if (deposit.player != player) {
                 continue;
             }
             found = true;
-            const long double elapsed = now > deposit.since
-                ? static_cast<long double>(now) - static_cast<long double>(deposit.since) : 0;
-            total += static_cast<long double>(deposit.amount) * std::pow(1.03L, elapsed / 86400.0L);
+            total += investment_value(session, state, deposit, now, signs);
             if (total >= static_cast<long double>(std::numeric_limits<std::int64_t>::max()) ||
                 !std::isfinite(total)) {
                 result.status = InvestmentStatus::balance_limit;
                 return result;
             }
-            principal += deposit.amount;
+            principal += static_cast<long double>(deposit.amount);
         }
         if (!found) {
             result.status = InvestmentStatus::no_investment;
             return result;
         }
         const std::int64_t score = counter(state.scores, player);
-        if (total > static_cast<long double>(std::numeric_limits<std::int64_t>::max() - score)) {
+        if (principal >= static_cast<long double>(std::numeric_limits<std::int64_t>::max()) ||
+            total > static_cast<long double>(std::numeric_limits<std::int64_t>::max() - score)) {
             result.status = InvestmentStatus::balance_limit;
             return result;
         }
@@ -879,7 +884,7 @@ InvestmentResult investment_withdraw(Storage &storage, const std::string &player
         });
         result.status = InvestmentStatus::withdrawn;
         result.amount = payout;
-        result.interest = payout - principal;
+        result.interest = payout - static_cast<std::int64_t>(principal);
         result.score = score + payout;
         return result;
     });
@@ -996,12 +1001,8 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 event.target_emoji = furniture_of(state, raid.target);
                 const bool on_home_planet = on_own_planet(state, raid.target);
                 event.undefended = !on_home_planet;
-                const auto shield = find_entry(state.shields, raid.target);
                 const auto balloon = find_entry(state.balloons, raid.target);
-                if (on_home_planet && shield != state.shields.end() && shield->second > now) {
-                    event.kind = RaidEvent::Kind::defended;
-                    event.cost = charge_attacker(state, raid.raider, rules.attack_cost);
-                } else if (on_home_planet && balloon != state.balloons.end()) {
+                if (on_home_planet && balloon != state.balloons.end()) {
                     const std::int64_t attempt = balloon->second + 1;
                     if (static_cast<std::int64_t>(session.random_index(balloon_attempts)) >= attempt) {
                         balloon->second = attempt;
@@ -1095,8 +1096,7 @@ BoostResult boost_buy(
     Storage &storage,
     const std::string &username,
     int cost,
-    std::int64_t multiplier,
-    std::int64_t now
+    std::int64_t multiplier
 ) {
     const BoostResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
@@ -1110,12 +1110,6 @@ BoostResult boost_buy(
         }
         if (find_entry(state.balloons, username) != state.balloons.end()) {
             return BoostResult{BoostStatus::has_balloon, score};
-        }
-        if (const auto shield = find_entry(state.shields, username); shield != state.shields.end()) {
-            if (shield->second > now) {
-                return BoostResult{BoostStatus::has_balloon, score};
-            }
-            state.shields.erase(username);
         }
         if (score < cost) {
             return BoostResult{BoostStatus::insufficient_score, score};

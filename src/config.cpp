@@ -136,13 +136,6 @@ constexpr std::array settings{
     Setting{"NORELECBOT_BOOST_MULTIPLIER", [](AppConfig &config, std::string_view value) {
         return set_number(config.boost_multiplier, value, AppConfig::default_boost_multiplier, 1, 100);
     }},
-    Setting{"NORELECBOT_SHIELD_USERS", [](AppConfig &config, std::string_view value) {
-        config.shield_users = split_names(value);
-        return true;
-    }},
-    Setting{"NORELECBOT_SHIELD_SECONDS", [](AppConfig &config, std::string_view value) {
-        return set_number(config.shield_seconds, value, AppConfig::default_shield_seconds, 0);
-    }},
     Setting{"NORELECBOT_CONQUISTER_CHAT_ID", [](AppConfig &config, std::string_view value) {
         return set_number(config.conquister_chat_id, value, std::int64_t{0});
     }},

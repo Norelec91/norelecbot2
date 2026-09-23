@@ -553,10 +553,14 @@ TEST_CASE("We invests and withdraws only with the owner's platform name") {
     CHECK(command_dispatch(alice, "We @Bob 1000")->contains("solo sul tuo pianeta"));
     CHECK(command_dispatch(alice, "We @Alice 0")->contains("maggiore di zero"));
     CHECK(command_dispatch(alice, "We @Alice 3000")->contains("solo 2000"));
-    CHECK(command_dispatch(alice, "We @Alice 1000")->contains("hai investito 1000"));
+    const std::string deposited = command_dispatch(alice, "We @Alice 1000").value_or("");
+    CHECK(deposited.contains("hai investito 1000"));
+    CHECK(deposited.contains("oroscopo "));
     CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 1000);
-    CHECK(command_dispatch(alice, "We @Alice")->contains("hai ritirato 1000"));
-    CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 2000);
+    const std::string withdrawn = command_dispatch(alice, "We @Alice").value_or("");
+    CHECK(withdrawn.contains("hai ritirato"));
+    CHECK(withdrawn.contains("rendimento:"));
+    CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score >= 1999);
     CHECK(command_dispatch(alice, "We @Alice") == "🪐 Alice sei già in @Alice!");
 
     CommandContext irc{.storage = storage, .config = config, .user_id = 0, .username = "Bob"};
@@ -566,7 +570,7 @@ TEST_CASE("We invests and withdraws only with the owner's platform name") {
         return 0;
     });
     CHECK(command_dispatch(irc, "We Bob 1000")->contains("hai investito 1000"));
-    CHECK(command_dispatch(irc, "We Bob")->contains("hai ritirato 1000"));
+    CHECK(command_dispatch(irc, "We Bob")->contains("hai ritirato"));
 }
 
 TEST_CASE("an ambiguous old holder is not claimed by an IRC namesake") {

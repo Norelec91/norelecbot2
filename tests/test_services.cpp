@@ -9,6 +9,7 @@
 #include <doctest/doctest.h>
 
 #include <fstream>
+#include <chrono>
 
 using namespace norelecbot;
 
@@ -17,6 +18,27 @@ namespace {
 /* Seconds held, times the boost, times what the house of the day was worth to the holder. */
 std::int64_t earnings(std::string_view holder, std::int64_t seconds, std::int64_t now, std::int64_t boost = 1) {
     return seconds * boost * zodiac::percent_for(holder, now) / 100;
+}
+
+int bank_rate(std::string_view holder, std::int64_t now, int magnitude, zodiac::Overrides signs = {}) {
+    const int percent = zodiac::percent_for(holder, now, signs);
+    return percent == 125 ? magnitude : percent == 75 ? -magnitude : 0;
+}
+
+std::string_view matching_sign(zodiac::Element house) {
+    return house == zodiac::Element::water ? "cancro" :
+        house == zodiac::Element::fire ? "leone" :
+        house == zodiac::Element::air ? "gemelli" : "toro";
+}
+
+std::string_view opposing_sign(zodiac::Element house) {
+    return house == zodiac::Element::water ? "leone" :
+        house == zodiac::Element::fire ? "cancro" :
+        house == zodiac::Element::air ? "toro" : "gemelli";
+}
+
+std::string_view neutral_sign(zodiac::Element house) {
+    return house == zodiac::Element::water || house == zodiac::Element::fire ? "gemelli" : "cancro";
 }
 
 Json read_json(const std::string &path) {
@@ -107,9 +129,9 @@ TEST_CASE("a balloon defends the holder until it pops") {
 
     static_cast<void>(conquister_claim(storage, 1, "alice", 0));
     static_cast<void>(conquister_claim(storage, 2, "bob", 1000));
-    CHECK(balloon_buy(storage, "alice", 1000, 0, 0).status == BalloonStatus::bought);
-    CHECK(balloon_buy(storage, "alice", 0, 0, 0).status == BalloonStatus::already_owned);
-    CHECK(balloon_buy(storage, "carol", 1000, 0, 0).status == BalloonStatus::insufficient_score);
+    CHECK(balloon_buy(storage, "alice", 1000).status == BalloonStatus::bought);
+    CHECK(balloon_buy(storage, "alice", 0).status == BalloonStatus::already_owned);
+    CHECK(balloon_buy(storage, "carol", 1000).status == BalloonStatus::insufficient_score);
     static_cast<void>(conquister_claim(storage, 1, "alice", 2000));
 
     int attempts = 0;
@@ -145,14 +167,14 @@ TEST_CASE("a penalty blocks the next attempts") {
     }
     Storage storage{paths.conquister, paths.quotes};
 
-    const ClaimResult blocked = conquister_claim(storage, 2, "bob", 700, ClaimRules{.cooldown_seconds = 300, .attack_cost = 0, .ignores_shield = false, .signs = {}});
+    const ClaimResult blocked = conquister_claim(storage, 2, "bob", 700, ClaimRules{.cooldown_seconds = 300, .attack_cost = 0, .signs = {}});
     CHECK(blocked.status == ClaimStatus::cooldown);
     CHECK(blocked.penalty_seconds == 300);
 
-    const ClaimResult others = conquister_claim(storage, 3, "carol", 700, ClaimRules{.cooldown_seconds = 300, .attack_cost = 0, .ignores_shield = false, .signs = {}});
+    const ClaimResult others = conquister_claim(storage, 3, "carol", 700, ClaimRules{.cooldown_seconds = 300, .attack_cost = 0, .signs = {}});
     CHECK(others.status == ClaimStatus::taken);
 
-    const ClaimResult expired = conquister_claim(storage, 2, "bob", 1000, ClaimRules{.cooldown_seconds = 300, .attack_cost = 0, .ignores_shield = false, .signs = {}});
+    const ClaimResult expired = conquister_claim(storage, 2, "bob", 1000, ClaimRules{.cooldown_seconds = 300, .attack_cost = 0, .signs = {}});
     CHECK(expired.status == ClaimStatus::taken);
 }
 
@@ -162,13 +184,13 @@ TEST_CASE("a failed balloon attempt hands out the penalty") {
 
     static_cast<void>(conquister_claim(storage, 1, "alice", 0));
     static_cast<void>(conquister_claim(storage, 2, "bob", 1000));
-    CHECK(balloon_buy(storage, "alice", 1000, 0, 0).status == BalloonStatus::bought);
+    CHECK(balloon_buy(storage, "alice", 1000).status == BalloonStatus::bought);
     static_cast<void>(conquister_claim(storage, 1, "alice", 2000));
 
-    const ClaimResult attack = conquister_claim(storage, 2, "bob", 3000, ClaimRules{.cooldown_seconds = 300, .attack_cost = 0, .ignores_shield = false, .signs = {}});
+    const ClaimResult attack = conquister_claim(storage, 2, "bob", 3000, ClaimRules{.cooldown_seconds = 300, .attack_cost = 0, .signs = {}});
     if (attack.status == ClaimStatus::defended) {
         CHECK(attack.penalty_seconds == 300);
-        const ClaimResult again = conquister_claim(storage, 2, "bob", 3100, ClaimRules{.cooldown_seconds = 300, .attack_cost = 0, .ignores_shield = false, .signs = {}});
+        const ClaimResult again = conquister_claim(storage, 2, "bob", 3100, ClaimRules{.cooldown_seconds = 300, .attack_cost = 0, .signs = {}});
         CHECK(again.status == ClaimStatus::cooldown);
         CHECK(again.penalty_seconds == 200);
     } else {
@@ -209,62 +231,29 @@ TEST_CASE("a quote saved before a failed state save is rolled back") {
     CHECK(page.items[0] == "originale");
 }
 
-TEST_CASE("one player's balloon cannot be popped until it deflates") {
-    const TestPaths paths{"shield-test"};
-    Storage storage{paths.conquister, paths.quotes};
-
-    static_cast<void>(conquister_claim(storage, 1, "alice", 0));
-    static_cast<void>(conquister_claim(storage, 2, "bob", 5000));
-    const BalloonResult bought = balloon_buy(storage, "alice", 1000, 5000, 3600);
-    CHECK(bought.status == BalloonStatus::bought);
-    CHECK(bought.shield_seconds == 3600);
-    const BalloonResult again = balloon_buy(storage, "alice", 0, 5100, 3600);
-    CHECK(again.status == BalloonStatus::already_owned);
-    CHECK(again.shield_seconds == 3500);
-    static_cast<void>(conquister_claim(storage, 1, "alice", 5200));
-
-    const ClaimResult first = conquister_claim(storage, 2, "bob", 5300, ClaimRules{.cooldown_seconds = 300, .attack_cost = 0, .ignores_shield = false, .signs = {}});
-    CHECK(first.status == ClaimStatus::defended);
-    CHECK(first.previous_username == "alice");
-    CHECK(first.shield_seconds == 3300);
-    CHECK(first.penalty_seconds == 300);
-    CHECK(first.next_chance == 0);
-
-    /* Far more attempts than the four an ordinary balloon survives. */
-    for (int attempt = 0; attempt < 20; ++attempt) {
-        const ClaimResult attack = conquister_claim(storage, 2, "bob", 6000 + attempt);
-        CHECK(attack.status == ClaimStatus::defended);
-        CHECK(attack.shield_seconds > 0);
+TEST_CASE("active legacy timed balloons become ordinary balloons") {
+    const TestPaths paths{"legacy-timed-balloon-test"};
+    const std::int64_t now = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << Json{{"current", Json{{"user_id", 1}, {"username", "alice"}, {"since", now - 100}}},
+                     {"scores", Json{{"alice", 1000}}},
+                     {"shields", Json{{"alice", now + 3600}, {"bob", now - 1}}}}.dump();
     }
-
-    const ClaimResult deflated = conquister_claim(storage, 3, "carol", 8700);
-    CHECK(deflated.status == ClaimStatus::taken);
-    CHECK(deflated.previous_username == "alice");
-    CHECK_FALSE(deflated.balloon_popped);
-
-    /* Deflated, so the next one can be bought. */
-    CHECK(balloon_buy(storage, "alice", 0, 8700, 3600).status == BalloonStatus::bought);
-}
-
-TEST_CASE("two shielded players can pop each other's balloon") {
-    const TestPaths paths{"shield-duel-test"};
     Storage storage{paths.conquister, paths.quotes};
-
-    static_cast<void>(conquister_claim(storage, 1, "alice", 0, ClaimRules{.cooldown_seconds = 0, .attack_cost = 0, .ignores_shield = true, .signs = {}}));
-    CHECK(balloon_buy(storage, "alice", 0, 0, 3600).status == BalloonStatus::bought);
-
-    /* carol is an ordinary player: she cannot. */
-    const ClaimResult refused = conquister_claim(storage, 3, "carol", 100);
-    CHECK(refused.status == ClaimStatus::defended);
-    CHECK(refused.shield_seconds == 3500);
-
-    const ClaimResult popped = conquister_claim(storage, 2, "bob", 200, ClaimRules{.cooldown_seconds = 0, .attack_cost = 0, .ignores_shield = true, .signs = {}});
-    CHECK(popped.status == ClaimStatus::taken);
-    CHECK(popped.balloon_popped);
-    CHECK(popped.previous_username == "alice");
-
-    /* Popped for good: alice has to buy another one. */
-    CHECK(balloon_buy(storage, "alice", 0, 300, 3600).status == BalloonStatus::bought);
+    CHECK_FALSE(read_json(paths.conquister).contains("shields"));
+    CHECK(read_json(paths.conquister).at("balloons").at("alice") == 0);
+    CHECK_FALSE(read_json(paths.conquister).at("balloons").contains("bob"));
+    CHECK(balloon_buy(storage, "alice", 0).status == BalloonStatus::already_owned);
+    CHECK(balloon_buy(storage, "bob", 0).status == BalloonStatus::bought);
+    storage.transaction([](StorageSession &session) {
+        session.state().balloons["alice"] = 3;
+        return 0;
+    });
+    const ClaimResult attack = conquister_claim(storage, 2, "bob", now);
+    CHECK(attack.status == ClaimStatus::taken);
+    CHECK(attack.balloon_popped);
 }
 
 TEST_CASE("a boost multiplies what the hold earns, once") {
@@ -276,10 +265,10 @@ TEST_CASE("a boost multiplies what the hold earns, once") {
     const std::int64_t first_hold = earnings("alice", 1000, 1000);
     CHECK(conquister_user(storage, "alice")->score == first_hold);
 
-    const BoostResult bought = boost_buy(storage, "alice", 1000, 3, 1000);
+    const BoostResult bought = boost_buy(storage, "alice", 1000, 3);
     CHECK(bought.status == BoostStatus::bought);
     CHECK(bought.available_score == first_hold - 1000);
-    CHECK(boost_buy(storage, "alice", 0, 3, 1000).status == BoostStatus::already_owned);
+    CHECK(boost_buy(storage, "alice", 0, 3).status == BoostStatus::already_owned);
 
     SUBCASE("it is cashed in when the place is taken away") {
         static_cast<void>(conquister_claim(storage, 1, "alice", 2000));
@@ -297,7 +286,7 @@ TEST_CASE("a boost multiplies what the hold earns, once") {
     }
 
     SUBCASE("it rules out a balloon while it waits") {
-        CHECK(balloon_buy(storage, "alice", 0, 2000, 0).status == BalloonStatus::has_boost);
+        CHECK(balloon_buy(storage, "alice", 0).status == BalloonStatus::has_boost);
     }
 }
 
@@ -310,7 +299,7 @@ TEST_CASE("a boost cannot be bought retroactively during the current hold") {
     }
     Storage storage{paths.conquister, paths.quotes};
 
-    const BoostResult refused = boost_buy(storage, "alice", 1500, 3, 3599);
+    const BoostResult refused = boost_buy(storage, "alice", 1500, 3);
     CHECK(refused.status == BoostStatus::holding_place);
     CHECK(refused.available_score == 2000);
     CHECK(conquister_user(storage, "alice")->score == 2000);
@@ -323,7 +312,7 @@ TEST_CASE("a boost cannot be bought retroactively during the current hold") {
     CHECK(left.boost_multiplier == 0);
     CHECK(left.earned == earnings("alice", 3600, 3600));
 
-    CHECK(boost_buy(storage, "alice", 1500, 3, 3601).status == BoostStatus::bought);
+    CHECK(boost_buy(storage, "alice", 1500, 3).status == BoostStatus::bought);
     CHECK(conquister_claim(storage, 1, "alice", 4000).status == ClaimStatus::taken);
     const ClaimResult next = conquister_claim(storage, 2, "bob", 4100);
     CHECK(next.boost_multiplier == 3);
@@ -334,13 +323,11 @@ TEST_CASE("a balloon rules out a boost") {
     const TestPaths paths{"boost-balloon-test"};
     Storage storage{paths.conquister, paths.quotes};
 
-    CHECK(balloon_buy(storage, "alice", 0, 0, 0).status == BalloonStatus::bought);
-    CHECK(boost_buy(storage, "alice", 0, 3, 0).status == BoostStatus::has_balloon);
+    CHECK(balloon_buy(storage, "alice", 0).status == BalloonStatus::bought);
+    CHECK(boost_buy(storage, "alice", 0, 3).status == BoostStatus::has_balloon);
 
-    CHECK(balloon_buy(storage, "bob", 0, 0, 3600).status == BalloonStatus::bought);
-    CHECK(boost_buy(storage, "bob", 0, 3, 100).status == BoostStatus::has_balloon);
-    /* Once the hour is over the shield is gone and the boost can be bought. */
-    CHECK(boost_buy(storage, "bob", 0, 3, 3700).status == BoostStatus::bought);
+    CHECK(balloon_buy(storage, "bob", 0).status == BalloonStatus::bought);
+    CHECK(boost_buy(storage, "bob", 0, 3).status == BoostStatus::has_balloon);
 }
 
 TEST_CASE("a raid shield costs palle and is replaced only by a paid balloon or boost") {
@@ -351,32 +338,31 @@ TEST_CASE("a raid shield costs palle and is replaced only by a paid balloon or b
     }
     Storage storage{paths.conquister, paths.quotes};
 
-    CHECK(raid_shield_buy(storage, "bob", 1000, 0).status == RaidShieldStatus::insufficient_score);
-    const RaidShieldResult bought = raid_shield_buy(storage, "alice", 1000, 0);
+    CHECK(raid_shield_buy(storage, "bob", 1000).status == RaidShieldStatus::insufficient_score);
+    const RaidShieldResult bought = raid_shield_buy(storage, "alice", 1000);
     CHECK(bought.status == RaidShieldStatus::bought);
     CHECK(bought.available_score == 200);
     CHECK(conquister_user(storage, "alice")->score == 200);
-    CHECK(raid_shield_buy(storage, "alice", 0, 0).status == RaidShieldStatus::already_owned);
-    CHECK(balloon_buy(storage, "alice", 201, 0, 0).status == BalloonStatus::insufficient_score);
+    CHECK(raid_shield_buy(storage, "alice", 0).status == RaidShieldStatus::already_owned);
+    CHECK(balloon_buy(storage, "alice", 201).status == BalloonStatus::insufficient_score);
     CHECK(read_json(paths.conquister).at("raid_shields").at("alice") == 1);
-    CHECK(balloon_buy(storage, "alice", 200, 0, 0).status == BalloonStatus::bought);
+    CHECK(balloon_buy(storage, "alice", 200).status == BalloonStatus::bought);
     CHECK(conquister_user(storage, "alice")->score == 0);
     CHECK_FALSE(read_json(paths.conquister).at("raid_shields").contains("alice"));
-    CHECK(raid_shield_buy(storage, "alice", 0, 0).status == RaidShieldStatus::has_balloon);
+    CHECK(raid_shield_buy(storage, "alice", 0).status == RaidShieldStatus::has_balloon);
 
-    CHECK(balloon_buy(storage, "carol", 0, 0, 0).status == BalloonStatus::bought);
-    CHECK(raid_shield_buy(storage, "carol", 0, 0).status == RaidShieldStatus::has_balloon);
-    CHECK(balloon_buy(storage, "dave", 0, 0, 3600).status == BalloonStatus::bought);
-    CHECK(raid_shield_buy(storage, "dave", 0, 100).status == RaidShieldStatus::has_balloon);
-    CHECK(raid_shield_buy(storage, "dave", 0, 3700).status == RaidShieldStatus::bought);
-    CHECK(boost_buy(storage, "erin", 0, 3, 0).status == BoostStatus::bought);
-    CHECK(raid_shield_buy(storage, "erin", 0, 0).status == RaidShieldStatus::has_boost);
-    CHECK(raid_shield_buy(storage, "frank", 0, 0).status == RaidShieldStatus::bought);
-    CHECK(boost_buy(storage, "frank", 1, 3, 0).status == BoostStatus::insufficient_score);
+    CHECK(balloon_buy(storage, "carol", 0).status == BalloonStatus::bought);
+    CHECK(raid_shield_buy(storage, "carol", 0).status == RaidShieldStatus::has_balloon);
+    CHECK(balloon_buy(storage, "dave", 0).status == BalloonStatus::bought);
+    CHECK(raid_shield_buy(storage, "dave", 0).status == RaidShieldStatus::has_balloon);
+    CHECK(boost_buy(storage, "erin", 0, 3).status == BoostStatus::bought);
+    CHECK(raid_shield_buy(storage, "erin", 0).status == RaidShieldStatus::has_boost);
+    CHECK(raid_shield_buy(storage, "frank", 0).status == RaidShieldStatus::bought);
+    CHECK(boost_buy(storage, "frank", 1, 3).status == BoostStatus::insufficient_score);
     CHECK(read_json(paths.conquister).at("raid_shields").at("frank") == 1);
-    CHECK(boost_buy(storage, "frank", 0, 3, 0).status == BoostStatus::bought);
+    CHECK(boost_buy(storage, "frank", 0, 3).status == BoostStatus::bought);
     CHECK_FALSE(read_json(paths.conquister).at("raid_shields").contains("frank"));
-    CHECK(raid_shield_buy(storage, "frank", 0, 0).status == RaidShieldStatus::has_boost);
+    CHECK(raid_shield_buy(storage, "frank", 0).status == RaidShieldStatus::has_boost);
 }
 
 TEST_CASE("an attempt that a balloon survives costs palle") {
@@ -389,7 +375,7 @@ TEST_CASE("an attempt that a balloon survives costs palle") {
     Storage storage{paths.conquister, paths.quotes};
 
     const ClaimResult attack =
-        conquister_claim(storage, 2, "bob", 10, ClaimRules{.cooldown_seconds = 0, .attack_cost = 100, .ignores_shield = false, .signs = {}});
+        conquister_claim(storage, 2, "bob", 10, ClaimRules{.cooldown_seconds = 0, .attack_cost = 100, .signs = {}});
     if (attack.status == ClaimStatus::defended) {
         CHECK(attack.attack_cost == 100);
         CHECK(conquister_user(storage, "bob")->score == 150);
@@ -405,20 +391,24 @@ TEST_CASE("nobody is charged more than they have") {
     {
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":{"user_id":1,"username":"alice","since":0},"scores":{"bob":30},)"
-             << R"("quotes_added":{},"balloons":{},"cooldowns":{},"shields":{"alice":9999}})";
+             << R"("quotes_added":{},"balloons":{"alice":0},"cooldowns":{}})";
     }
     Storage storage{paths.conquister, paths.quotes};
 
     const ClaimResult first =
-        conquister_claim(storage, 2, "bob", 10, ClaimRules{.cooldown_seconds = 0, .attack_cost = 100, .ignores_shield = false, .signs = {}});
-    CHECK(first.status == ClaimStatus::defended);
-    CHECK(first.attack_cost == 30);
-    CHECK(conquister_user(storage, "bob")->score == 0);
-
-    const ClaimResult second =
-        conquister_claim(storage, 2, "bob", 20, ClaimRules{.cooldown_seconds = 0, .attack_cost = 100, .ignores_shield = false, .signs = {}});
-    CHECK(second.attack_cost == 0);
-    CHECK(conquister_user(storage, "bob")->score == 0);
+        conquister_claim(storage, 2, "bob", 10, ClaimRules{.cooldown_seconds = 0, .attack_cost = 100, .signs = {}});
+    if (first.status == ClaimStatus::defended) {
+        CHECK(first.attack_cost == 30);
+        CHECK(conquister_user(storage, "bob")->score == 0);
+        const ClaimResult second =
+            conquister_claim(storage, 2, "bob", 20, ClaimRules{.cooldown_seconds = 0, .attack_cost = 100, .signs = {}});
+        CHECK(second.attack_cost == 0);
+        CHECK(conquister_user(storage, "bob")->score == 0);
+    } else {
+        CHECK(first.status == ClaimStatus::taken);
+        CHECK(first.attack_cost == 0);
+        CHECK(conquister_user(storage, "bob")->score == 30);
+    }
 }
 
 namespace {
@@ -442,7 +432,7 @@ TEST_CASE("a raid shield reduces the potential loot by x/(x+1000) on every raid"
              << R"("ids":{"alice":0,"bob":5000}})";
     }
     Storage storage{paths.conquister, paths.quotes};
-    CHECK(raid_shield_buy(storage, "alice", 1000, 0).status == RaidShieldStatus::bought);
+    CHECK(raid_shield_buy(storage, "alice", 1000).status == RaidShieldStatus::bought);
     CHECK(raid_start(storage, 0, "bob", "alice", 0, shield_rides()).status == RaidStatus::started);
 
     const std::vector<RaidEvent> first = raid_due(storage, 5, shield_rides());
@@ -476,7 +466,7 @@ TEST_CASE("a raid shield stays ready while its owner is away") {
              << R"("ids":{"alice":0,"bob":500,"carol":1000}})";
     }
     Storage storage{paths.conquister, paths.quotes};
-    CHECK(raid_shield_buy(storage, "alice", 1000, 0).status == RaidShieldStatus::bought);
+    CHECK(raid_shield_buy(storage, "alice", 1000).status == RaidShieldStatus::bought);
     CHECK(raid_start(storage, 0, "alice", "carol", 0, shield_rides()).status == RaidStatus::started);
     CHECK(raid_start(storage, 0, "bob", "alice", 0, shield_rides()).status == RaidStatus::started);
     const std::vector<RaidEvent> arrivals = raid_due(storage, 5, shield_rides());
@@ -551,7 +541,7 @@ TEST_CASE("a raid shield rounds down and safely handles large loot") {
                  << R"("ids":{"alice":0,"bob":500}})";
         }
         Storage storage{paths.conquister, paths.quotes};
-        CHECK(raid_shield_buy(storage, "alice", 0, 0).status == RaidShieldStatus::bought);
+        CHECK(raid_shield_buy(storage, "alice", 0).status == RaidShieldStatus::bought);
         RaidRules rules = shield_rides();
         rules.loot_share = 0;
         CHECK(raid_start(storage, 0, "bob", "alice", 0, rules).status == RaidStatus::started);
@@ -572,7 +562,7 @@ TEST_CASE("a raid shield rounds down and safely handles large loot") {
                  << R"("ids":{"alice":0,"bob":50000}})";
         }
         Storage storage{paths.conquister, paths.quotes};
-        CHECK(raid_shield_buy(storage, "alice", 0, 0).status == RaidShieldStatus::bought);
+        CHECK(raid_shield_buy(storage, "alice", 0).status == RaidShieldStatus::bought);
         RaidRules rules = shield_rides();
         rules.loot_share = 0;
         CHECK(raid_start(storage, 0, "bob", "alice", 0, rules).status == RaidStatus::started);
@@ -711,7 +701,7 @@ TEST_CASE("a balloon turns a raid back") {
 
     SUBCASE("a fresh balloon can send him home empty handed") {
         static_cast<void>(raid_due(storage, 10, quick_rides()));
-        CHECK(balloon_buy(storage, "alice", 0, 10, 0).status == BalloonStatus::bought);
+        CHECK(balloon_buy(storage, "alice", 0).status == BalloonStatus::bought);
         static_cast<void>(raid_start(storage, 0, "bob", "alice", 11, quick_rides()));
         const std::vector<RaidEvent> second = raid_due(storage, 16, quick_rides());
         REQUIRE(second.size() == 1);
@@ -751,7 +741,7 @@ TEST_CASE("an empty house has no defences") {
         }
     }
     /* The balloon is still hers, it simply was not at home either. */
-    CHECK(balloon_buy(storage, "alice", 0, 5, 0).status == BalloonStatus::already_owned);
+    CHECK(balloon_buy(storage, "alice", 0).status == BalloonStatus::already_owned);
 }
 
 TEST_CASE("nobody takes the place from the road") {
@@ -987,15 +977,19 @@ TEST_CASE("turning back mid journey only costs the road already walked") {
     CHECK(raid_start(storage, 7, "bob", "alice", third + third, slow).status == RaidStatus::started);
 }
 
-TEST_CASE("investments compound daily, remain separate from score, and survive a restart") {
+TEST_CASE("investments earn zodiac interest, remain separate from score, and survive a restart") {
     const TestPaths paths{"investment-service-test"};
-    constexpr std::int64_t day = 86400;
+    const std::int64_t first_day = zodiac::next_day_start(0);
+    const std::int64_t second_day = zodiac::next_day_start(first_day);
+    const std::int64_t third_day = zodiac::next_day_start(second_day);
     {
         Storage storage{paths.conquister, paths.quotes};
         const std::string alice = player_seen(storage, 1, "Alice");
         const std::string bob = player_seen(storage, 2, "Bob");
         storage.transaction([&](StorageSession &session) {
             session.state().scores[alice] = 3000;
+            session.state().investment_magnitudes[std::to_string(first_day)] = 100;
+            session.state().investment_magnitudes[std::to_string(second_day)] = 100;
             return 0;
         });
         CHECK(investment_deposit(storage, alice, "Bob", RaidTargetKind::telegram, 1000, 0).status ==
@@ -1006,27 +1000,211 @@ TEST_CASE("investments compound daily, remain separate from score, and survive a
               InvestmentStatus::invalid_amount);
         CHECK(investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 4000, 0).status ==
               InvestmentStatus::insufficient_score);
-        CHECK(investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 1000, 0).status ==
+        CHECK(investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 1000, first_day).status ==
               InvestmentStatus::deposited);
         CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 2000);
-        CHECK(investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 1000, day).status ==
+        CHECK(investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 1000, second_day).status ==
               InvestmentStatus::deposited);
         CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 1000);
-        CHECK(investment_withdraw(storage, bob, "Alice", RaidTargetKind::telegram, day).status ==
+        CHECK(investment_withdraw(storage, bob, "Alice", RaidTargetKind::telegram, second_day).status ==
               InvestmentStatus::not_self);
     }
     {
         Storage storage{paths.conquister, paths.quotes};
         const InvestmentResult payout = investment_withdraw(storage, "tg:1", "Alice", RaidTargetKind::telegram,
-                                                              2 * day);
+                                                              third_day);
+        const int first_rate = bank_rate("Alice", first_day, 100);
+        const int second_rate = bank_rate("Alice", second_day, 100);
+        const std::int64_t first_factor = 1 + first_rate / 100;
+        const std::int64_t second_factor = 1 + second_rate / 100;
+        const std::int64_t expected = 1000 * first_factor * second_factor + 1000 * second_factor;
         CHECK(payout.status == InvestmentStatus::withdrawn);
-        CHECK(payout.amount == 2090);
-        CHECK(payout.interest == 90);
-        CHECK(payout.score == 3090);
-        CHECK(investment_withdraw(storage, "tg:1", "Alice", RaidTargetKind::telegram, 2 * day).status ==
+        CHECK(payout.amount == expected);
+        CHECK(payout.interest == expected - 2000);
+        CHECK(payout.score == expected + 1000);
+        CHECK(investment_withdraw(storage, "tg:1", "Alice", RaidTargetKind::telegram, third_day).status ==
               InvestmentStatus::no_investment);
         CHECK(read_json(paths.conquister).at("investments").empty());
     }
+}
+
+TEST_CASE("zodiac bank returns double, preserve, or wipe out deposits") {
+    const TestPaths paths{"zodiac-investment-test"};
+    const std::int64_t first_day = zodiac::next_day_start(0);
+    const std::int64_t second_day = zodiac::next_day_start(first_day);
+    const std::int64_t third_day = zodiac::next_day_start(second_day);
+    const std::int64_t fourth_day = zodiac::next_day_start(third_day);
+    const std::int64_t fifth_day = zodiac::next_day_start(fourth_day);
+    const zodiac::Element house = zodiac::element_of_day(first_day);
+    const std::vector<zodiac::Override> signs{{"Alice", std::string{matching_sign(house)}},
+                                               {"Bob", std::string{opposing_sign(house)}},
+                                               {"Carol", std::string{matching_sign(house)}},
+                                               {"Dave", std::string{neutral_sign(house)}},
+                                               {"Eve", std::string{opposing_sign(house)}}};
+    Storage storage{paths.conquister, paths.quotes};
+    const std::string alice = player_seen(storage, 1, "Alice");
+    const std::string bob = player_seen(storage, 2, "Bob");
+    const std::string carol = player_seen(storage, 3, "Carol");
+    const std::string dave = player_seen(storage, 4, "Dave");
+    const std::string eve = player_seen(storage, 5, "Eve");
+    storage.transaction([&](StorageSession &session) {
+        session.state().scores[alice] = 1000;
+        session.state().scores[bob] = 1000;
+        session.state().scores[carol] = 1000;
+        session.state().scores[dave] = 1000;
+        session.state().scores[eve] = 1000;
+        for (const std::int64_t day : {first_day, second_day, third_day, fourth_day}) {
+            session.state().investment_magnitudes[std::to_string(day)] = 100;
+        }
+        return 0;
+    });
+    CHECK(investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 1000, first_day, signs)
+              .zodiac_percent == 125);
+    CHECK(investment_deposit(storage, bob, "Bob", RaidTargetKind::telegram, 1000, first_day, signs)
+              .daily_rate == -100);
+    CHECK(investment_deposit(storage, carol, "Carol", RaidTargetKind::telegram, 1000, first_day, signs)
+              .daily_rate == 100);
+    CHECK(investment_deposit(storage, dave, "Dave", RaidTargetKind::telegram, 1000, first_day, signs)
+              .daily_rate == 0);
+    CHECK(investment_deposit(storage, eve, "Eve", RaidTargetKind::telegram, 1000, first_day, signs)
+              .daily_rate == -100);
+    CHECK(investment_withdraw(storage, alice, "Alice", RaidTargetKind::telegram, second_day, signs).amount == 2000);
+    CHECK(investment_withdraw(storage, bob, "Bob", RaidTargetKind::telegram, second_day, signs).amount == 0);
+    CHECK(investment_withdraw(storage, dave, "Dave", RaidTargetKind::telegram, second_day, signs).amount == 1000);
+    CHECK(investment_withdraw(storage, eve, "Eve", RaidTargetKind::telegram, first_day + 43200, signs).amount == 500);
+    CHECK(investment_withdraw(storage, carol, "Carol", RaidTargetKind::telegram, fifth_day, signs).amount == 0);
+}
+
+TEST_CASE("an intermediate bank magnitude is shared and survives a restart") {
+    const TestPaths paths{"intermediate-investment-magnitude-test"};
+    const std::int64_t first_day = zodiac::next_day_start(0);
+    const std::int64_t second_day = zodiac::next_day_start(first_day);
+    const zodiac::Element house = zodiac::element_of_day(first_day);
+    const std::vector<zodiac::Override> signs{{"Alice", std::string{matching_sign(house)}},
+                                               {"Bob", std::string{opposing_sign(house)}},
+                                               {"Carol", std::string{neutral_sign(house)}}};
+    {
+        Storage storage{paths.conquister, paths.quotes};
+        const std::string alice = player_seen(storage, 1, "Alice");
+        const std::string bob = player_seen(storage, 2, "Bob");
+        const std::string carol = player_seen(storage, 3, "Carol");
+        storage.transaction([&](StorageSession &session) {
+            session.state().scores[alice] = 1000;
+            session.state().scores[bob] = 1000;
+            session.state().scores[carol] = 1000;
+            session.state().investment_magnitudes[std::to_string(first_day)] = 37;
+            return 0;
+        });
+        CHECK(investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 1000, first_day, signs)
+                  .daily_rate == 37);
+        CHECK(investment_deposit(storage, bob, "Bob", RaidTargetKind::telegram, 1000, first_day, signs)
+                  .daily_rate == -37);
+        CHECK(investment_deposit(storage, carol, "Carol", RaidTargetKind::telegram, 1000, first_day, signs)
+                  .daily_rate == 0);
+    }
+    CHECK(read_json(paths.conquister).at("investment_magnitudes").at(std::to_string(first_day)) == 37);
+    Storage reopened{paths.conquister, paths.quotes};
+    CHECK(investment_withdraw(reopened, "tg:1", "Alice", RaidTargetKind::telegram, second_day, signs).amount == 1370);
+    CHECK(investment_withdraw(reopened, "tg:2", "Bob", RaidTargetKind::telegram, second_day, signs).amount == 630);
+    CHECK(investment_withdraw(reopened, "tg:3", "Carol", RaidTargetKind::telegram, second_day, signs).amount == 1000);
+}
+
+TEST_CASE("a newly drawn bank magnitude is saved for the whole local day") {
+    const TestPaths paths{"drawn-investment-magnitude-test"};
+    const std::int64_t first_day = zodiac::next_day_start(0);
+    const zodiac::Element house = zodiac::element_of_day(first_day);
+    const std::vector<zodiac::Override> signs{{"Alice", std::string{matching_sign(house)}},
+                                               {"Bob", std::string{opposing_sign(house)}}};
+    int chosen = -1;
+    {
+        Storage storage{paths.conquister, paths.quotes};
+        const std::string alice = player_seen(storage, 1, "Alice");
+        const std::string bob = player_seen(storage, 2, "Bob");
+        storage.transaction([&](StorageSession &session) {
+            session.state().scores[alice] = 1000;
+            session.state().scores[bob] = 1000;
+            return 0;
+        });
+        chosen = investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 1, first_day, signs).daily_rate;
+        CHECK(chosen >= 0);
+        CHECK(chosen <= 100);
+        CHECK(investment_deposit(storage, bob, "Bob", RaidTargetKind::telegram, 1, first_day, signs).daily_rate ==
+              -chosen);
+    }
+    CHECK(read_json(paths.conquister).at("investment_magnitudes").at(std::to_string(first_day)) == chosen);
+    Storage reopened{paths.conquister, paths.quotes};
+    CHECK(investment_deposit(reopened, "tg:1", "Alice", RaidTargetKind::telegram, 1, first_day, signs).daily_rate ==
+          chosen);
+}
+
+TEST_CASE("daily investment returns accrue at one-second resolution") {
+    const TestPaths paths{"investment-per-second-test"};
+    Storage storage{paths.conquister, paths.quotes};
+    const std::string alice = player_seen(storage, 1, "Alice");
+    const std::vector<zodiac::Override> signs{{"Alice", std::string{matching_sign(zodiac::element_of_day(0))}}};
+    storage.transaction([&](StorageSession &session) {
+        session.state().scores[alice] = 1000000;
+        session.state().investment_magnitudes[std::to_string(zodiac::day_start(0))] = 100;
+        return 0;
+    });
+    CHECK(investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 1000000, 0, signs).status ==
+          InvestmentStatus::deposited);
+    const InvestmentResult payout = investment_withdraw(storage, alice, "Alice", RaidTargetKind::telegram, 1, signs);
+    CHECK(payout.status == InvestmentStatus::withdrawn);
+    CHECK(payout.amount == 1000011);
+    CHECK(payout.interest == 11);
+}
+
+TEST_CASE("old compound investments keep their accrued return through the changeover") {
+    const TestPaths paths{"legacy-investment-rate-test"};
+    const std::int64_t before = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << Json{{"current", nullptr}, {"scores", Json{{"tg:1", 0}}},
+                     {"telegram_names", Json{{"alice", "tg:1"}}},
+                     {"investments", Json::array({Json{{"player", "tg:1"}, {"amount", 1000},
+                                                        {"since", before - 86400}}})}}.dump();
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    const Json saved = read_json(paths.conquister);
+    const std::int64_t cutover = saved.at("investments").at(0).at("fixed_until").get<std::int64_t>();
+    CHECK(cutover >= before);
+    const InvestmentResult payout = investment_withdraw(storage, "tg:1", "Alice", RaidTargetKind::telegram,
+                                                         cutover);
+    CHECK(payout.status == InvestmentStatus::withdrawn);
+    CHECK(payout.amount == 1030);
+}
+
+TEST_CASE("migrated investments switch to zodiac returns after the changeover") {
+    const TestPaths paths{"legacy-investment-cutover-test"};
+    const std::int64_t before = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << Json{{"current", nullptr}, {"scores", Json{{"tg:1", 0}}},
+                     {"telegram_names", Json{{"alice", "tg:1"}}},
+                     {"investments", Json::array({Json{{"player", "tg:1"}, {"amount", 1000000000},
+                                                        {"since", before - 86400}}})}}.dump();
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    const std::int64_t cutover = read_json(paths.conquister).at("investments").at(0)
+                                     .at("fixed_until").get<std::int64_t>();
+    const std::int64_t elapsed = std::min<std::int64_t>(60, zodiac::next_day_start(cutover) - cutover);
+    const std::vector<zodiac::Override> signs{{"Alice", std::string{matching_sign(zodiac::element_of_day(cutover))}}};
+    storage.transaction([&](StorageSession &session) {
+        session.state().investment_magnitudes[std::to_string(zodiac::day_start(cutover))] = 100;
+        return 0;
+    });
+    const InvestmentResult payout = investment_withdraw(storage, "tg:1", "Alice", RaidTargetKind::telegram,
+                                                         cutover + elapsed, signs);
+    const long double old_balance = 1000000000.0L * std::pow(1.03L,
+        static_cast<long double>(cutover - (before - 86400)) / 86400.0L);
+    const long double expected = old_balance * (1.0L + static_cast<long double>(elapsed) /
+        static_cast<long double>(zodiac::next_day_start(cutover) - zodiac::day_start(cutover)));
+    CHECK(payout.status == InvestmentStatus::withdrawn);
+    CHECK(payout.amount == static_cast<std::int64_t>(std::floor(std::nextafter(
+        expected, std::numeric_limits<long double>::infinity()))));
 }
 
 TEST_CASE("investment withdrawal and deposit require the player's planet") {
@@ -1082,6 +1260,6 @@ TEST_CASE("raids can steal only the non-invested balance") {
     const InvestmentResult payout = investment_withdraw(storage, alice, "Alice", RaidTargetKind::telegram,
                                                          1 + trip.seconds);
     CHECK(payout.status == InvestmentStatus::withdrawn);
-    CHECK(payout.amount >= 1000);
-    CHECK(payout.score >= 1000);
+    CHECK(payout.amount > 0);
+    CHECK(payout.score == 1000 - arrival[0].loot + payout.amount);
 }

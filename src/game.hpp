@@ -30,8 +30,6 @@ struct ClaimResult {
     std::int64_t penalty_seconds = 0;
     /* defended: the palle the failed attempt cost, never more than the attacker had. */
     std::int64_t attack_cost = 0;
-    /* defended: how long a balloon no attempt can pop still holds, zero for an ordinary one. */
-    std::int64_t shield_seconds = 0;
     /* travelling: how long before the claimer is home again. */
     std::int64_t travel_seconds = 0;
     /* taken: the multiplier the kicked holder had bought, zero when there was none. */
@@ -64,8 +62,6 @@ struct FurnitureResult {
 struct BalloonResult {
     BalloonStatus status = BalloonStatus::bought;
     std::int64_t available_score = 0;
-    /* How long the balloon just bought cannot be popped, zero for an ordinary one. */
-    std::int64_t shield_seconds = 0;
 };
 
 struct BoostResult {
@@ -94,6 +90,8 @@ struct InvestmentResult {
     std::int64_t amount = 0;
     std::int64_t interest = 0;
     std::int64_t score = 0;
+    int zodiac_percent = 100;
+    int daily_rate = 0;
 };
 
 struct RaidRules {
@@ -193,8 +191,6 @@ struct ClaimRules {
     int cooldown_seconds = 0;
     /* What an attempt against a balloon that holds costs the attacker. */
     int attack_cost = 0;
-    /* Set for a player who pops a shielded balloon on his first attempt, as the owner asked for some. */
-    bool ignores_shield = false;
     zodiac::Overrides signs;
 };
 
@@ -217,8 +213,6 @@ enum class LinkStatus { pending, linked, unknown_account, conflict, self, alread
 [[nodiscard]] LinkStatus player_link(Storage &storage, std::int64_t user_id, const std::string &username,
                                      std::string_view other_name, std::string_view account_name = {});
 /* One balloon per user: it survives 4 attempts at most, then has to be bought again. */
-/* With shield_seconds the balloon cannot be popped until it deflates, instead of lasting until an
-   attempt pops it. */
 /* What is going around, so the prices can keep up with it. */
 struct Wealth {
     std::int64_t total = 0;
@@ -248,16 +242,13 @@ void debug_set(Storage &storage, const std::string &username, bool wanted);
 [[nodiscard]] BalloonResult balloon_buy(
     Storage &storage,
     const std::string &username,
-    int cost,
-    std::int64_t now,
-    std::int64_t shield_seconds
+    int cost
 );
 
 [[nodiscard]] RaidShieldResult raid_shield_buy(
     Storage &storage,
     const std::string &username,
-    int cost,
-    std::int64_t now
+    int cost
 );
 
 /* Sends a player to rob another one, if he is at home and the target is somebody the bot knows.
@@ -275,9 +266,11 @@ void debug_set(Storage &storage, const std::string &username, bool wanted);
 
 /* Funds leave the stealable score until withdrawn on the owner's planet. */
 [[nodiscard]] InvestmentResult investment_deposit(Storage &storage, const std::string &player,
-    std::string_view target, RaidTargetKind platform, std::int64_t amount, std::int64_t now);
+    std::string_view target, RaidTargetKind platform, std::int64_t amount, std::int64_t now,
+    zodiac::Overrides signs = {});
 [[nodiscard]] InvestmentResult investment_withdraw(Storage &storage, const std::string &player,
-    std::string_view target, RaidTargetKind platform, std::int64_t now);
+    std::string_view target, RaidTargetKind platform, std::int64_t now,
+    zodiac::Overrides signs = {});
 
 /* Settles the raids that have reached the target or come home by now. */
 [[nodiscard]] std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRules &rules);
@@ -287,8 +280,7 @@ void debug_set(Storage &storage, const std::string &username, bool wanted);
     Storage &storage,
     const std::string &username,
     int cost,
-    std::int64_t multiplier,
-    std::int64_t now
+    std::int64_t multiplier
 );
 
 [[nodiscard]] QuoteAddResult quote_add(

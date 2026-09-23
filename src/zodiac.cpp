@@ -75,6 +75,20 @@ Element element_of_day(std::int64_t now) {
     return houses.at(house);
 }
 
+std::int64_t day_start(std::int64_t now) {
+    const std::chrono::sys_seconds instant{std::chrono::seconds{now}};
+    const auto *zone = std::chrono::current_zone();
+    const auto today = std::chrono::floor<std::chrono::days>(zone->to_local(instant));
+    return zone->to_sys(today).time_since_epoch().count();
+}
+
+std::int64_t next_day_start(std::int64_t now) {
+    const std::chrono::sys_seconds instant{std::chrono::seconds{now}};
+    const auto *zone = std::chrono::current_zone();
+    const auto today = std::chrono::floor<std::chrono::days>(zone->to_local(instant));
+    return zone->to_sys(today + std::chrono::days{1}).time_since_epoch().count();
+}
+
 std::string_view element_name(Element element) {
     switch (element) {
     case Element::water:

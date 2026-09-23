@@ -56,6 +56,8 @@ struct InvestmentDeposit {
     std::string player;
     std::int64_t amount = 0;
     std::int64_t since = 0;
+    /* -1 marks a deposit made before zodiac returns; migration sets the cutover. */
+    std::int64_t fixed_until = 0;
 
     bool operator==(const InvestmentDeposit &) const = default;
 };
@@ -68,8 +70,6 @@ struct ConquisterState {
     Counters balloons;
     /* Users mapped to the instant their claim penalty expires. */
     Counters cooldowns;
-    /* Owners of a balloon that no attempt can pop, mapped to the instant it deflates. */
-    Counters shields;
     /* Users mapped to the multiplier their next hold earns, until someone takes the place from them. */
     Counters boosts;
     /* Persistent protection that reduces raid loot until replaced by a balloon or boost. */
@@ -96,6 +96,8 @@ struct ConquisterState {
     /* The raids under way, in the order they left. */
     std::vector<Raid> raids;
     std::vector<InvestmentDeposit> investments;
+    /* Local day start (Unix seconds) -> shared bank volatility from 0 to 100 percent. */
+    Counters investment_magnitudes;
     /* Who added each quote, for the ones added since the bot started writing it down. */
     Authors quote_authors;
     /* The emoji each player bought to hang beside his name. */

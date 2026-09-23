@@ -170,13 +170,6 @@ std::optional<std::string> optional_random_quote(Storage &storage) {
     }
 }
 
-/* A few players have a balloon nobody else can pop: the owner asked for it, for them alone. */
-bool is_shielded(const CommandContext &context, const std::string &username) {
-    return std::ranges::any_of(context.config.shield_users, [&username](const std::string &shielded) {
-        return text::equals_ignore_case(shielded, username);
-    });
-}
-
 /* What a failed attempt cost the one who made it. */
 std::string failed_attempt_toll(const ClaimResult &result) {
     if (result.attack_cost > 0 && result.penalty_seconds > 0) {
@@ -268,11 +261,16 @@ std::string handle_investment(const CommandContext &context, const ParsedInvestm
     const bool telegram = request.target.starts_with('@');
     const std::string_view name = telegram ? request.target.substr(1) : request.target;
     const InvestmentResult result = investment_deposit(context.storage, std::string{context.player_key}, name,
-        telegram ? RaidTargetKind::telegram : RaidTargetKind::irc, request.amount, seconds_now());
+        telegram ? RaidTargetKind::telegram : RaidTargetKind::irc, request.amount, seconds_now(),
+        context.config.zodiac_signs);
     switch (result.status) {
-    case InvestmentStatus::deposited:
-        return std::format("🏦 {} hai investito {} palle sul tuo pianeta. Saldo disponibile: {} palle.",
-                           context.username, result.amount, result.score);
+    case InvestmentStatus::deposited: {
+        return std::format("🏦 {} hai investito {} palle sul tuo pianeta. "
+                           "Rendimento di oggi: {:+}% (oroscopo {}%). "
+                           "Saldo disponibile: {} palle.",
+                           context.username, result.amount, result.daily_rate,
+                           result.zodiac_percent, result.score);
+    }
     case InvestmentStatus::not_self:
         return std::format("🏦 {} puoi investire solo sul tuo pianeta.", context.username);
     case InvestmentStatus::not_home:
@@ -301,7 +299,6 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
             ClaimRules{
                 .cooldown_seconds = context.config.cooldown_seconds,
                 .attack_cost = context.config.attack_cost,
-                .ignores_shield = is_shielded(context, username),
                 .signs = context.config.zodiac_signs,
             }
         );
@@ -326,15 +323,6 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
     const Authors furniture = furniture_all(context.storage);
     if (result.status == ClaimStatus::defended) {
         const std::string toll = failed_attempt_toll(result);
-        if (result.shield_seconds > 0) {
-            return std::format(
-                "🎈 {} il palloncino di {} ha resistito{}. Resiste ancora per {}.",
-                dressed(furniture, context.player_key, username),
-                dressed(furniture, result.previous_key, result.previous_username),
-                toll,
-                format_wait(result.shield_seconds)
-            );
-        }
         return std::format(
             "🎈 {} il palloncino di {} ha resistito{}. "
             "Ora il palloncino ha il {}% di probabilità di essere bucato.",
@@ -497,16 +485,8 @@ std::string handle_buy_balloon(const CommandContext &context, std::string_view) 
     }
     const std::string username{context.username};
     const int cost = price(context, context.config.balloon_cost);
-    const std::int64_t shield_seconds = is_shielded(context, username) ? context.config.shield_seconds : 0;
-    const BalloonResult result = balloon_buy(context.storage, std::string{context.player_key}, cost, seconds_now(), shield_seconds);
+    const BalloonResult result = balloon_buy(context.storage, std::string{context.player_key}, cost);
     if (result.status == BalloonStatus::already_owned) {
-        if (result.shield_seconds > 0) {
-            return std::format(
-                "{} hai già un palloncino, resiste ancora per {}.",
-                username,
-                format_wait(result.shield_seconds)
-            );
-        }
         return std::format("{} hai già un palloncino.", username);
     }
     if (result.status == BalloonStatus::has_boost) {
@@ -518,16 +498,6 @@ std::string handle_buy_balloon(const CommandContext &context, std::string_view) 
             username,
             cost,
             result.available_score
-        );
-    }
-    if (result.shield_seconds > 0) {
-        return std::format(
-            "🎈 {} hai comprato un palloncino spendendo {} palle! "
-            "Nessuno può bucarlo: difende la tua posizione in {} per {}.",
-            username,
-            cost,
-            conquister_place,
-            format_wait(result.shield_seconds)
         );
     }
     return std::format(
@@ -614,7 +584,7 @@ std::string handle_buy_boost(const CommandContext &context, std::string_view) {
     const std::string username{context.username};
     const int cost = price(context, context.config.boost_cost);
     const BoostResult result =
-        boost_buy(context.storage, std::string{context.player_key}, cost, context.config.boost_multiplier, seconds_now());
+        boost_buy(context.storage, std::string{context.player_key}, cost, context.config.boost_multiplier);
     if (result.status == BoostStatus::already_owned) {
         return std::format("{} hai già un boost x{} pronto.", username, result.multiplier);
     }
@@ -652,7 +622,7 @@ std::string handle_buy_shield(const CommandContext &context, std::string_view) {
     }
     const std::string username{context.username};
     const int cost = price(context, context.config.raid_shield_cost);
-    const RaidShieldResult result = raid_shield_buy(context.storage, std::string{context.player_key}, cost, seconds_now());
+    const RaidShieldResult result = raid_shield_buy(context.storage, std::string{context.player_key}, cost);
     if (result.status == RaidShieldStatus::already_owned) {
         return std::format("{} hai già uno scudo pronto.", username);
     }
@@ -807,9 +777,10 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
                 const bool telegram = target.starts_with('@');
                 const InvestmentResult investment = investment_withdraw(context.storage, bound_key,
                     telegram ? target.substr(1) : target,
-                    telegram ? RaidTargetKind::telegram : RaidTargetKind::irc, seconds_now());
+                    telegram ? RaidTargetKind::telegram : RaidTargetKind::irc, seconds_now(),
+                    context.config.zodiac_signs);
                 if (investment.status == InvestmentStatus::withdrawn) {
-                    return std::format("🏦 {} hai ritirato {} palle, di cui {} di interessi. Saldo: {} palle.",
+                    return std::format("🏦 {} hai ritirato {} palle (rendimento: {:+} palle). Saldo: {} palle.",
                                        context.username, investment.amount, investment.interest, investment.score);
                 }
                 if (investment.status == InvestmentStatus::balance_limit) {
