@@ -65,6 +65,10 @@ struct ConquisterState {
     Counters boosts;
     /* Persistent protection that reduces raid loot until replaced by a balloon or boost. */
     Counters raid_shields;
+    /* Successful raids build planet resistance, shared by every attacker. */
+    Counters raid_resistance_levels;
+    /* Start of the current resistance recovery interval. */
+    Counters raid_resistance_since;
     /* Where each player lives: an id of ours, drawn once, which spells out a point on the map. */
     Counters ids;
     /* Players known to be on Telegram, mapped to their id there, so a message can reach them. */

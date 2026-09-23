@@ -566,6 +566,15 @@ TEST_CASE("the raids tell what happened") {
           "💰 bob hai rubato 250 palle a alice, il cui scudo ha fermato 70 palle! Torni in bob tra 52 secondi.");
     event.shield_absorbed = 0;
 
+    event.resistance_absorbed = 125;
+    CHECK(raid_event_reply(event, none) ==
+          "💰 bob hai rubato 250 palle a alice, la resistenza del pianeta ha fermato 125 palle! Torni in bob tra 52 secondi.");
+    event.shield_absorbed = 70;
+    CHECK(raid_event_reply(event, none) ==
+          "💰 bob hai rubato 250 palle a alice, il cui scudo ha fermato 70 palle, la resistenza del pianeta ha fermato 125 palle! Torni in bob tra 52 secondi.");
+    event.shield_absorbed = 0;
+    event.resistance_absorbed = 0;
+
     event.target_on_telegram = true;
     event.undefended = true;
     CHECK(raid_event_reply(event, none) ==

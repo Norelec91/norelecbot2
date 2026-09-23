@@ -721,6 +721,9 @@ std::string raid_event_reply(const RaidEvent &event, const zodiac::Overrides &si
     } else if (event.shield_absorbed > 0) {
         reply += std::format(", il cui scudo ha fermato {} palle", event.shield_absorbed);
     }
+    if (event.resistance_absorbed > 0) {
+        reply += std::format(", la resistenza del pianeta ha fermato {} palle", event.resistance_absorbed);
+    }
     if (event.raider_percent != event.target_percent) {
         const zodiac::Sign raider_sign = zodiac::sign_of(event.raider, signs);
         const zodiac::Sign target_sign = zodiac::sign_of(event.target, signs);

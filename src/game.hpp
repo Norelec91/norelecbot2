@@ -130,6 +130,8 @@ struct RaidEvent {
     bool balloon_popped = false;
     /* A purchased shield absorbed part of this raid's potential loot. */
     std::int64_t shield_absorbed = 0;
+    /* The target planet's resistance absorbed part of the remaining loot. */
+    std::int64_t resistance_absorbed = 0;
     /* The target was away, so there was nothing to get past. */
     bool undefended = false;
     /* Whether each of them is known to be on Telegram, where a mention reaches them. */

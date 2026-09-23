@@ -461,9 +461,10 @@ TEST_CASE("a raid shield reduces the potential loot by x/(x+1000) on every raid"
     CHECK(raid_start(storage, 0, "bob", "alice", 11, shield_rides()).status == RaidStatus::started);
     const std::vector<RaidEvent> second = raid_due(storage, 16, shield_rides());
     REQUIRE(second.size() == 1);
-    CHECK(second[0].loot == 462); /* raw 950, shield applied again. */
+    CHECK(second[0].loot == 231); /* raw 950, shield leaves 462, then planet resistance halves it. */
     CHECK(second[0].shield_absorbed == 488);
-    CHECK(conquister_user(storage, "alice")->score == 9038);
+    CHECK(second[0].resistance_absorbed == 231);
+    CHECK(conquister_user(storage, "alice")->score == 9269);
     CHECK(read_json(paths.conquister).at("raid_shields").at("alice") == 1);
 }
 
@@ -558,6 +559,7 @@ TEST_CASE("a raid shield rounds down and safely handles large loot") {
         REQUIRE(arrival.size() == 1);
         CHECK(arrival[0].loot == 0);
         CHECK(arrival[0].shield_absorbed == 1);
+        CHECK_FALSE(read_json(paths.conquister).at("raid_resistance_levels").contains("alice"));
         CHECK(conquister_user(storage, "alice")->score == 1);
         CHECK(read_json(paths.conquister).at("raid_shields").at("alice") == 1);
     }
@@ -582,6 +584,64 @@ TEST_CASE("a raid shield rounds down and safely handles large loot") {
         CHECK(arrival[0].loot == potential * potential / (potential + 1000));
         CHECK(arrival[0].shield_absorbed == potential - arrival[0].loot);
         CHECK(conquister_user(storage, "alice")->score == 1000000000000 - arrival[0].loot);
+    }
+}
+
+TEST_CASE("planet resistance follows the victim across attackers, persists, and recovers") {
+    const TestPaths paths{"raid-planet-resistance-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":1000000,"bob":0,"carol":0},)"
+             << R"("ids":{"alice":0,"bob":5000,"carol":4000}})";
+    }
+    RaidRules rules = shield_rides();
+    rules.loot_share = 0;
+    const auto potential = [](const RaidEvent &event) {
+        return event.distance * event.raider_percent / event.target_percent;
+    };
+    {
+        Storage storage{paths.conquister, paths.quotes};
+        REQUIRE(raid_start(storage, 0, "bob", "alice", 0, rules).status == RaidStatus::started);
+        const auto first = raid_due(storage, 5, rules);
+        REQUIRE(first.size() == 1);
+        CHECK(first[0].loot == potential(first[0]));
+        CHECK(first[0].resistance_absorbed == 0);
+        CHECK(read_json(paths.conquister).at("raid_resistance_levels").at("alice") == 1);
+        CHECK(read_json(paths.conquister).at("raid_resistance_since").at("alice") == 5);
+        static_cast<void>(raid_due(storage, 10, rules));
+    }
+    {
+        Storage storage{paths.conquister, paths.quotes};
+        REQUIRE(raid_start(storage, 0, "carol", "alice", 11, rules).status == RaidStatus::started);
+        const auto second = raid_due(storage, 16, rules);
+        REQUIRE(second.size() == 1);
+        CHECK(second[0].loot == potential(second[0]) / 2);
+        CHECK(second[0].resistance_absorbed == potential(second[0]) - second[0].loot);
+        static_cast<void>(raid_due(storage, 21, rules));
+
+        REQUIRE(raid_start(storage, 0, "bob", "alice", 22, rules).status == RaidStatus::started);
+        const auto third = raid_due(storage, 27, rules);
+        REQUIRE(third.size() == 1);
+        CHECK(third[0].loot == potential(third[0]) / 4);
+        static_cast<void>(raid_due(storage, 32, rules));
+
+        REQUIRE(raid_start(storage, 0, "bob", "alice", 33, rules).status == RaidStatus::started);
+        const auto fourth = raid_due(storage, 38, rules);
+        REQUIRE(fourth.size() == 1);
+        CHECK(fourth[0].loot == potential(fourth[0]) / 8);
+        static_cast<void>(raid_due(storage, 43, rules));
+
+        REQUIRE(raid_start(storage, 0, "bob", "alice", 7200, rules).status == RaidStatus::started);
+        const auto recovering = raid_due(storage, 7205, rules);
+        REQUIRE(recovering.size() == 1);
+        CHECK(recovering[0].loot == potential(recovering[0]) / 4);
+        static_cast<void>(raid_due(storage, 7210, rules));
+
+        REQUIRE(raid_start(storage, 0, "bob", "alice", 28800, rules).status == RaidStatus::started);
+        const auto recovered = raid_due(storage, 28805, rules);
+        REQUIRE(recovered.size() == 1);
+        CHECK(recovered[0].loot == potential(recovered[0]));
+        CHECK(recovered[0].resistance_absorbed == 0);
     }
 }
 
