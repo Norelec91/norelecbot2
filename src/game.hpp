@@ -134,9 +134,8 @@ struct RaidEvent {
     std::int64_t resistance_absorbed = 0;
     /* The target was away, so there was nothing to get past. */
     bool undefended = false;
-    /* Whether each of them is known to be on Telegram, where a mention reaches them. */
+    /* Whether the target is known to be on Telegram, where a mention reaches them. */
     bool target_on_telegram = false;
-    bool raider_on_telegram = false;
 };
 
 struct LeaderboardEntry {

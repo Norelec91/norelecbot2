@@ -682,9 +682,9 @@ bool command_is_for_bot(std::string_view text) {
            (!message.empty() && find_command(parse_command(message).name) != nullptr);
 }
 
-std::string raid_event_reply(const RaidEvent &event, const zodiac::Overrides &signs) {
+std::string raid_event_reply(const RaidEvent &event) {
     const std::string_view mention = event.target_on_telegram ? "@" : "";
-    const std::string home = std::format("{}{}", event.raider_on_telegram ? "@" : "", event.raider);
+    const std::string &home = event.raider;
     /* The bare name for whoever is spoken to, the dressed one when somebody is named. */
     const auto with_emoji = [](std::string_view name, std::string_view emoji) {
         return emoji.empty() ? std::string{name} : std::format("{} ({})", name, emoji);
@@ -718,24 +718,6 @@ std::string raid_event_reply(const RaidEvent &event, const zodiac::Overrides &si
         reply += ", che non era sul suo pianeta";
     } else if (event.balloon_popped) {
         reply += ", bucandogli il palloncino";
-    } else if (event.shield_absorbed > 0) {
-        reply += std::format(", il cui scudo ha fermato {} palle", event.shield_absorbed);
-    }
-    if (event.resistance_absorbed > 0) {
-        reply += std::format(", la resistenza del pianeta ha fermato {} palle", event.resistance_absorbed);
-    }
-    if (event.raider_percent != event.target_percent) {
-        const zodiac::Sign raider_sign = zodiac::sign_of(event.raider, signs);
-        const zodiac::Sign target_sign = zodiac::sign_of(event.target, signs);
-        reply += std::format(
-            " ({} {} contro {} {}: {}/{})",
-            raider_sign.symbol,
-            raider_sign.name,
-            target_sign.symbol,
-            target_sign.name,
-            event.raider_percent,
-            event.target_percent
-        );
     }
     reply += std::format("! Torni in {} tra {}.", home, format_wait(event.seconds));
     return reply;

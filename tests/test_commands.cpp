@@ -552,40 +552,38 @@ TEST_CASE("an ambiguous old holder is not claimed by an IRC namesake") {
 }
 
 TEST_CASE("the raids tell what happened") {
-    const zodiac::Overrides none;
     RaidEvent event;
     event.kind = RaidEvent::Kind::stolen;
     event.raider = "bob";
     event.target = "alice";
     event.loot = 250;
     event.seconds = 52;
-    CHECK(raid_event_reply(event, none) == "💰 bob hai rubato 250 palle a alice! Torni in bob tra 52 secondi.");
+    CHECK(raid_event_reply(event) == "💰 bob hai rubato 250 palle a alice! Torni in bob tra 52 secondi.");
 
     event.shield_absorbed = 70;
-    CHECK(raid_event_reply(event, none) ==
-          "💰 bob hai rubato 250 palle a alice, il cui scudo ha fermato 70 palle! Torni in bob tra 52 secondi.");
+    CHECK(raid_event_reply(event) ==
+          "💰 bob hai rubato 250 palle a alice! Torni in bob tra 52 secondi.");
     event.shield_absorbed = 0;
 
     event.resistance_absorbed = 125;
-    CHECK(raid_event_reply(event, none) ==
-          "💰 bob hai rubato 250 palle a alice, la resistenza del pianeta ha fermato 125 palle! Torni in bob tra 52 secondi.");
+    CHECK(raid_event_reply(event) ==
+          "💰 bob hai rubato 250 palle a alice! Torni in bob tra 52 secondi.");
     event.shield_absorbed = 70;
-    CHECK(raid_event_reply(event, none) ==
-          "💰 bob hai rubato 250 palle a alice, il cui scudo ha fermato 70 palle, la resistenza del pianeta ha fermato 125 palle! Torni in bob tra 52 secondi.");
+    CHECK(raid_event_reply(event) ==
+          "💰 bob hai rubato 250 palle a alice! Torni in bob tra 52 secondi.");
     event.shield_absorbed = 0;
-    event.resistance_absorbed = 0;
 
     event.target_on_telegram = true;
     event.undefended = true;
-    CHECK(raid_event_reply(event, none) ==
+    CHECK(raid_event_reply(event) ==
           "💰 bob hai rubato 250 palle a @alice, che non era sul suo pianeta! Torni in bob tra 52 secondi.");
 
     event.undefended = false;
     event.balloon_popped = true;
     event.raider_percent = 125;
     event.target_percent = 75;
-    CHECK(raid_event_reply(event, none).contains("bucandogli il palloncino ("));
-    CHECK(raid_event_reply(event, none).contains(": 125/75)"));
+    CHECK(raid_event_reply(event) ==
+          "💰 bob hai rubato 250 palle a @alice, bucandogli il palloncino! Torni in bob tra 52 secondi.");
 
     RaidEvent defended{
         .kind = RaidEvent::Kind::defended,
@@ -597,27 +595,23 @@ TEST_CASE("the raids tell what happened") {
         .target_emoji = {},
         .seconds = 52,
     };
-    CHECK(raid_event_reply(defended, none) ==
+    CHECK(raid_event_reply(defended) ==
           "🎈 bob il palloncino di alice ha resistito e ti costa 100 palle. Torni in bob a mani vuote tra 52 secondi.");
 
-    /* Names of people stay bare; the mention belongs to the planet he is heading back to. */
-    defended.raider_on_telegram = true;
+    /* The raider's own planet does not mention them. */
     defended.target_on_telegram = true;
-    CHECK(raid_event_reply(defended, none) ==
+    CHECK(raid_event_reply(defended) ==
           "🎈 bob il palloncino di alice ha resistito e ti costa 100 palle. "
-          "Torni in @bob a mani vuote tra 52 secondi.");
+          "Torni in bob a mani vuote tra 52 secondi.");
 
     RaidEvent home;
     home.kind = RaidEvent::Kind::returned;
     home.raider = "bob";
     home.target = "alice";
     home.loot = 250;
-    CHECK(raid_event_reply(home, none) == "🪐 bob sei tornato in bob con 250 palle.");
-    home.raider_on_telegram = true;
-    CHECK(raid_event_reply(home, none) == "🪐 bob sei tornato in @bob con 250 palle.");
-    home.raider_on_telegram = false;
+    CHECK(raid_event_reply(home) == "🪐 bob sei tornato in bob con 250 palle.");
     home.loot = 0;
-    CHECK(raid_event_reply(home, none) == "🪐 bob sei tornato in bob a mani vuote.");
+    CHECK(raid_event_reply(home) == "🪐 bob sei tornato in bob a mani vuote.");
 }
 
 TEST_CASE("a quote about what the owner has banned is turned away") {

@@ -31,7 +31,7 @@ struct CommandContext {
 };
 
 /* What the bot says when a raid reaches its target or comes home. */
-[[nodiscard]] std::string raid_event_reply(const RaidEvent &event, const zodiac::Overrides &signs);
+[[nodiscard]] std::string raid_event_reply(const RaidEvent &event);
 
 /* Whether the text is a claim or a known command, without running it. */
 [[nodiscard]] bool command_is_for_bot(std::string_view text);

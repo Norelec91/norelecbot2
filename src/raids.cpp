@@ -46,7 +46,7 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
     while (!stop.load(std::memory_order_relaxed)) {
         try {
             for (const RaidEvent &event : raid_due(storage, seconds_now(), rules)) {
-                announce(config, raid_event_reply(event, config.zodiac_signs));
+                announce(config, raid_event_reply(event));
             }
         } catch (const std::exception &error) {
             log_warning("A raid could not be settled: {}", error.what());

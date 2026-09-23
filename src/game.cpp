@@ -894,7 +894,6 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 event.target = display_name(state, raid.target);
                 event.seconds = std::max<std::int64_t>(raid.back - now, 0);
                 event.target_on_telegram = counter(state.telegram_ids, raid.target) != 0;
-                event.raider_on_telegram = counter(state.telegram_ids, raid.raider) != 0;
                 event.raider_emoji = furniture_of(state, raid.raider);
                 event.target_emoji = furniture_of(state, raid.target);
                 const bool on_home_planet = on_own_planet(state, raid.target);
@@ -961,7 +960,6 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                     .loot = raid.loot,
                     .raider_emoji = furniture_of(state, raid.raider),
                     .target_emoji = furniture_of(state, raid.target),
-                    .raider_on_telegram = counter(state.telegram_ids, raid.raider) != 0,
                 });
             }
         }

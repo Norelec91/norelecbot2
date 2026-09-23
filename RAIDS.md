@@ -10,8 +10,10 @@ in the meantime.
 A balloon that turns a raid back does not increase resistance. Neither does a
 raid that takes no palle, including one stopped completely by the purchased
 shield. Resistance remains effective when the owner is away; balloon and
-purchased shield behavior is unchanged. The raid announcement reports the
-number of palle stopped by planet resistance separately from shield absorption.
+purchased shield behavior is unchanged. Raid announcements report the amount
+stolen but do not attribute reductions to resistance or the purchased shield.
+Zodiac modifiers still affect the loot calculation but are not shown in raid
+announcements.
 
 Resistance belongs to the stable internal player key and is saved under
 `raid_resistance_levels` and `raid_resistance_since` in `conquister.json`.
