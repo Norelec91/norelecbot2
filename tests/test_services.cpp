@@ -986,3 +986,102 @@ TEST_CASE("turning back mid journey only costs the road already walked") {
     /* And once home he can leave again. */
     CHECK(raid_start(storage, 7, "bob", "alice", third + third, slow).status == RaidStatus::started);
 }
+
+TEST_CASE("investments compound daily, remain separate from score, and survive a restart") {
+    const TestPaths paths{"investment-service-test"};
+    constexpr std::int64_t day = 86400;
+    {
+        Storage storage{paths.conquister, paths.quotes};
+        const std::string alice = player_seen(storage, 1, "Alice");
+        const std::string bob = player_seen(storage, 2, "Bob");
+        storage.transaction([&](StorageSession &session) {
+            session.state().scores[alice] = 3000;
+            return 0;
+        });
+        CHECK(investment_deposit(storage, alice, "Bob", RaidTargetKind::telegram, 1000, 0).status ==
+              InvestmentStatus::not_self);
+        CHECK(investment_deposit(storage, alice, "Alice", RaidTargetKind::irc, 1000, 0).status ==
+              InvestmentStatus::not_self);
+        CHECK(investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 0, 0).status ==
+              InvestmentStatus::invalid_amount);
+        CHECK(investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 4000, 0).status ==
+              InvestmentStatus::insufficient_score);
+        CHECK(investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 1000, 0).status ==
+              InvestmentStatus::deposited);
+        CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 2000);
+        CHECK(investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 1000, day).status ==
+              InvestmentStatus::deposited);
+        CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 1000);
+        CHECK(investment_withdraw(storage, bob, "Alice", RaidTargetKind::telegram, day).status ==
+              InvestmentStatus::not_self);
+    }
+    {
+        Storage storage{paths.conquister, paths.quotes};
+        const InvestmentResult payout = investment_withdraw(storage, "tg:1", "Alice", RaidTargetKind::telegram,
+                                                              2 * day);
+        CHECK(payout.status == InvestmentStatus::withdrawn);
+        CHECK(payout.amount == 2090);
+        CHECK(payout.interest == 90);
+        CHECK(payout.score == 3090);
+        CHECK(investment_withdraw(storage, "tg:1", "Alice", RaidTargetKind::telegram, 2 * day).status ==
+              InvestmentStatus::no_investment);
+        CHECK(read_json(paths.conquister).at("investments").empty());
+    }
+}
+
+TEST_CASE("investment withdrawal and deposit require the player's planet") {
+    const TestPaths paths{"investment-location-test"};
+    Storage storage{paths.conquister, paths.quotes};
+    const std::string alice = player_seen(storage, 1, "Alice");
+    const std::string bob = player_seen(storage, 2, "Bob");
+    storage.transaction([&](StorageSession &session) {
+        session.state().scores[alice] = 2000;
+        return 0;
+    });
+    CHECK(investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 1000, 0).status ==
+          InvestmentStatus::deposited);
+    CHECK(raid_start(storage, 1, alice, "Bob", 1, {}, RaidTargetKind::telegram).status == RaidStatus::started);
+    CHECK(investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 1, 2).status ==
+          InvestmentStatus::not_home);
+    CHECK(investment_withdraw(storage, alice, "Alice", RaidTargetKind::telegram, 2).status ==
+          InvestmentStatus::not_home);
+    storage.transaction([&](StorageSession &session) {
+        session.state().raids.clear();
+        session.state().current = Holder{.user_id = 1, .username = alice, .since = 3};
+        return 0;
+    });
+    CHECK(investment_withdraw(storage, alice, "Alice", RaidTargetKind::telegram, 4).status ==
+          InvestmentStatus::not_home);
+    storage.transaction([&](StorageSession &session) {
+        session.state().current.reset();
+        return 0;
+    });
+    CHECK(investment_withdraw(storage, alice, "Alice", RaidTargetKind::telegram, 86400).status ==
+          InvestmentStatus::withdrawn);
+}
+
+TEST_CASE("raids can steal only the non-invested balance") {
+    const TestPaths paths{"investment-raid-test"};
+    Storage storage{paths.conquister, paths.quotes};
+    const std::string alice = player_seen(storage, 1, "Alice");
+    const std::string bob = player_seen(storage, 2, "Bob");
+    storage.transaction([&](StorageSession &session) {
+        session.state().scores[alice] = 2000;
+        return 0;
+    });
+    REQUIRE(investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 1000, 0).status ==
+            InvestmentStatus::deposited);
+    const RaidRules rules{.loot_divisor = 1, .loot_share = 0, .travel_divisor = 1000,
+                          .attack_cost = 0, .signs = {}};
+    const RaidResult trip = raid_start(storage, 2, bob, "Alice", 1, rules, RaidTargetKind::telegram);
+    REQUIRE(trip.status == RaidStatus::started);
+    const std::vector<RaidEvent> arrival = raid_due(storage, 1 + trip.seconds, rules);
+    REQUIRE(arrival.size() == 1);
+    CHECK(arrival[0].loot <= 1000);
+    CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 1000 - arrival[0].loot);
+    const InvestmentResult payout = investment_withdraw(storage, alice, "Alice", RaidTargetKind::telegram,
+                                                         1 + trip.seconds);
+    CHECK(payout.status == InvestmentStatus::withdrawn);
+    CHECK(payout.amount >= 1000);
+    CHECK(payout.score >= 1000);
+}

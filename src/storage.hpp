@@ -51,6 +51,15 @@ struct Raid {
     bool operator==(const Raid &) const = default;
 };
 
+/* A deposit remains separate from the score and keeps its own accrual start. */
+struct InvestmentDeposit {
+    std::string player;
+    std::int64_t amount = 0;
+    std::int64_t since = 0;
+
+    bool operator==(const InvestmentDeposit &) const = default;
+};
+
 struct ConquisterState {
     std::optional<Holder> current;
     Counters scores;
@@ -86,6 +95,7 @@ struct ConquisterState {
     Authors link_requests;
     /* The raids under way, in the order they left. */
     std::vector<Raid> raids;
+    std::vector<InvestmentDeposit> investments;
     /* Who added each quote, for the ones added since the bot started writing it down. */
     Authors quote_authors;
     /* The emoji each player bought to hang beside his name. */

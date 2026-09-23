@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cmath>
 #include <iterator>
 #include <limits>
 #include <ranges>
@@ -287,6 +288,11 @@ std::optional<std::string> known_player(const ConquisterState &state, std::strin
             return found->first;
         }
     }
+    for (const InvestmentDeposit &deposit : state.investments) {
+        if (text::equals_ignore_case(deposit.player, name)) {
+            return deposit.player;
+        }
+    }
     if (state.current && text::equals_ignore_case(state.current->username, name)) {
         return state.current->username;
     }
@@ -407,6 +413,9 @@ LinkStatus player_link(Storage &storage, std::int64_t user_id, const std::string
                 }) ||
                 std::ranges::any_of(state.quote_authors, [&key](const Authors::value_type &entry) {
                     return entry.second == key;
+                }) ||
+                std::ranges::any_of(state.investments, [&key](const InvestmentDeposit &deposit) {
+                    return deposit.player == key;
                 });
         };
         if (has_assets(mine_key) && has_assets(other_key)) {
@@ -438,6 +447,11 @@ LinkStatus player_link(Storage &storage, std::int64_t user_id, const std::string
         }
         if (state.irc_names.erase(secondary) > 0) {
             state.irc_names[primary] = 1;
+        }
+        for (InvestmentDeposit &deposit : state.investments) {
+            if (deposit.player == secondary) {
+                deposit.player = primary;
+            }
         }
         state.display_names.erase(secondary);
         if (!telegram_display.empty()) {
@@ -785,6 +799,90 @@ RaidShieldResult raid_shield_buy(Storage &storage, const std::string &username, 
         log_info("raid shield bought user={} cost={} left={}", username, cost, result.available_score);
     }
     return result;
+}
+
+InvestmentResult investment_deposit(Storage &storage, const std::string &player,
+                                    std::string_view target, RaidTargetKind platform,
+                                    std::int64_t amount, std::int64_t now) {
+    return storage.transaction([&](StorageSession &session) {
+        ConquisterState &state = session.state();
+        InvestmentResult result;
+        if (player_by_name(state, target, platform) != player) {
+            result.status = InvestmentStatus::not_self;
+        } else if (!on_own_planet(state, player)) {
+            result.status = InvestmentStatus::not_home;
+        } else if (amount <= 0) {
+            result.status = InvestmentStatus::invalid_amount;
+        } else {
+            const std::int64_t score = counter(state.scores, player);
+            if (amount > score) {
+                result.status = InvestmentStatus::insufficient_score;
+                result.score = score;
+            } else {
+                state.scores[player] = score - amount;
+                state.investments.push_back({player, amount, now});
+                result.status = InvestmentStatus::deposited;
+                result.amount = amount;
+                result.score = score - amount;
+            }
+        }
+        return result;
+    });
+}
+
+InvestmentResult investment_withdraw(Storage &storage, const std::string &player,
+                                     std::string_view target, RaidTargetKind platform,
+                                     std::int64_t now) {
+    return storage.transaction([&](StorageSession &session) {
+        ConquisterState &state = session.state();
+        InvestmentResult result;
+        if (player_by_name(state, target, platform) != player) {
+            result.status = InvestmentStatus::not_self;
+            return result;
+        }
+        if (!on_own_planet(state, player)) {
+            result.status = InvestmentStatus::not_home;
+            return result;
+        }
+        long double total = 0;
+        std::int64_t principal = 0;
+        bool found = false;
+        for (const InvestmentDeposit &deposit : state.investments) {
+            if (deposit.player != player) {
+                continue;
+            }
+            found = true;
+            const long double elapsed = now > deposit.since
+                ? static_cast<long double>(now) - static_cast<long double>(deposit.since) : 0;
+            total += static_cast<long double>(deposit.amount) * std::pow(1.03L, elapsed / 86400.0L);
+            if (total >= static_cast<long double>(std::numeric_limits<std::int64_t>::max()) ||
+                !std::isfinite(total)) {
+                result.status = InvestmentStatus::balance_limit;
+                return result;
+            }
+            principal += deposit.amount;
+        }
+        if (!found) {
+            result.status = InvestmentStatus::no_investment;
+            return result;
+        }
+        const std::int64_t score = counter(state.scores, player);
+        if (total > static_cast<long double>(std::numeric_limits<std::int64_t>::max() - score)) {
+            result.status = InvestmentStatus::balance_limit;
+            return result;
+        }
+        const std::int64_t payout = static_cast<std::int64_t>(std::floor(std::nextafter(
+            total, std::numeric_limits<long double>::infinity())));
+        state.scores[player] = score + payout;
+        std::erase_if(state.investments, [&player](const InvestmentDeposit &deposit) {
+            return deposit.player == player;
+        });
+        result.status = InvestmentStatus::withdrawn;
+        result.amount = payout;
+        result.interest = payout - principal;
+        result.score = score + payout;
+        return result;
+    });
 }
 
 RaidResult raid_start(

@@ -86,6 +86,16 @@ enum class RaidStatus {
 
 enum class RaidTargetKind { any, telegram, irc };
 
+enum class InvestmentStatus { deposited, withdrawn, not_self, not_home, insufficient_score,
+                              no_investment, invalid_amount, balance_limit };
+
+struct InvestmentResult {
+    InvestmentStatus status = InvestmentStatus::no_investment;
+    std::int64_t amount = 0;
+    std::int64_t interest = 0;
+    std::int64_t score = 0;
+};
+
 struct RaidRules {
     /* How much road buys a palla. */
     int loot_divisor = 50;
@@ -262,6 +272,12 @@ void debug_set(Storage &storage, const std::string &username, bool wanted);
     const RaidRules &rules,
     RaidTargetKind target_kind = RaidTargetKind::any
 );
+
+/* Funds leave the stealable score until withdrawn on the owner's planet. */
+[[nodiscard]] InvestmentResult investment_deposit(Storage &storage, const std::string &player,
+    std::string_view target, RaidTargetKind platform, std::int64_t amount, std::int64_t now);
+[[nodiscard]] InvestmentResult investment_withdraw(Storage &storage, const std::string &player,
+    std::string_view target, RaidTargetKind platform, std::int64_t now);
 
 /* Settles the raids that have reached the target or come home by now. */
 [[nodiscard]] std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRules &rules);

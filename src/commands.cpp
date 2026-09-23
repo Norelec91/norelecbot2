@@ -31,16 +31,40 @@ struct ParsedCommand {
     std::string_view argument;
 };
 
+bool valid_raid_target(std::string_view target) {
+    const bool one_name = !target.empty() && target != "@" &&
+                          target.find_first_of(" \t\r\n", 0) == std::string_view::npos &&
+                          target.find('@', target.starts_with('@') ? 1 : 0) == std::string_view::npos;
+    return one_name;
+}
+
 /* The name after "We ", including its optional Telegram @, or nothing if invalid. */
 std::string_view raid_target(std::string_view message) {
     if (!message.starts_with(raid_trigger) || message == conquister_trigger) {
         return {};
     }
     const std::string_view target = message.substr(raid_trigger.size());
-    const bool one_name = !target.empty() && target != "@" &&
-                          target.find_first_of(" \t\r\n", 0) == std::string_view::npos &&
-                          target.find('@', target.starts_with('@') ? 1 : 0) == std::string_view::npos;
-    return one_name ? target : std::string_view{};
+    return valid_raid_target(target) ? target : std::string_view{};
+}
+
+struct ParsedInvestment {
+    std::string_view target;
+    std::int64_t amount = 0;
+};
+
+std::optional<ParsedInvestment> investment_target(std::string_view message) {
+    if (!message.starts_with(raid_trigger)) {
+        return std::nullopt;
+    }
+    const std::string_view rest = message.substr(raid_trigger.size());
+    const std::size_t separator = rest.find_first_of(" \t\r\n");
+    if (separator == std::string_view::npos || !valid_raid_target(rest.substr(0, separator))) {
+        return std::nullopt;
+    }
+    if (const auto amount = text::parse_int64(rest.substr(separator))) {
+        return ParsedInvestment{rest.substr(0, separator), *amount};
+    }
+    return std::nullopt;
 }
 
 ParsedCommand parse_command(std::string_view message) {
@@ -235,6 +259,31 @@ std::string handle_raid(const CommandContext &context, std::string_view target) 
         format_wait(result.seconds),
         username
     );
+}
+
+std::string handle_investment(const CommandContext &context, const ParsedInvestment &request) {
+    if (context.username.empty()) {
+        return missing_username_reply();
+    }
+    const bool telegram = request.target.starts_with('@');
+    const std::string_view name = telegram ? request.target.substr(1) : request.target;
+    const InvestmentResult result = investment_deposit(context.storage, std::string{context.player_key}, name,
+        telegram ? RaidTargetKind::telegram : RaidTargetKind::irc, request.amount, seconds_now());
+    switch (result.status) {
+    case InvestmentStatus::deposited:
+        return std::format("🏦 {} hai investito {} palle sul tuo pianeta. Saldo disponibile: {} palle.",
+                           context.username, result.amount, result.score);
+    case InvestmentStatus::not_self:
+        return std::format("🏦 {} puoi investire solo sul tuo pianeta.", context.username);
+    case InvestmentStatus::not_home:
+        return std::format("🏦 {} devi essere sul tuo pianeta per investire.", context.username);
+    case InvestmentStatus::invalid_amount:
+        return std::format("🏦 {} indica un numero di palle maggiore di zero.", context.username);
+    case InvestmentStatus::insufficient_score:
+        return std::format("🏦 {} hai solo {} palle disponibili.", context.username, result.score);
+    default:
+        return std::string{internal_error_reply};
+    }
 }
 
 std::string handle_claim(const CommandContext &context, std::string_view) {
@@ -678,7 +727,7 @@ const CommandDefinition *find_command(std::string_view name) {
 
 bool command_is_for_bot(std::string_view text) {
     const std::string_view message = text::trim(text);
-    return message == conquister_trigger || !raid_target(message).empty() ||
+    return message == conquister_trigger || !raid_target(message).empty() || investment_target(message).has_value() ||
            (!message.empty() && find_command(parse_command(message).name) != nullptr);
 }
 
@@ -742,11 +791,32 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
             remember_sender();
             return handle_claim(bound, {});
         }
+        if (const auto investment = investment_target(message)) {
+            if (!context.claims_allowed) {
+                return std::nullopt;
+            }
+            remember_sender();
+            return handle_investment(bound, *investment);
+        }
         if (const std::string_view target = raid_target(message); !target.empty()) {
             if (!context.claims_allowed) {
                 return std::nullopt;
             }
             remember_sender();
+            if (!bound.player_key.empty()) {
+                const bool telegram = target.starts_with('@');
+                const InvestmentResult investment = investment_withdraw(context.storage, bound_key,
+                    telegram ? target.substr(1) : target,
+                    telegram ? RaidTargetKind::telegram : RaidTargetKind::irc, seconds_now());
+                if (investment.status == InvestmentStatus::withdrawn) {
+                    return std::format("🏦 {} hai ritirato {} palle, di cui {} di interessi. Saldo: {} palle.",
+                                       context.username, investment.amount, investment.interest, investment.score);
+                }
+                if (investment.status == InvestmentStatus::balance_limit) {
+                    return std::format("🏦 {} il saldo è troppo alto per ritirare l'investimento: contatta il proprietario del bot.",
+                                       context.username);
+                }
+            }
             return handle_raid(bound, target);
         }
         if (message.empty()) {

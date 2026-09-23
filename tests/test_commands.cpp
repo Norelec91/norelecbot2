@@ -535,6 +535,40 @@ TEST_CASE("the @ prefix selects Telegram names and bare names select IRC nicks")
     CHECK(command_dispatch(context, "We Lucy")->contains("sei già in viaggio"));
 }
 
+TEST_CASE("We invests and withdraws only with the owner's platform name") {
+    const TestPaths paths{"investment-command-test"};
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{paths.conquister, paths.quotes};
+    CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
+    REQUIRE(command_dispatch(alice, "/leaderboard"));
+    storage.transaction([](StorageSession &session) {
+        session.state().scores["tg:1"] = 2000;
+        return 0;
+    });
+    CHECK(command_is_for_bot("We @Alice 1000"));
+    CHECK_FALSE(command_is_for_bot("We @Alice ora"));
+    CHECK(command_dispatch(alice, "We Alice 1000")->contains("solo sul tuo pianeta"));
+    CHECK(command_dispatch(alice, "We @Bob 1000")->contains("solo sul tuo pianeta"));
+    CHECK(command_dispatch(alice, "We @Alice 0")->contains("maggiore di zero"));
+    CHECK(command_dispatch(alice, "We @Alice 3000")->contains("solo 2000"));
+    CHECK(command_dispatch(alice, "We @Alice 1000")->contains("hai investito 1000"));
+    CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 1000);
+    CHECK(command_dispatch(alice, "We @Alice")->contains("hai ritirato 1000"));
+    CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 2000);
+    CHECK(command_dispatch(alice, "We @Alice") == "🪐 Alice sei già in @Alice!");
+
+    CommandContext irc{.storage = storage, .config = config, .user_id = 0, .username = "Bob"};
+    REQUIRE(command_dispatch(irc, "/leaderboard"));
+    storage.transaction([](StorageSession &session) {
+        session.state().scores["irc:bob"] = 1000;
+        return 0;
+    });
+    CHECK(command_dispatch(irc, "We Bob 1000")->contains("hai investito 1000"));
+    CHECK(command_dispatch(irc, "We Bob")->contains("hai ritirato 1000"));
+}
+
 TEST_CASE("an ambiguous old holder is not claimed by an IRC namesake") {
     const TestPaths paths{"legacy-dual-target-command-test"};
     {

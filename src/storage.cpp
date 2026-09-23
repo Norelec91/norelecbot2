@@ -98,6 +98,29 @@ std::vector<Raid> parse_raids(const Json &state) {
     return raids;
 }
 
+std::vector<InvestmentDeposit> parse_investments(const Json &state) {
+    std::vector<InvestmentDeposit> deposits;
+    const auto section = state.find("investments");
+    if (section == state.end()) {
+        return deposits;
+    }
+    if (!section->is_array()) {
+        throw std::invalid_argument("investments is not an array");
+    }
+    for (const Json &entry : *section) {
+        InvestmentDeposit deposit{
+            .player = entry.at("player").get<std::string>(),
+            .amount = integer(entry.at("amount")),
+            .since = integer(entry.at("since")),
+        };
+        if (deposit.player.empty() || deposit.amount <= 0) {
+            throw std::invalid_argument("invalid investment deposit");
+        }
+        deposits.push_back(std::move(deposit));
+    }
+    return deposits;
+}
+
 /* Missing sections count as empty, like in the original C version. */
 ConquisterState parse_state(const Json &json) {
     if (!json.is_object()) {
@@ -131,6 +154,7 @@ ConquisterState parse_state(const Json &json) {
         parse_authors(json, "irc_nicks"),
         parse_authors(json, "link_requests"),
         parse_raids(json),
+        parse_investments(json),
         parse_authors(json, "quote_authors"),
         parse_authors(json, "furniture"),
         parse_counters(json, "debugging"),
@@ -148,6 +172,10 @@ Json state_to_json(const ConquisterState &state) {
             {"arrived", raid.arrived},
             {"loot", raid.loot},
         };
+    });
+    Json investments = Json::array();
+    std::ranges::transform(state.investments, std::back_inserter(investments), [](const InvestmentDeposit &deposit) {
+        return Json{{"player", deposit.player}, {"amount", deposit.amount}, {"since", deposit.since}};
     });
     Json current = nullptr;
     if (state.current) {
@@ -177,6 +205,7 @@ Json state_to_json(const ConquisterState &state) {
         {"irc_nicks", state.irc_nicks},
         {"link_requests", state.link_requests},
         {"raids", std::move(raids)},
+        {"investments", std::move(investments)},
         {"quote_authors", state.quote_authors},
         {"furniture", state.furniture},
         {"debugging", state.debugging},
