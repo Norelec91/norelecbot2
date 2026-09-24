@@ -41,8 +41,10 @@ struct AppConfig {
 
     std::string bot_token;
     bool conquister_enabled = false;
-    /* Whoever may see and delete the quotes, on Telegram. */
+    /* Whoever owns the bot, on Telegram: an admin who may also switch the debug on. */
     std::vector<std::int64_t> owner_ids;
+    /* Whoever may see and delete the quotes, on Telegram; the owners can do it too. */
+    std::vector<std::int64_t> admin_ids;
     int quote_cost = default_quote_cost;
     /* Pieces of word a quote may not contain, whatever the spelling. */
     std::vector<std::string> quote_banned;

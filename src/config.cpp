@@ -42,6 +42,20 @@ std::vector<std::string> split_names(std::string_view value) {
     return names;
 }
 
+/* A list of Telegram ids, separated by commas or spaces. */
+bool set_ids(std::vector<std::int64_t> &target, std::string_view value) {
+    std::vector<std::int64_t> parsed;
+    for (const std::string &name : split_names(value)) {
+        const std::optional<std::int64_t> id = text::parse_int64(name);
+        if (!id) {
+            return false;
+        }
+        parsed.push_back(*id);
+    }
+    target = std::move(parsed);
+    return true;
+}
+
 bool set_text(std::string &target, std::string_view value, std::string_view fallback) {
     target = value.empty() ? fallback : value;
     return true;
@@ -63,16 +77,10 @@ constexpr std::array settings{
         return true;
     }},
     Setting{"NORELECBOT_OWNER_ID", [](AppConfig &config, std::string_view value) {
-        std::vector<std::int64_t> owners;
-        for (const std::string &name : split_names(value)) {
-            const std::optional<std::int64_t> id = text::parse_int64(name);
-            if (!id) {
-                return false;
-            }
-            owners.push_back(*id);
-        }
-        config.owner_ids = std::move(owners);
-        return true;
+        return set_ids(config.owner_ids, value);
+    }},
+    Setting{"NORELECBOT_ADMIN_ID", [](AppConfig &config, std::string_view value) {
+        return set_ids(config.admin_ids, value);
     }},
     Setting{"NORELECBOT_QUOTE_COST", [](AppConfig &config, std::string_view value) {
         return set_number(config.quote_cost, value, AppConfig::default_quote_cost, 0);

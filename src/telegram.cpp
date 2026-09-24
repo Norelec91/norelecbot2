@@ -94,6 +94,7 @@ void process_message(Storage &storage, const AppConfig &config, const Json &mess
             : std::string_view{},
         .claims_allowed = config.conquister_chat_id == 0 || chat == config.conquister_chat_id,
         .owner = std::ranges::find(config.owner_ids, sender_id) != config.owner_ids.end(),
+        .admin = std::ranges::find(config.admin_ids, sender_id) != config.admin_ids.end(),
     };
     const std::optional<std::string> reply = command_dispatch(context, text->get_ref<const std::string &>());
     if (!reply) {

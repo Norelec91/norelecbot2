@@ -129,3 +129,20 @@ TEST_CASE("the bot can have more than one owner") {
 
     CHECK_FALSE(file.load("NORELECBOT_OWNER_ID=12345, tizio\n"));
 }
+
+TEST_CASE("the admins are read like the owners, and are nobody by default") {
+    const ConfigFile file;
+
+    const auto config = file.load("NORELECBOT_ADMIN_ID=4455 667788\n");
+    REQUIRE(config);
+    REQUIRE(config->admin_ids.size() == 2);
+    CHECK(config->admin_ids[0] == 4455);
+    CHECK(config->admin_ids[1] == 667788);
+    CHECK(config->owner_ids.empty());
+
+    const auto nobody = file.load("NORELECBOT_ADMIN_ID=\n");
+    REQUIRE(nobody);
+    CHECK(nobody->admin_ids.empty());
+
+    CHECK_FALSE(file.load("NORELECBOT_ADMIN_ID=12345, tizio\n"));
+}

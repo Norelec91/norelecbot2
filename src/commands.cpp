@@ -542,9 +542,14 @@ std::string handle_buy_balloon(const CommandContext &, std::string_view) {
            "Sparisce quando lasci il posto e non protegge a casa.";
 }
 
+/* The owner is an admin with more powers, so he never has to be listed twice. */
+bool trusted(const CommandContext &context) {
+    return context.owner || context.admin;
+}
+
 std::string handle_quotes(const CommandContext &context, std::string_view argument) {
-    if (!context.owner) {
-        return "Solo il proprietario può vedere le citazioni.";
+    if (!trusted(context)) {
+        return "Solo gli amministratori possono vedere le citazioni.";
     }
     const std::optional<std::int64_t> requested = text::parse_int64(argument);
     const int page = requested && *requested > 0 && *requested <= std::numeric_limits<std::int32_t>::max()
@@ -601,8 +606,8 @@ std::string handle_debug(const CommandContext &context, std::string_view argumen
 }
 
 std::string handle_delete_quote(const CommandContext &context, std::string_view argument) {
-    if (!context.owner) {
-        return "Solo il proprietario può eliminare le citazioni.";
+    if (!trusted(context)) {
+        return "Solo gli amministratori possono eliminare le citazioni.";
     }
     if (argument.empty()) {
         return "Uso: /delquote <numero da /quotes | testo esatto>.";

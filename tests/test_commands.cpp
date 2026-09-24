@@ -62,11 +62,11 @@ TEST_CASE("the bot answers the commands it knows and ignores the rest") {
         answer = reply("  /LEADERBOARD@ExampleBot  ");
         CHECK(answer.contains("Classifica"));
         CHECK_FALSE(answer.contains("palle @TheConquister37"));
-        CHECK(reply("/quotes 8") == "Solo il proprietario può vedere le citazioni.");
+        CHECK(reply("/quotes 8") == "Solo gli amministratori possono vedere le citazioni.");
         answer = reply("/addquote");
         CHECK(answer.contains("Uso: /addquote"));
         CHECK(answer.contains("1000 palle."));
-        CHECK(reply("/delquote 1").contains("Solo il proprietario"));
+        CHECK(reply("/delquote 1").contains("Solo gli amministratori"));
 
         context.user_id = 99;
         context.username = "owner";
@@ -698,6 +698,35 @@ TEST_CASE("the raids tell what happened") {
     /* He turned back, so the palle he was carrying are his again. */
     home.gift = 700;
     CHECK(raid_event_reply(home) == "🎁 bob sei tornato in bob con le tue 700 palle ancora in tasca.");
+}
+
+TEST_CASE("the quotes are open to the admins as well as to the owner") {
+    const TestPaths paths{"admin-command-test"};
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    config.quote_cost = 0;
+    Storage storage{paths.conquister, paths.quotes};
+    CommandContext context{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
+    REQUIRE(command_dispatch(context, "/addquote citazione di prova"));
+
+    const auto reply = [&](std::string_view text) {
+        return command_dispatch(context, text).value_or("<nessuna risposta>");
+    };
+    CHECK(reply("/quotes") == "Solo gli amministratori possono vedere le citazioni.");
+    CHECK(reply("/delquote 1") == "Solo gli amministratori possono eliminare le citazioni.");
+
+    context.admin = true;
+    CHECK(reply("/quotes").contains("citazione di prova"));
+    /* The debug switch stays with the owner alone. */
+    CHECK(reply("/debug 1") == "Solo il proprietario può accendere il debug.");
+    CHECK(reply("/delquote 1") == "Citazione eliminata: citazione di prova");
+
+    /* An owner is trusted with the quotes without being listed as an admin too. */
+    context.admin = false;
+    context.owner = true;
+    CHECK(reply("/quotes") == "Nessuna citazione in collezione.");
+    CHECK(reply("/debug 0").contains("Debug spento"));
 }
 
 TEST_CASE("We with a number for the place destroys the palle") {

@@ -28,6 +28,8 @@ struct CommandContext {
     /* The front end decides both: the chat or channel where the game is played, and who owns the bot. */
     bool claims_allowed = true;
     bool owner = false;
+    /* Trusted with the quotes; every owner is one, whatever the front end passes here. */
+    bool admin = false;
 };
 
 /* What the bot says when a raid reaches its target or comes home. */
