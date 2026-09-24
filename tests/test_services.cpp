@@ -519,7 +519,7 @@ TEST_CASE("palle brought back to the place leave the game") {
     CHECK(burned.score == 600);
     CHECK(conquister_user(storage, "alice")->score == 600);
     /* Nobody else grew by what was destroyed. */
-    CHECK(wealth_now(storage).total == 600);
+    CHECK(read_json(paths.conquister).at("scores").size() == 1);
 }
 
 TEST_CASE("palle taken along change hands on arrival and come home on a turnaround") {
@@ -947,6 +947,36 @@ TEST_CASE("an emoji costs double for every copy already hanging from anybody's n
     const FurnitureResult dear = furniture_buy(storage, "alice", "🐝", 3, 1000, 10, 0);
     CHECK(dear.status == FurnitureStatus::insufficient_score);
     CHECK(dear.charged == std::numeric_limits<std::int64_t>::max());
+}
+
+TEST_CASE("with a lower inflation every copy costs half again, not twice") {
+    const TestPaths paths{"furniture-inflation-half-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":100000},"quotes_added":{},)"
+             << R"("furniture":{"bob":"⚡⚡⚡⚡"}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    /* Four already hang on Bob: 1000 × 1.5⁴, rounded down at every step. */
+    const FurnitureResult fifth = furniture_buy(storage, "alice", "⚡", 0, 1000, 10, 0, {}, 50);
+    CHECK(fifth.copies == 4);
+    CHECK(fifth.charged == 5062);
+    CHECK(furniture_buy(storage, "alice", "⚡", 0, 1000, 10, 0, {}, 50).charged == 7593);
+}
+
+TEST_CASE("an emoji on its way to somebody still counts for the price") {
+    const TestPaths paths{"furniture-transit-price-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":10,"bob":10,"carol":100000},"quotes_added":{},)"
+             << R"("furniture":{"alice":"🍕"}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 0, quick_rides(), RaidTargetKind::any, 0, "🍕").status ==
+            RaidStatus::started);
+    const FurnitureResult bought = furniture_buy(storage, "carol", "🍕", 0, 1000, 10, 1);
+    CHECK(bought.copies == 1);
+    CHECK(bought.charged == 2000);
 }
 
 TEST_CASE("an emoji is carried to another player, or burnt at the place") {

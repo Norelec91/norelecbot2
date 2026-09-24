@@ -140,21 +140,9 @@ ParsedCommand parse_command(std::string_view message) {
     return {std::move(name), text::trim(message.substr(length))};
 }
 
-/* What made this hold worth more or less than the seconds it lasted. */
-/* What is actually paid. Whoever turned the debug switch on pays nothing; for everyone else the
-   price follows the wealth of the group: a share of what the middle player owns, never under the
-   list price and never over the ceiling. */
+/* What is actually paid: the list price, or nothing for whoever turned the debug switch on. */
 int price(const CommandContext &context, int cost) {
-    if (debug_on(context.storage, std::string{context.player_key})) {
-        return 0;
-    }
-    if (context.config.price_percent <= 0) {
-        return cost;
-    }
-    const Wealth wealth = wealth_now(context.storage);
-    const std::int64_t asked = wealth.middle * context.config.price_percent / 100;
-    const std::int64_t ceiling = static_cast<std::int64_t>(cost) * context.config.price_ceiling;
-    return static_cast<int>(std::clamp(asked, static_cast<std::int64_t>(cost), ceiling));
+    return debug_on(context.storage, std::string{context.player_key}) ? 0 : cost;
 }
 
 /* The name as it is shown: the real one, plus whatever he hung beside it. */
@@ -686,7 +674,8 @@ std::string handle_furniture(const CommandContext &context, std::string_view wan
     const std::string emoji{wanted};
     const std::int64_t now = seconds_now();
     const FurnitureResult result = furniture_buy(context.storage, std::string{context.player_key}, emoji, position,
-                                                 cost, limit, now, context.config.zodiac_signs);
+                                                 cost, limit, now, context.config.zodiac_signs,
+                                                 context.config.furniture_inflation);
     const std::string departure = departure_line(context, result.departure, now);
     switch (result.status) {
     case FurnitureStatus::not_home:
@@ -725,10 +714,10 @@ std::string handle_furniture(const CommandContext &context, std::string_view wan
         reply += std::format(", al posto di {}", result.replaced);
     }
     if (result.copies > 0) {
-        reply += std::format(" (ce n'{} già {} in giro, prezzo x{})",
+        reply += std::format(" (ce n'{} già {} in giro, prezzo {})",
                              result.copies == 1 ? "era" : "erano",
                              result.copies,
-                             std::int64_t{1} << std::min<std::size_t>(result.copies, 62));
+                             multiplier_text(cost > 0 ? result.charged * 100 / cost : 100));
     }
     return departure + reply + ".";
 }

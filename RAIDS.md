@@ -66,8 +66,9 @@ sender's own name, in the first empty slot; `We @yourname 🍕 3` puts it in slo
 3, overwriting what hung there. Names have `NORELECBOT_FURNITURE_LIMIT` slots
 (10 by default), and empty slots between emoji show as `[]`. It works only at
 home, not on the road nor from @TheConquister37. The price is
-`NORELECBOT_FURNITURE_COST`, following the group's wealth like every price,
-doubled for every copy of that emoji already hanging from anybody's name.
+`NORELECBOT_FURNITURE_COST`, grown by `NORELECBOT_FURNITURE_INFLATION` (50%) for every copy
+of that emoji already hanging from anybody's name or on its way to somebody: 1000,
+1500, 2250, 3375 and so on.
 `We @yourname 1 2` moves the emoji in slot 1 to slot 2, swapping it with
 whatever hangs there; it is free, works only at home and only on the sender's
 own name. The old `/buyfurniture` command is gone.
@@ -79,8 +80,8 @@ Every ⚡ hanging on a player's name as he enters @TheConquister37 adds
 x1.5, two x2, three x2.5, ten x6. The bonus is fixed on the way in and saved with
 the holder as `lightning_percent`, so a ⚡ hung, received or burnt during the hold
 changes nothing until the next entry, and the balloon stays. Every ⚡ adds the
-same, while its price doubles with every copy in the game, so the first ones pay
-back quickly and the later ones hardly ever. A hold saved by an older version
+same, while its price grows by half with every copy in the game, so the first
+ones pay back quickly and the later ones take longer. A hold saved by an older version
 with a whole `multiplier` keeps it: x3 becomes 300%. The old `/buyboost` command
 is gone, and boosts bought with older versions are removed from
 `conquister.json` on the first load, without a refund.
@@ -107,8 +108,8 @@ change its price. An emoji in transit is kept in the `gift_emoji` field of the
 which takes them out of the game: nobody receives them, no journey is made, and
 they are gone the moment the line is written. The amount must be positive and no
 larger than the available score, and the place is recognised with or without the
-mention. It is the only way palle leave the game, so it is also the only brake
-on the wealth the prices follow.
+mention. Together with quotes and furniture, it is one of the few ways palle
+leave the game.
 
 `We @TheConquister37 🍕` does the same with an emoji: the first slot holding it
 is emptied on the spot and the emoji leaves the game, which lowers the price of

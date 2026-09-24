@@ -280,16 +280,6 @@ struct Profile {
 enum class LinkStatus { pending, linked, unknown_account, conflict, self, already_linked };
 [[nodiscard]] LinkStatus player_link(Storage &storage, std::int64_t user_id, const std::string &username,
                                      std::string_view other_name, std::string_view account_name = {});
-/* What is going around, so the prices can keep up with it. */
-struct Wealth {
-    std::int64_t total = 0;
-    /* The median, not the average: one player sitting on the seat all day should not set the
-       prices for everybody else. */
-    std::int64_t middle = 0;
-    std::size_t players = 0;
-};
-
-[[nodiscard]] Wealth wealth_now(Storage &storage);
 
 /* The debug switch frees one person only: his purchases are free, everyone else pays. */
 void debug_set(Storage &storage, const std::string &username, bool wanted);
@@ -301,8 +291,8 @@ void debug_set(Storage &storage, const std::string &username, bool wanted);
 [[nodiscard]] std::string furniture_stored(std::vector<std::string> slots);
 
 /* Hangs one emoji in a slot, from 1, overwriting what was there; position 0 takes the first empty
-   one. Only at home. The price is the base cost doubled for every copy of that emoji already hanging
-   anywhere. */
+   one. Only at home. The price is the base cost grown by the inflation percent for every copy of that
+   emoji already in the game: 100 doubles it each time. */
 [[nodiscard]] FurnitureResult furniture_buy(
     Storage &storage,
     const std::string &username,
@@ -311,7 +301,8 @@ void debug_set(Storage &storage, const std::string &username, bool wanted);
     std::int64_t cost,
     std::size_t limit,
     std::int64_t now,
-    zodiac::Overrides signs = {}
+    zodiac::Overrides signs = {},
+    std::int64_t inflation = 100
 );
 /* Moves the emoji in one slot to another, both from 1, swapping it with whatever hangs there. Free,
    and only at home. */

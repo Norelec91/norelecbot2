@@ -768,27 +768,6 @@ std::optional<ConquisterUser> conquister_user(Storage &storage, std::string_view
     });
 }
 
-Wealth wealth_now(Storage &storage) {
-    return storage.transaction([](StorageSession &session) {
-        const ConquisterState &state = session.state();
-        Wealth wealth;
-        std::vector<std::int64_t> scores;
-        scores.reserve(state.scores.size());
-        for (const Counters::value_type &entry : state.scores) {
-            wealth.total += entry.second;
-            scores.push_back(entry.second);
-        }
-        wealth.players = scores.size();
-        if (scores.empty()) {
-            return wealth;
-        }
-        const auto middle = scores.begin() + static_cast<std::ptrdiff_t>(scores.size() / 2);
-        std::ranges::nth_element(scores, middle);
-        wealth.middle = *middle;
-        return wealth;
-    });
-}
-
 void debug_set(Storage &storage, const std::string &username, bool wanted) {
     storage.transaction([&username, wanted](StorageSession &session) {
         ConquisterState &state = session.state();
@@ -843,16 +822,22 @@ std::size_t empty_slots(const std::vector<std::string> &slots, std::size_t limit
     return static_cast<std::size_t>(holes) + (limit - used);
 }
 
-/* The price doubled once for every copy, stopping at the largest number rather than wrapping. */
-std::int64_t inflated(std::int64_t cost, std::size_t copies) {
+/* The price grown by the inflation percent once for every copy, stopping at the largest number
+   rather than wrapping. */
+std::int64_t inflated(std::int64_t cost, std::size_t copies, std::int64_t inflation) {
     if (cost <= 0) {
         return 0;
     }
     constexpr auto most = std::numeric_limits<std::int64_t>::max();
-    if (copies >= 63 || cost > (most >> copies)) {
-        return most;
+    const std::int64_t factor = 100 + std::max<std::int64_t>(inflation, 0);
+    std::int64_t price = cost;
+    for (std::size_t copy = 0; copy < copies; ++copy) {
+        if (price > most / factor) {
+            return most;
+        }
+        price = price * factor / 100;
     }
-    return cost << copies;
+    return price;
 }
 
 }
@@ -1037,7 +1022,8 @@ FurnitureResult furniture_buy(
     std::int64_t cost,
     std::size_t limit,
     std::int64_t now,
-    zodiac::Overrides signs
+    zodiac::Overrides signs,
+    std::int64_t inflation
 ) {
     const FurnitureResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
@@ -1079,7 +1065,11 @@ FurnitureResult furniture_buy(
                     return !slot.empty() && without_variation(slot) == wanted;
                 }));
         }
-        outcome.charged = inflated(cost, outcome.copies);
+        /* One on its way to somebody is still in the game: a delivery does not make it cheaper. */
+        outcome.copies += static_cast<std::size_t>(std::ranges::count_if(state.raids, [&wanted](const Raid &raid) {
+            return !raid.gift_emoji.empty() && without_variation(raid.gift_emoji) == wanted;
+        }));
+        outcome.charged = inflated(cost, outcome.copies, inflation);
         if (outcome.available_score < outcome.charged) {
             outcome.status = FurnitureStatus::insufficient_score;
             return outcome;

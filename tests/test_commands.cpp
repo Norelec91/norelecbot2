@@ -1102,11 +1102,10 @@ TEST_CASE("the owner turns the prices off for himself, not for everyone") {
     CHECK(asked->contains("spento"));
 }
 
-TEST_CASE("prices follow how rich the group has become") {
+TEST_CASE("everything costs its list price, however rich the group is") {
     const TestPaths paths{"prices-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
-        /* Five players: the middle one holds ten thousand. */
         file << R"({"current":null,"scores":{"a":100,"b":5000,"c":10000,"d":40000,"e":900000},)"
                 R"("quotes_added":{},"telegram_ids":{"d":1}})";
     }
@@ -1114,77 +1113,12 @@ TEST_CASE("prices follow how rich the group has become") {
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
     config.furniture_cost = 1000;
-    config.price_percent = 20;
-    config.price_ceiling = 50;
+    config.quote_cost = 1000;
     Storage storage{config.conquister_path, config.quotes_path};
+    const CommandContext context{.storage = storage, .config = config, .user_id = 1, .username = "d"};
 
-    const CommandContext context{
-        .storage = storage,
-        .config = config,
-        .user_id = 1,
-        .username = "d",
-        .claims_allowed = true,
-        .owner = true,
-    };
-
-    const Wealth wealth = wealth_now(storage);
-    CHECK(wealth.players == 5);
-    CHECK(wealth.middle == 10000);
-    CHECK(wealth.total == 955100);
-
-    /* The median is ten thousand, so an emoji costs a fifth of it, not the list price. */
     REQUIRE(command_dispatch(context, "We @d 🍕"));
-    CHECK(conquister_user(storage, "d")->score == 38000);
-
-    /* With the debug switch on, whoever threw it pays nothing. */
-    REQUIRE(command_dispatch(context, "/debug 1"));
+    CHECK(conquister_user(storage, "d")->score == 39000);
     REQUIRE(command_dispatch(context, "/addquote una citazione qualunque"));
     CHECK(conquister_user(storage, "d")->score == 38000);
-    REQUIRE(command_dispatch(context, "/debug 0"));
-}
-
-TEST_CASE("a poor group pays the list price, and a rich one stops at the ceiling") {
-    const TestPaths paths{"prices-edges-test"};
-    {
-        std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":null,"scores":{"a":2000,"b":10,"c":30},"quotes_added":{},)"
-                R"("telegram_ids":{"a":1}})";
-    }
-    AppConfig config;
-    config.conquister_path = paths.conquister;
-    config.quotes_path = paths.quotes;
-    config.furniture_cost = 1000;
-    config.price_percent = 20;
-    config.price_ceiling = 50;
-    Storage storage{config.conquister_path, config.quotes_path};
-
-    const CommandContext context{
-        .storage = storage,
-        .config = config,
-        .user_id = 1,
-        .username = "a",
-        .claims_allowed = true,
-        .owner = false,
-    };
-    /* A group with nothing pays the list price. */
-    REQUIRE(command_dispatch(context, "We @a 🍕"));
-    CHECK(conquister_user(storage, "a")->score == 1000);
-
-    /* A group swimming in palle stops at the ceiling, fifty times the list price. */
-    {
-        std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":null,"scores":{"a":90000000,"b":90000000,"c":90000000},)"
-                R"("quotes_added":{},"telegram_ids":{"a":1}})";
-    }
-    Storage rich{paths.conquister, paths.quotes};
-    const CommandContext loaded{
-        .storage = rich,
-        .config = config,
-        .user_id = 1,
-        .username = "a",
-        .claims_allowed = true,
-        .owner = false,
-    };
-    REQUIRE(command_dispatch(loaded, "We @a 🍕"));
-    CHECK(conquister_user(rich, "a")->score == 90000000 - 50000);
 }

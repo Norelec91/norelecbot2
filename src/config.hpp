@@ -15,16 +15,14 @@ namespace norelecbot {
 struct AppConfig {
     static constexpr int default_quote_cost = 1000;
     static constexpr int default_furniture_cost = 10000;
-    /* What share of the middle player's wealth a thing costs, and how many times the list price
-       it may never pass. Zero per cent leaves the prices fixed. */
+    /* How much dearer an emoji gets, in percent, for every copy of it already in the game. */
+    static constexpr int default_furniture_inflation = 50;
     /* How much road buys a palla: the distance between the two is divided by this before it
        becomes loot, so a journey is worth a few minutes of holding the place, not a day of it. */
     static constexpr int default_loot_divisor = 50;
     /* A raid takes at most this fraction of what the target owns: three means a third. Zero
        lifts the ceiling and lets a raid clean him out. */
     static constexpr int default_raid_share = 3;
-    static constexpr int default_price_percent = 20;
-    static constexpr int default_price_ceiling = 50;
     static constexpr int default_furniture_limit = 10;
     static constexpr int default_cooldown_seconds = 300;
     static constexpr int default_travel_divisor = 350;
@@ -48,10 +46,9 @@ struct AppConfig {
     /* What a shelf of emoji costs, and how many of them a name can carry. */
     int furniture_cost = default_furniture_cost;
     int furniture_limit = default_furniture_limit;
+    int furniture_inflation = default_furniture_inflation;
     int loot_divisor = default_loot_divisor;
     int raid_share = default_raid_share;
-    int price_percent = default_price_percent;
-    int price_ceiling = default_price_ceiling;
     int cooldown_seconds = default_cooldown_seconds;
     /* Seconds of travel per unit of distance, and the share of a raid's loot. */
     int travel_divisor = default_travel_divisor;
