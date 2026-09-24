@@ -828,7 +828,7 @@ bool command_is_for_bot(std::string_view text) {
            (!message.empty() && find_command(parse_command(message).name) != nullptr);
 }
 
-std::string raid_event_reply(const RaidEvent &event) {
+std::optional<std::string> raid_event_reply(const RaidEvent &event) {
     const std::string_view mention = event.target_on_telegram ? "@" : "";
     const std::string &home = event.raider;
     /* The bare name for whoever is spoken to, the dressed one when somebody is named. */
@@ -848,7 +848,8 @@ std::string raid_event_reply(const RaidEvent &event) {
         if (event.loot > 0) {
             return std::format("🪐 {} sei tornato in {} con {} palle.", raider, home, event.loot);
         }
-        return std::format("🪐 {} sei tornato in {} a mani vuote.", raider, home);
+        /* Coming home with nothing is not news. */
+        return std::nullopt;
     }
     if (event.kind == RaidEvent::Kind::delivered && !event.gift_emoji.empty()) {
         if (event.no_room) {

@@ -8,6 +8,7 @@
 
 #include <chrono>
 #include <exception>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -46,7 +47,9 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
     while (!stop.load(std::memory_order_relaxed)) {
         try {
             for (const RaidEvent &event : raid_due(storage, seconds_now(), rules)) {
-                announce(config, raid_event_reply(event));
+                if (const std::optional<std::string> reply = raid_event_reply(event)) {
+                    announce(config, *reply);
+                }
             }
         } catch (const std::exception &error) {
             log_warning("A raid could not be settled: {}", error.what());
