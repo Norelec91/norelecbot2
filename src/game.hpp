@@ -256,9 +256,6 @@ struct Profile {
     std::string heading;
     bool returning = false;
     std::int64_t home_in = 0;
-    /* How many attempts his balloon took, and the chance the next one pops it. */
-    std::int64_t balloon_survived = 0;
-    int balloon_chance = 0;
     /* What he put in the bank, and what it is worth now. */
     std::int64_t invested = 0;
     std::int64_t investment_value = 0;

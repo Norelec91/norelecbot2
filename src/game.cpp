@@ -651,8 +651,6 @@ Profile profile_from(StorageSession &session, ConquisterState &state, const std:
         profile.returning = trip->arrived;
         profile.home_in = std::max<std::int64_t>(trip->back - now, 0);
     }
-    profile.balloon_survived = counter(state.balloons, key);
-    profile.balloon_chance = balloon_pop_chance(state, key);
     long double value = 0;
     for (const InvestmentDeposit &deposit : state.investments) {
         if (deposit.player == key) {

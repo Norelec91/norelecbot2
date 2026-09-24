@@ -687,7 +687,8 @@ TEST_CASE("the profile shows where a player stands") {
     CHECK(mine.starts_with("👤 Alice (🍕[]⚡)\n💰 4000 palle, 2° su 2 in classifica\n"));
     CHECK(mine.contains(": oggi è giorno di "));
     CHECK(mine.contains("\n🪐 in @Alice\n"));
-    CHECK(mine.contains("\n🎈 palloncino: ha retto 1 tentativo, il prossimo lo buca al 50%\n"));
+    /* The balloon stays out of it, worn or not. */
+    CHECK_FALSE(mine.contains("🎈"));
     CHECK(mine.contains("\n🏦 investite 1000 palle, ora ne valgono "));
     CHECK(mine.ends_with("\n📜 3 citazioni"));
 

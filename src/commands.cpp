@@ -814,12 +814,6 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
                             profile.heading, format_wait(profile.home_in));
         break;
     }
-    /* Everybody has a balloon: only a worn one is news. */
-    if (profile.balloon_survived > 0) {
-        card += std::format("🎈 palloncino: ha retto {} tentativ{}, il prossimo lo buca al {}%\n",
-                            profile.balloon_survived, profile.balloon_survived == 1 ? "o" : "i",
-                            profile.balloon_chance);
-    }
     if (profile.invested > 0) {
         card += std::format("🏦 investite {} palle, ora ne valgono {}\n", profile.invested, profile.investment_value);
     }
