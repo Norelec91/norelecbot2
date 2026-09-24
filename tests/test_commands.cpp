@@ -700,6 +700,33 @@ TEST_CASE("the raids tell what happened") {
     CHECK(raid_event_reply(home) == "🎁 bob sei tornato in bob con le tue 700 palle ancora in tasca.");
 }
 
+TEST_CASE("We with a number for the place destroys the palle") {
+    const TestPaths paths{"burn-command-test"};
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{paths.conquister, paths.quotes};
+    const CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
+    REQUIRE(command_dispatch(alice, "/leaderboard"));
+    storage.transaction([](StorageSession &session) {
+        session.state().scores["tg:1"] = 1000;
+        return 0;
+    });
+
+    CHECK(command_is_for_bot("We @TheConquister37 400"));
+    CHECK(command_dispatch(alice, "We @TheConquister37 0")->contains("maggiore di zero"));
+    CHECK(command_dispatch(alice, "We @TheConquister37 1001")->contains("hai solo 1000 palle disponibili"));
+    CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 1000);
+
+    CHECK(command_dispatch(alice, "We @TheConquister37 400") ==
+          "🔥 Alice hai riportato 400 palle in @TheConquister37: sono uscite dal gioco. Te ne restano 600.");
+    CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 600);
+    /* The place is the place however it is written, and taking it is still a claim. */
+    CHECK(command_dispatch(alice, "We theconquister37 100")->contains("uscite dal gioco"));
+    CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 500);
+    CHECK(command_dispatch(alice, "We @TheConquister37")->contains("Alice"));
+}
+
 TEST_CASE("We with a number for somebody else sends the palle to them") {
     const TestPaths paths{"gift-command-test"};
     AppConfig config;

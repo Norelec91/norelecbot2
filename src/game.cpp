@@ -750,6 +750,32 @@ Authors furniture_all(Storage &storage) {
     return storage.transaction([](StorageSession &session) { return session.state().furniture; });
 }
 
+BurnResult palle_burn(Storage &storage, const std::string &player, std::int64_t amount) {
+    const BurnResult result = storage.transaction([&](StorageSession &session) {
+        ConquisterState &state = session.state();
+        BurnResult outcome;
+        const std::int64_t score = counter(state.scores, player);
+        outcome.score = score;
+        if (amount <= 0) {
+            outcome.status = BurnStatus::invalid_amount;
+            return outcome;
+        }
+        if (amount > score) {
+            outcome.status = BurnStatus::insufficient_score;
+            return outcome;
+        }
+        state.scores[player] = score - amount;
+        outcome.status = BurnStatus::burned;
+        outcome.amount = amount;
+        outcome.score = score - amount;
+        return outcome;
+    });
+    if (result.status == BurnStatus::burned) {
+        log_info("palle burned user={} amount={} left={}", player, result.amount, result.score);
+    }
+    return result;
+}
+
 RaidShieldResult raid_shield_buy(Storage &storage, const std::string &username, int cost) {
     const RaidShieldResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();

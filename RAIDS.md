@@ -49,3 +49,12 @@ target's resistance does not rise. The traveller then rides home empty-handed.
 Naming himself during the ride turns him around, and the undelivered palle come
 back to him when he reaches home. Palle in transit are kept in the `gift` field
 of the `raids` section of `conquister.json`.
+
+## Palle brought back to the place
+
+`We @TheConquister37 N` gives `N` palle back to the place they were earned in,
+which takes them out of the game: nobody receives them, no journey is made, and
+they are gone the moment the line is written. The amount must be positive and no
+larger than the available score, and the place is recognised with or without the
+mention. It is the only way palle leave the game, so it is also the only brake
+on the wealth the prices follow.

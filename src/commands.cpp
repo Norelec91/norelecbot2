@@ -268,6 +268,35 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
     );
 }
 
+/* The place itself, written with or without the mention that reaches it on Telegram. */
+bool names_the_place(std::string_view target) {
+    const std::string_view name = target.starts_with('@') ? target.substr(1) : target;
+    return text::equals_ignore_case(name, conquister_place.substr(1));
+}
+
+/* "We @TheConquister37 numero": the palle go back where they were earned, which is out of the game. */
+std::string handle_burn(const CommandContext &context, std::int64_t amount) {
+    if (context.username.empty()) {
+        return missing_username_reply();
+    }
+    const BurnResult result = palle_burn(context.storage, std::string{context.player_key}, amount);
+    switch (result.status) {
+    case BurnStatus::invalid_amount:
+        return std::format("🔥 {} indica un numero di palle maggiore di zero.", context.username);
+    case BurnStatus::insufficient_score:
+        return std::format("🔥 {} hai solo {} palle disponibili.", context.username, result.score);
+    case BurnStatus::burned:
+        break;
+    }
+    return std::format(
+        "🔥 {} hai riportato {} palle in {}: sono uscite dal gioco. Te ne restano {}.",
+        context.username,
+        result.amount,
+        conquister_place,
+        result.score
+    );
+}
+
 /* "We nome numero" toward somebody else: the palle travel with him and change hands when he arrives. */
 std::string handle_gift(const CommandContext &context, const ParsedInvestment &request) {
     if (context.username.empty()) {
@@ -768,6 +797,9 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
                 return std::nullopt;
             }
             remember_sender();
+            if (names_the_place(investment->target)) {
+                return handle_burn(bound, investment->amount);
+            }
             if (std::optional<std::string> reply = handle_investment(bound, *investment)) {
                 return reply;
             }

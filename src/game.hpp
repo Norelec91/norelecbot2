@@ -80,6 +80,15 @@ enum class RaidStatus {
 
 enum class RaidTargetKind { any, telegram, irc };
 
+enum class BurnStatus { burned, invalid_amount, insufficient_score };
+
+struct BurnResult {
+    BurnStatus status = BurnStatus::burned;
+    std::int64_t amount = 0;
+    /* What is left once they are gone, or what there was when they were too few. */
+    std::int64_t score = 0;
+};
+
 enum class InvestmentStatus { deposited, withdrawn, not_self, not_home, insufficient_score,
                               no_investment, invalid_amount, balance_limit };
 
@@ -235,6 +244,9 @@ void debug_set(Storage &storage, const std::string &username, bool wanted);
 );
 /* Everybody's emoji, for whoever only has names to write. */
 [[nodiscard]] Authors furniture_all(Storage &storage);
+
+/* Palle brought back to @TheConquister37 leave the game: nobody receives them. */
+[[nodiscard]] BurnResult palle_burn(Storage &storage, const std::string &player, std::int64_t amount);
 
 [[nodiscard]] RaidShieldResult raid_shield_buy(
     Storage &storage,

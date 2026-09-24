@@ -701,6 +701,30 @@ TEST_CASE("a raid takes a quarter of what the target has, and carries it home") 
     CHECK(raid_start(storage, 7, "bob", "alice", 11, quick_rides()).status == RaidStatus::started);
 }
 
+TEST_CASE("palle brought back to the place leave the game") {
+    const TestPaths paths{"palle-burn-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":1000},"quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+
+    CHECK(palle_burn(storage, "alice", 0).status == BurnStatus::invalid_amount);
+    CHECK(palle_burn(storage, "alice", -5).status == BurnStatus::invalid_amount);
+    const BurnResult refused = palle_burn(storage, "alice", 1001);
+    CHECK(refused.status == BurnStatus::insufficient_score);
+    CHECK(refused.score == 1000);
+    CHECK(conquister_user(storage, "alice")->score == 1000);
+
+    const BurnResult burned = palle_burn(storage, "alice", 400);
+    CHECK(burned.status == BurnStatus::burned);
+    CHECK(burned.amount == 400);
+    CHECK(burned.score == 600);
+    CHECK(conquister_user(storage, "alice")->score == 600);
+    /* Nobody else grew by what was destroyed. */
+    CHECK(wealth_now(storage).total == 600);
+}
+
 TEST_CASE("palle taken along change hands on arrival and come home on a turnaround") {
     const TestPaths paths{"raid-gift-test"};
     {
