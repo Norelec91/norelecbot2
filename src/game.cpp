@@ -47,9 +47,6 @@ const Counters::value_type *find_ignore_case(const Counters &counters, std::stri
 
 /* Four attempts at most: the first has one chance in four, the fourth is certain. */
 constexpr std::size_t balloon_attempts = 4;
-/* A successful raid halves the next loot, up to three times; one level recovers every two hours. */
-constexpr std::int64_t max_raid_resistance = 3;
-constexpr std::int64_t raid_resistance_recovery_seconds = std::int64_t{2} * 60 * 60;
 constexpr std::int64_t investment_day_seconds = std::int64_t{24} * 60 * 60;
 
 Counters::iterator find_entry(Counters &counters, const std::string &username) {
@@ -107,33 +104,6 @@ BalloonRoll balloon_attempt(StorageSession &session, ConquisterState &state, con
 int balloon_pop_chance(const ConquisterState &state, const std::string &player) {
     return static_cast<int>((counter(state.balloons, player) + 1) * 100 /
                             static_cast<std::int64_t>(balloon_attempts));
-}
-
-std::int64_t resistance_adjusted_loot(ConquisterState &state, const std::string &target,
-                                      std::int64_t loot, std::int64_t now) {
-    if (loot <= 0) {
-        return loot;
-    }
-    std::int64_t level = std::clamp(counter(state.raid_resistance_levels, target),
-                                    std::int64_t{0}, max_raid_resistance);
-    std::int64_t since = counter(state.raid_resistance_since, target);
-    if (since > now) {
-        since = now;
-    }
-    if (level > 0 && now > since) {
-        const std::uint64_t elapsed = static_cast<std::uint64_t>(now) -
-                                      static_cast<std::uint64_t>(since);
-        const std::int64_t recovered = static_cast<std::int64_t>(std::min<std::uint64_t>(
-            static_cast<std::uint64_t>(level), elapsed / raid_resistance_recovery_seconds));
-        level -= recovered;
-        since = level > 0 ? since + recovered * raid_resistance_recovery_seconds : now;
-    }
-    const std::int64_t reduced = loot / (std::int64_t{1} << level);
-    if (reduced > 0) {
-        state.raid_resistance_levels[target] = std::min(level + 1, max_raid_resistance);
-        state.raid_resistance_since[target] = level == 0 ? now : since;
-    }
-    return reduced;
 }
 
 /* What a hold was worth: the seconds it lasted, times the boost he had bought, times the house of the
@@ -296,7 +266,7 @@ std::optional<std::string> legacy_owner(const ConquisterState &state, std::int64
 std::optional<std::string> known_player(const ConquisterState &state, std::string_view name) {
     for (const Counters *counters : {&state.scores, &state.quotes_added, &state.ids,
                                      &state.balloons, &state.cooldowns,
-                                     &state.boosts, &state.raid_resistance_levels}) {
+                                     &state.boosts}) {
         if (const Counters::value_type *found = find_ignore_case(*counters, name); found != nullptr) {
             return found->first;
         }
@@ -455,8 +425,7 @@ LinkStatus player_link(Storage &storage, std::int64_t user_id, const std::string
         }
         const auto has_assets = [&state](const std::string &key) {
             const std::array items{&state.scores, &state.quotes_added, &state.balloons,
-                                   &state.cooldowns, &state.boosts, &state.raid_resistance_levels,
-                                   &state.raid_resistance_since, &state.ids, &state.debugging};
+                                   &state.cooldowns, &state.boosts, &state.ids, &state.debugging};
             return std::ranges::any_of(items, [&key](const Counters *entries) {
                 return entries->find(key) != entries->end();
             }) || (state.current && state.current->username == key) ||
@@ -1046,9 +1015,6 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                         rules.loot_share > 0 ? theirs / rules.loot_share : theirs;
                     event.loot = std::min({theirs, carried, most});
                     if (event.loot > 0) {
-                        const std::int64_t exposed = event.loot;
-                        event.loot = resistance_adjusted_loot(state, raid.target, exposed, now);
-                        event.resistance_absorbed = exposed - event.loot;
                         state.scores[raid.target] = theirs - event.loot;
                     }
                     raid.loot = event.loot;
@@ -1081,13 +1047,13 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
         switch (event.kind) {
         case RaidEvent::Kind::stolen:
             log_info(
-                "raid stolen user={} target={} loot={} resistance={} undefended={} balloon={} percent={}/{}",
+                "raid {} user={} target={} loot={} undefended={} percent={}/{}",
+                event.balloon_held ? "held off by the balloon" :
+                    event.balloon_popped ? "stolen past a popped balloon" : "stolen",
                 event.raider,
                 event.target,
                 event.loot,
-                event.resistance_absorbed,
                 event.undefended ? 1 : 0,
-                event.balloon_held ? "held" : event.balloon_popped ? "popped" : "none",
                 event.raider_percent,
                 event.target_percent
             );

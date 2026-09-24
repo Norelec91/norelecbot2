@@ -486,62 +486,30 @@ TEST_CASE("the balloon guards only where its owner is, and follows him home") {
     CHECK_FALSE(read_json(paths.conquister).at("balloons").contains("alice"));
 }
 
-TEST_CASE("raid resistance follows the victim across attackers, persists, and recovers") {
-    const TestPaths paths{"raid-resistance-test"};
+TEST_CASE("every raid that gets through takes the whole road, however many came before") {
+    const TestPaths paths{"raid-no-resistance-test"};
     {
+        /* Her boost keeps her balloon out of the way, so every raid gets through. The resistance an
+           older version saved is dropped on the first load and never softens a raid again. */
         std::ofstream file{paths.conquister, std::ios::binary};
-        /* Her boost keeps her balloon out of the way, so every raid gets through. */
         file << R"({"current":null,"scores":{"alice":1000000,"bob":0,"carol":0},)"
-             << R"("ids":{"alice":0,"bob":5000,"carol":4000},"boosts":{"alice":3}})";
+             << R"("ids":{"alice":0,"bob":5000,"carol":4000},"boosts":{"alice":3},)"
+             << R"("raid_resistance_levels":{"alice":3},"raid_resistance_since":{"alice":0}})";
     }
     RaidRules rules = full_rides();
     rules.loot_share = 0;
     const auto potential = [](const RaidEvent &event) {
         return event.distance * event.raider_percent / event.target_percent;
     };
-    {
-        Storage storage{paths.conquister, paths.quotes};
-        REQUIRE(raid_start(storage, 0, "bob", "alice", 0, rules).status == RaidStatus::started);
-        const auto first = raid_due(storage, 5, rules);
-        REQUIRE(first.size() == 1);
-        CHECK(first[0].loot == potential(first[0]));
-        CHECK(first[0].resistance_absorbed == 0);
-        CHECK(read_json(paths.conquister).at("raid_resistance_levels").at("alice") == 1);
-        CHECK(read_json(paths.conquister).at("raid_resistance_since").at("alice") == 5);
-        static_cast<void>(raid_due(storage, 10, rules));
-    }
-    {
-        Storage storage{paths.conquister, paths.quotes};
-        REQUIRE(raid_start(storage, 0, "carol", "alice", 11, rules).status == RaidStatus::started);
-        const auto second = raid_due(storage, 16, rules);
-        REQUIRE(second.size() == 1);
-        CHECK(second[0].loot == potential(second[0]) / 2);
-        CHECK(second[0].resistance_absorbed == potential(second[0]) - second[0].loot);
-        static_cast<void>(raid_due(storage, 21, rules));
-
-        REQUIRE(raid_start(storage, 0, "bob", "alice", 22, rules).status == RaidStatus::started);
-        const auto third = raid_due(storage, 27, rules);
-        REQUIRE(third.size() == 1);
-        CHECK(third[0].loot == potential(third[0]) / 4);
-        static_cast<void>(raid_due(storage, 32, rules));
-
-        REQUIRE(raid_start(storage, 0, "bob", "alice", 33, rules).status == RaidStatus::started);
-        const auto fourth = raid_due(storage, 38, rules);
-        REQUIRE(fourth.size() == 1);
-        CHECK(fourth[0].loot == potential(fourth[0]) / 8);
-        static_cast<void>(raid_due(storage, 43, rules));
-
-        REQUIRE(raid_start(storage, 0, "bob", "alice", 7200, rules).status == RaidStatus::started);
-        const auto recovering = raid_due(storage, 7205, rules);
-        REQUIRE(recovering.size() == 1);
-        CHECK(recovering[0].loot == potential(recovering[0]) / 4);
-        static_cast<void>(raid_due(storage, 7210, rules));
-
-        REQUIRE(raid_start(storage, 0, "bob", "alice", 28800, rules).status == RaidStatus::started);
-        const auto recovered = raid_due(storage, 28805, rules);
-        REQUIRE(recovered.size() == 1);
-        CHECK(recovered[0].loot == potential(recovered[0]));
-        CHECK(recovered[0].resistance_absorbed == 0);
+    Storage storage{paths.conquister, paths.quotes};
+    CHECK_FALSE(read_json(paths.conquister).contains("raid_resistance_levels"));
+    CHECK_FALSE(read_json(paths.conquister).contains("raid_resistance_since"));
+    for (const auto &[raider, start] : {std::pair{"bob", 0}, std::pair{"carol", 11}, std::pair{"bob", 22}}) {
+        REQUIRE(raid_start(storage, 0, raider, "alice", start, rules).status == RaidStatus::started);
+        const auto arrival = raid_due(storage, start + 5, rules);
+        REQUIRE(arrival.size() == 1);
+        CHECK(arrival[0].loot == potential(arrival[0]));
+        static_cast<void>(raid_due(storage, start + 10, rules));
     }
 }
 
@@ -687,11 +655,10 @@ TEST_CASE("a balloon at home holds off raids until it pops") {
         arrival = arrived[0];
         ++raids;
         if (arrival.balloon_held) {
-            /* Nothing taken, nothing to build resistance on, and the next raid has better odds. */
+            /* Nothing taken, and the next raid has better odds. */
             CHECK(arrival.loot == 0);
             CHECK(arrival.next_chance == 25 * (raids + 1));
             CHECK(conquister_user(storage, "alice")->score == 1000);
-            CHECK_FALSE(read_json(paths.conquister).at("raid_resistance_levels").contains("alice"));
         }
         const std::vector<RaidEvent> home = raid_due(storage, now + 10, quick_rides());
         REQUIRE(home.size() == 1);

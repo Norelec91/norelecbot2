@@ -136,8 +136,6 @@ struct RaidEvent {
     std::int64_t seconds = 0;
     int raider_percent = 100;
     int target_percent = 100;
-    /* The target's raid resistance absorbed part of the remaining loot. */
-    std::int64_t resistance_absorbed = 0;
     /* The target was away, so there was nothing to get past. */
     bool undefended = false;
     /* The target was home with his balloon: it held and nothing was taken, with the chance the next

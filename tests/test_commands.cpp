@@ -135,7 +135,7 @@ TEST_CASE("the bot answers the commands it knows and ignores the rest") {
         CHECK(command_is_for_bot("/buyshield"));
         CHECK(reply("/buyshield") ==
               "🛡️ /buyshield è deprecato: lo scudo non esiste più. "
-              "Contro le razzie resta la resistenza, che dimezza il bottino dopo ogni furto subito.");
+              "Contro le razzie resta il palloncino, che ti protegge quando sei a casa.");
 
         config.quote_cost = 0;
         context.user_id = 3;
@@ -631,10 +631,6 @@ TEST_CASE("the raids tell what happened") {
     event.loot = 250;
     event.seconds = 52;
     CHECK(raid_event_reply(event) == "💰 bob hai rubato 250 palle a alice! Torni in bob tra 52 secondi.");
-
-    event.resistance_absorbed = 125;
-    CHECK(raid_event_reply(event) ==
-          "💰 bob hai rubato 250 palle a alice! Torni in bob tra 52 secondi.");
 
     event.target_on_telegram = true;
     event.undefended = true;

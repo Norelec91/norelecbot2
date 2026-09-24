@@ -654,7 +654,7 @@ std::string handle_buy_boost(const CommandContext &context, std::string_view) {
 
 std::string handle_buy_shield(const CommandContext &, std::string_view) {
     return "🛡️ /buyshield è deprecato: lo scudo non esiste più. "
-           "Contro le razzie resta la resistenza, che dimezza il bottino dopo ogni furto subito.";
+           "Contro le razzie resta il palloncino, che ti protegge quando sei a casa.";
 }
 
 std::string handle_link(const CommandContext &context, std::string_view argument) {
