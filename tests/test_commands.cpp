@@ -93,7 +93,8 @@ TEST_CASE("the bot answers the commands it knows and ignores the rest") {
         context.username = "bob";
         answer = reply("We @TheConquister37");
         CHECK(answer.contains("bob sei in "));
-        CHECK(answer.contains("Palloncino gratuito attivo finché resti qui.\n\ncitazione di prova"));
+        CHECK(answer.contains("\n\ncitazione di prova"));
+        CHECK_FALSE(answer.contains("Palloncino gratuito attivo"));
         answer = reply("/leaderboard");
         CHECK(answer.contains("🏆 Classifica @TheConquister37\nOggi è giorno di "));
         CHECK(answer.contains("\n\n1) "));

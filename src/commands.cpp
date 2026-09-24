@@ -354,9 +354,6 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
         );
     }
     reply += std::format("🪐 {} sei in {}!", dressed(furniture, context.player_key, username), conquister_place);
-    if (result.balloon_active) {
-        reply += " 🎈 Palloncino gratuito attivo finché resti qui.";
-    }
     if (const std::optional<std::string> quote = optional_random_quote(context.storage)) {
         reply += std::format("\n\n{}", *quote);
     }
