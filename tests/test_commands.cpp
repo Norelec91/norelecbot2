@@ -702,6 +702,19 @@ TEST_CASE("the help lists every We line with the asker's own name") {
     CHECK(on_irc.contains("\nWe giocatore — parti per razziarlo\n"));
     CHECK(on_irc.contains("We @TheConquister37 — entri nel posto"));
     CHECK(on_irc.contains("\n!buyboost — "));
+
+    /* Every reply that names a command names it the way it is typed there. */
+    CHECK(command_dispatch(irc, "/addquote")->starts_with("Uso: !addquote <testo>."));
+    CHECK(command_dispatch(telegram, "/addquote")->starts_with("Uso: /addquote <testo>."));
+    CHECK(command_dispatch(irc, "/buyshield")->starts_with("🛡️ !buyshield è deprecato"));
+    CHECK(command_dispatch(irc, "/buyballoon")->starts_with("🎈 !buyballoon è deprecato"));
+    CHECK(command_dispatch(irc, "/buyfurniture") ==
+          "🛋️ !buyfurniture è deprecato: le emoji ora si comprano da casa con We Bob 🍕, "
+          "oppure We Bob 🍕 3 per sceglierne il posto.");
+    CommandContext owner = irc;
+    owner.owner = true;
+    CHECK(command_dispatch(owner, "/delquote") == "Uso: !delquote <numero da !quotes | testo esatto>.");
+    CHECK(command_dispatch(owner, "/debug")->starts_with("Uso: !debug 1 per accendere, !debug 0 per spegnere."));
 }
 
 TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
@@ -722,9 +735,9 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
 
     CHECK(command_is_for_bot("We @Bob 🍕"));
     CHECK(command_is_for_bot("We @TheConquister37 🍕"));
-    CHECK(command_dispatch(alice, "We @Bob 🍕🎈") == "Alice una emoji per volta: nessun addebito.");
+    CHECK(command_dispatch(alice, "We @Bob 🍕🎈") == "🛋️ Alice una emoji per volta.");
     CHECK(command_dispatch(alice, "We @Bob 🍕 2") ==
-          "Alice la posizione si sceglie solo sul tuo nome: scrivi We @Bob 🍕.");
+          "🛋️ Alice la posizione si sceglie solo sul tuo nome: scrivi We @Bob 🍕.");
     CHECK(command_dispatch(alice, "We @Bob 🚀") == "🎁 Alice non hai 🚀 appesa al nome.");
     /* On her own name it is a purchase: one copy already hangs there, so the price doubles. */
     CHECK(command_dispatch(alice, "We @Alice 🍕")->contains("ce ne sono già 1 in giro"));
@@ -757,10 +770,19 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     CHECK(command_dispatch(alice, "We @TheConquister37 💩") == "🔥 Alice non hai 💩 appesa al nome.");
 
     const std::string leaving = command_dispatch(alice, "We @Bob 🍕").value_or("");
-    CHECK(leaving.starts_with("🎁 Alice parti per Bob con 🍕 da consegnare: arrivi tra "));
+    CHECK(leaving.starts_with("🚀 Alice parti per Bob con 🍕 da consegnare: arrivi tra "));
     CHECK(furniture_all(storage).at("tg:1") == "[]🎈");
     /* On the road she cannot buy, and the old command only points to the new way. */
-    CHECK(command_dispatch(alice, "We @Alice 🚀") == "🛋️ Alice le emoji si appendono al nome solo da casa.");
+    CHECK(command_dispatch(alice, "We @Alice 🚀") ==
+          "🛋️ Alice sei in viaggio: le emoji si appendono al nome da casa. Per tornare indietro scrivi We @Alice.");
+    CHECK(command_dispatch(alice, "We @Alice 1 2") ==
+          "🛋️ Alice sei in viaggio: le emoji si spostano da casa. Per tornare indietro scrivi We @Alice.");
+    CHECK(command_dispatch(alice, "We @TheConquister37 🎈") ==
+          "🔥 Alice sei in viaggio: si brucia da casa o da @TheConquister37. Per tornare indietro scrivi We @Alice.");
+    CHECK(command_dispatch(alice, "We @TheConquister37 1") ==
+          "🔥 Alice sei in viaggio: si brucia da casa o da @TheConquister37. Per tornare indietro scrivi We @Alice.");
+    CHECK(command_dispatch(alice, "We @Alice 1") ==
+          "🏦 Alice sei in viaggio: si investe da casa. Per tornare indietro scrivi We @Alice.");
     CHECK(command_dispatch(alice, "/buyfurniture 🚀") ==
           "🛋️ /buyfurniture è deprecato: le emoji ora si comprano da casa con We @Alice 🍕, "
           "oppure We @Alice 🍕 3 per sceglierne il posto.");
@@ -898,7 +920,7 @@ TEST_CASE("We with a number for somebody else sends the palle to them") {
     CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 1000);
 
     const std::string leaving = command_dispatch(alice, "We @Bob 400").value_or("");
-    CHECK(leaving.contains("🎁 Alice parti per Bob con 400 palle da consegnare"));
+    CHECK(leaving.contains("🚀 Alice parti per Bob con 400 palle da consegnare"));
     CHECK(leaving.contains("La tua casa resta scoperta"));
     CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 600);
     /* Handed over only when he gets there, not when he sets off. */
@@ -967,10 +989,10 @@ TEST_CASE("a bought emoji follows the name everywhere") {
     /* Anything else is turned away without a charge. */
     const std::int64_t before = conquister_user(storage, "alice")->score;
     CHECK_FALSE(command_is_for_bot("We @alice ciao"));
-    CHECK(reply("We @alice 🍕🎈 3") == "alice una emoji per volta: nessun addebito.");
-    CHECK(reply("We @alice 🍕 11") == "alice i posti vanno da 1 a 10: nessun addebito.");
-    CHECK(reply("We @alice 🍕 0") == "alice i posti vanno da 1 a 10: nessun addebito.");
-    CHECK(reply("We @alice 🐟 3") == "alice nel posto 3 c'è già 🐟: nessun addebito.");
+    CHECK(reply("We @alice 🍕🎈 3") == "🛋️ alice una emoji per volta.");
+    CHECK(reply("We @alice 🍕 11") == "🛋️ alice i posti vanno da 1 a 10: nessun addebito.");
+    CHECK(reply("We @alice 🍕 0") == "🛋️ alice i posti vanno da 1 a 10: nessun addebito.");
+    CHECK(reply("We @alice 🐟 3") == "🛋️ alice nel posto 3 c'è già 🐟: nessun addebito.");
     CHECK(conquister_user(storage, "alice")->score == before);
 
     /* The leaderboard shows the dressed name, and whoever bought nothing stays bare. */
@@ -984,10 +1006,12 @@ TEST_CASE("a bought emoji follows the name everywhere") {
     REQUIRE(claimed);
     CHECK(claimed->contains("alice (🎈[]🐟) sei in"));
 
-    /* In the place she is not at home; back home, a keycap is an emoji like any other and fills the hole. */
-    CHECK(reply("We @alice 3️⃣") == "🛋️ alice le emoji si appendono al nome solo da casa.");
-    CHECK(reply("We @alice").contains("torni da @TheConquister37"));
-    CHECK(reply("We @alice 3️⃣").contains("alice (🎈3️⃣🐟)"));
+    /* From the place the purchase takes her home first; a keycap is an emoji like any other and fills
+       the hole. */
+    const std::string keycap = reply("We @alice 3️⃣");
+    CHECK(keycap.starts_with("🪐 alice torni da @TheConquister37 in @alice con "));
+    CHECK(keycap.contains("\n🛋️ alice (🎈3️⃣🐟) hai speso "));
+    CHECK_FALSE(conquister_user(storage, "alice")->in_conquister);
 }
 
 TEST_CASE("the owner turns the prices off for himself, not for everyone") {

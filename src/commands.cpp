@@ -321,7 +321,7 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
     }
     if (!gift_emoji.empty()) {
         return std::format(
-            "🎁 {} parti per {} con {} da consegnare: arrivi tra {}. La tua casa resta scoperta.",
+            "🚀 {} parti per {} con {} da consegnare: arrivi tra {}. La tua casa resta scoperta.",
             username,
             result.target,
             gift_emoji,
@@ -330,7 +330,7 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
     }
     if (gift > 0) {
         return std::format(
-            "🎁 {} parti per {} con {} palle da consegnare: arrivi tra {}. La tua casa resta scoperta.",
+            "🚀 {} parti per {} con {} palle da consegnare: arrivi tra {}. La tua casa resta scoperta.",
             username,
             result.target,
             gift,
@@ -343,6 +343,32 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
         result.target,
         format_wait(result.seconds)
     );
+}
+
+/* His own name as he writes it after "We": with the mention on Telegram, bare on IRC. */
+std::string own_name(const CommandContext &context) {
+    return std::format("{}{}", context.user_id != 0 ? "@" : "", context.username);
+}
+
+/* The line that comes first when a line meant for home took him out of @TheConquister37. */
+std::string departure_line(const CommandContext &context, const Departure &departure, std::int64_t now) {
+    if (!departure.left) {
+        return {};
+    }
+    return std::format(
+        "🪐 {} torni da {} in {} con {} palle{}.\n",
+        context.username,
+        conquister_place,
+        own_name(context),
+        departure.earned,
+        hold_note(context, std::string{context.username}, departure.boost_multiplier, departure.zodiac_percent, now)
+    );
+}
+
+/* On the road only the way back is open: says so, and how to take it. */
+std::string on_the_road(const CommandContext &context, std::string_view emoji, std::string_view what) {
+    return std::format("{} {} sei in viaggio: {} Per tornare indietro scrivi We {}.",
+                       emoji, context.username, what, own_name(context));
 }
 
 /* The place itself, written with or without the mention that reaches it on Telegram. */
@@ -362,6 +388,8 @@ std::string handle_burn(const CommandContext &context, std::int64_t amount) {
         return std::format("🔥 {} indica un numero di palle maggiore di zero.", context.username);
     case BurnStatus::insufficient_score:
         return std::format("🔥 {} hai solo {} palle disponibili.", context.username, result.score);
+    case BurnStatus::travelling:
+        return on_the_road(context, "🔥", "si brucia da casa o da @TheConquister37.");
     case BurnStatus::burned:
         break;
     }
@@ -374,34 +402,36 @@ std::string handle_burn(const CommandContext &context, std::int64_t amount) {
     );
 }
 
-/* His own name as he writes it after "We": with the mention on Telegram, bare on IRC. */
-std::string own_name(const CommandContext &context) {
-    return std::format("{}{}", context.user_id != 0 ? "@" : "", context.username);
+/* How commands are typed where he is: a slash on Telegram, a bang on IRC, where the slash belongs to the client. */
+std::string_view command_prefix(const CommandContext &context) {
+    return context.user_id == 0 ? "!" : "/";
 }
 
 /* "We yourname from to": the emoji in one slot goes to another, swapping with what hangs there. */
 std::string handle_furniture_move(const CommandContext &context, const ParsedMove &move) {
     const std::string username{context.username};
     const auto limit = static_cast<std::size_t>(context.config.furniture_limit);
-    const FurnitureMoveResult result =
-        furniture_move(context.storage, std::string{context.player_key}, move.from, move.to, limit);
+    const std::int64_t now = seconds_now();
+    const FurnitureMoveResult result = furniture_move(context.storage, std::string{context.player_key}, move.from,
+                                                      move.to, limit, now, context.config.zodiac_signs);
+    const std::string departure = departure_line(context, result.departure, now);
     switch (result.status) {
     case FurnitureMoveStatus::invalid_position:
-        return std::format("🛋️ {} i posti vanno da 1 a {}.", username, limit);
+        return departure + std::format("🛋️ {} i posti vanno da 1 a {}.", username, limit);
     case FurnitureMoveStatus::same_position:
-        return std::format("🛋️ {} il posto di partenza e quello di arrivo sono lo stesso.", username);
+        return departure + std::format("🛋️ {} il posto di partenza e quello di arrivo sono lo stesso.", username);
     case FurnitureMoveStatus::not_home:
-        return std::format("🛋️ {} le emoji si spostano solo da casa.", username);
+        return on_the_road(context, "🛋️", "le emoji si spostano da casa.");
     case FurnitureMoveStatus::empty_slot:
-        return std::format("🛋️ {} nel posto {} non c'è nessuna emoji.", username, move.from);
+        return departure + std::format("🛋️ {} nel posto {} non c'è nessuna emoji.", username, move.from);
     case FurnitureMoveStatus::swapped:
-        return std::format("🛋️ {} ({}) hai scambiato {} e {}: ora {} è nel posto {} e {} nel posto {}.",
+        return departure + std::format("🛋️ {} ({}) hai scambiato {} e {}: ora {} è nel posto {} e {} nel posto {}.",
                            username, result.shown, result.moved, result.swapped,
                            result.moved, move.to, result.swapped, move.from);
     case FurnitureMoveStatus::moved:
         break;
     }
-    return std::format("🛋️ {} ({}) hai spostato {} dal posto {} al posto {}.",
+    return departure + std::format("🛋️ {} ({}) hai spostato {} dal posto {} al posto {}.",
                        username, result.shown, result.moved, move.from, move.to);
 }
 
@@ -410,8 +440,13 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
     if (context.username.empty()) {
         return missing_username_reply();
     }
-    if (!furniture_burn(context.storage, std::string{context.player_key}, std::string{emoji})) {
+    switch (furniture_burn(context.storage, std::string{context.player_key}, std::string{emoji}).status) {
+    case FurnitureBurnStatus::travelling:
+        return on_the_road(context, "🔥", "si brucia da casa o da @TheConquister37.");
+    case FurnitureBurnStatus::not_owned:
         return std::format("🔥 {} non hai {} appesa al nome.", context.username, emoji);
+    case FurnitureBurnStatus::burned:
+        break;
     }
     if (emoji == "💩") {
         return std::format("{}, tiri una palla di cacca a {}, bravo hai fatto centro, l'hai completamente smerdato!",
@@ -448,18 +483,7 @@ std::optional<std::string> handle_investment(const CommandContext &context, cons
         telegram ? RaidTargetKind::telegram : RaidTargetKind::irc, request.amount, now,
         context.config.zodiac_signs);
     /* From @TheConquister37 the deposit is made on the way home: first what the hold was worth. */
-    std::string departure;
-    if (result.left_place) {
-        departure = std::format(
-            "🪐 {} torni da {} in {}{} con {} palle{}.\n",
-            context.username,
-            conquister_place,
-            context.user_id != 0 ? "@" : "",
-            context.username,
-            result.earned,
-            hold_note(context, std::string{context.username}, result.boost_multiplier, result.hold_percent, now)
-        );
-    }
+    const std::string departure = departure_line(context, result.departure, now);
     switch (result.status) {
     case InvestmentStatus::deposited: {
         const std::string_view horoscope = result.zodiac_percent == 125 ? "favorevole" :
@@ -473,7 +497,7 @@ std::optional<std::string> handle_investment(const CommandContext &context, cons
     case InvestmentStatus::not_self:
         return std::nullopt;
     case InvestmentStatus::not_home:
-        return std::format("🏦 {} devi essere a casa per investire.", context.username);
+        return on_the_road(context, "🏦", "si investe da casa.");
     case InvestmentStatus::invalid_amount:
         return std::format("🏦 {} indica un numero di palle maggiore di zero.", context.username);
     case InvestmentStatus::insufficient_score:
@@ -517,7 +541,7 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
         return std::format("⏳ {} hai ancora {} di penalità.", username, format_wait(result.penalty_seconds));
     }
     if (result.status == ClaimStatus::already_held) {
-        return std::format("{} sei già in {}!", username, conquister_place);
+        return std::format("🪐 {} sei già in {}!", username, conquister_place);
     }
     const Authors furniture = furniture_all(context.storage);
     if (result.status == ClaimStatus::defended) {
@@ -605,7 +629,7 @@ std::string handle_add_quote(const CommandContext &context, std::string_view arg
     }
     const int cost = price(context, context.config.quote_cost);
     if (argument.empty()) {
-        return std::format("Uso: /addquote <testo>. Costa {} palle.", cost);
+        return std::format("Uso: {}addquote <testo>. Costa {} palle.", command_prefix(context), cost);
     }
     const std::string username{context.username};
     /* Nobody gets tagged by a quote read out months later. */
@@ -641,8 +665,9 @@ std::string handle_buy_furniture(const CommandContext &context, std::string_view
         return missing_username_reply();
     }
     return std::format(
-        "🛋️ /buyfurniture è deprecato: le emoji ora si comprano da casa con We {} 🍕, "
+        "🛋️ {}buyfurniture è deprecato: le emoji ora si comprano da casa con We {} 🍕, "
         "oppure We {} 🍕 3 per sceglierne il posto.",
+        command_prefix(context),
         own_name(context),
         own_name(context)
     );
@@ -658,33 +683,35 @@ std::string handle_furniture(const CommandContext &context, std::string_view wan
     const int cost = price(context, context.config.furniture_cost);
     const auto limit = static_cast<std::size_t>(context.config.furniture_limit);
     if (slot && (*slot < 1 || static_cast<std::uint64_t>(*slot) > limit)) {
-        return std::format("{} i posti vanno da 1 a {}: nessun addebito.", username, limit);
+        return std::format("🛋️ {} i posti vanno da 1 a {}: nessun addebito.", username, limit);
     }
     const std::int64_t position = slot.value_or(0);
     const std::string emoji{wanted};
-    const FurnitureResult result =
-        furniture_buy(context.storage, std::string{context.player_key}, emoji, position, cost, limit);
+    const std::int64_t now = seconds_now();
+    const FurnitureResult result = furniture_buy(context.storage, std::string{context.player_key}, emoji, position,
+                                                 cost, limit, now, context.config.zodiac_signs);
+    const std::string departure = departure_line(context, result.departure, now);
     switch (result.status) {
     case FurnitureStatus::not_home:
-        return std::format("🛋️ {} le emoji si appendono al nome solo da casa.", username);
+        return on_the_road(context, "🛋️", "le emoji si appendono al nome da casa.");
     case FurnitureStatus::full:
-        return std::format(
-            "{} hai già tutti i {} posti pieni: scegli quale sostituire con We {} <emoji> <posizione>. "
+        return departure + std::format(
+            "🛋️ {} hai già tutti i {} posti pieni: scegli quale sostituire con We {} <emoji> <posizione>. "
             "Nessun addebito.",
             username,
             limit,
             own_name(context)
         );
     case FurnitureStatus::invalid_position:
-        return std::format("{} i posti vanno da 1 a {}: nessun addebito.", username, limit);
+        return departure + std::format("🛋️ {} i posti vanno da 1 a {}: nessun addebito.", username, limit);
     case FurnitureStatus::already_there:
-        return std::format("{} nel posto {} c'è già {}: nessun addebito.", username, result.position, result.replaced);
+        return departure + std::format("🛋️ {} nel posto {} c'è già {}: nessun addebito.", username, result.position, result.replaced);
     case FurnitureStatus::insufficient_score:
         if (result.copies > 0) {
-            return std::format("{} ti servono {} palle per {} (ce ne sono già {} in giro, ne hai {}).",
+            return departure + std::format("🛋️ {} ti servono {} palle per {} (ce ne sono già {} in giro, ne hai {}).",
                                username, result.charged, emoji, result.copies, result.available_score);
         }
-        return std::format("{} ti servono {} palle per {} (ne hai {}).",
+        return departure + std::format("🛋️ {} ti servono {} palle per {} (ne hai {}).",
                            username, result.charged, emoji, result.available_score);
     case FurnitureStatus::bought:
         break;
@@ -706,7 +733,7 @@ std::string handle_furniture(const CommandContext &context, std::string_view wan
                              result.copies,
                              std::int64_t{1} << std::min<std::size_t>(result.copies, 62));
     }
-    return reply + ".";
+    return departure + reply + ".";
 }
 
 /* Every line the game understands, one example each, written the way the asker has to write it. */
@@ -715,7 +742,7 @@ std::string handle_help(const CommandContext &context, std::string_view) {
     const std::string me = context.username.empty() ? std::string{irc ? "tuonick" : "@tuonome"}
                                                     : own_name(context);
     const std::string_view other = irc ? "giocatore" : "@giocatore";
-    const std::string_view slash = irc ? "!" : "/";
+    const std::string_view slash = command_prefix(context);
     std::string help = "📖 Come si gioca\n\n";
     const auto line = [&help](std::string_view example, std::string_view meaning) {
         help += std::format("{} — {}\n", example, meaning);
@@ -731,6 +758,8 @@ std::string handle_help(const CommandContext &context, std::string_view) {
     line(std::format("We {} 🍕", other), "gli porti una 🍕");
     line(std::format("We {} 500", conquister_place), "bruci 500 palle");
     line(std::format("We {} 🍕", conquister_place), "bruci una 🍕");
+    help += std::format("\nDa {} le righe col tuo nome ti riportano prima a casa. "
+                        "In viaggio si può solo tornare indietro: We {}.\n", conquister_place, me);
     help += std::format("\n{0}leaderboard — classifica\n{0}addquote <testo> — aggiungi una citazione\n"
                         "{0}buyboost — moltiplicatore per il prossimo possesso\n"
                         "{0}link <nome> — collega account Telegram e nick IRC",
@@ -738,10 +767,11 @@ std::string handle_help(const CommandContext &context, std::string_view) {
     return help;
 }
 
-std::string handle_buy_balloon(const CommandContext &, std::string_view) {
-    return "🎈 /buyballoon è deprecato: non serve più comprare il palloncino. "
-           "Ce l'hai sempre, se non hai un boost, e protegge il posto dove sei: "
-           "@TheConquister37 o casa tua. Quando scoppia, se ne forma subito uno nuovo.";
+std::string handle_buy_balloon(const CommandContext &context, std::string_view) {
+    return std::format("🎈 {}buyballoon è deprecato: non serve più comprare il palloncino. "
+                       "Ce l'hai sempre, se non hai un boost, e protegge il posto dove sei: "
+                       "@TheConquister37 o casa tua. Quando scoppia, se ne forma subito uno nuovo.",
+                       command_prefix(context));
 }
 
 /* The owner is an admin with more powers, so he never has to be listed twice. */
@@ -785,7 +815,7 @@ std::string handle_quotes(const CommandContext &context, std::string_view argume
         );
     }
     if (quotes.pages > 1) {
-        reply += "\n\nUsa /quotes <pagina> per le altre pagine.";
+        reply += std::format("\n\nUsa {}quotes <pagina> per le altre pagine.", command_prefix(context));
     }
     return reply;
 }
@@ -797,7 +827,8 @@ std::string handle_debug(const CommandContext &context, std::string_view argumen
     const std::string_view wanted = text::trim(argument);
     if (wanted != "0" && wanted != "1") {
         return std::format(
-            "Uso: /debug 1 per accendere, /debug 0 per spegnere. Per te adesso è {}.",
+            "Uso: {0}debug 1 per accendere, {0}debug 0 per spegnere. Per te adesso è {1}.",
+            command_prefix(context),
             debug_on(context.storage, std::string{context.player_key}) ? "acceso" : "spento"
         );
     }
@@ -812,7 +843,7 @@ std::string handle_delete_quote(const CommandContext &context, std::string_view 
         return "Solo gli amministratori possono eliminare le citazioni.";
     }
     if (argument.empty()) {
-        return "Uso: /delquote <numero da /quotes | testo esatto>.";
+        return std::format("Uso: {0}delquote <numero da {0}quotes | testo esatto>.", command_prefix(context));
     }
     const std::optional<std::string> removed = quote_delete(context.storage, argument);
     return removed ? std::format("Citazione eliminata: {}", *removed) : "Citazione non trovata.";
@@ -854,9 +885,10 @@ std::string handle_buy_boost(const CommandContext &context, std::string_view) {
     );
 }
 
-std::string handle_buy_shield(const CommandContext &, std::string_view) {
-    return "🛡️ /buyshield è deprecato: lo scudo non esiste più. "
-           "Contro le razzie resta il palloncino, che ti protegge quando sei a casa.";
+std::string handle_buy_shield(const CommandContext &context, std::string_view) {
+    return std::format("🛡️ {}buyshield è deprecato: lo scudo non esiste più. "
+                       "Contro le razzie resta il palloncino, che ti protegge quando sei a casa.",
+                       command_prefix(context));
 }
 
 std::string handle_link(const CommandContext &context, std::string_view argument) {
@@ -1037,7 +1069,7 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
             }
             remember_sender();
             if (text::emoji_count(carried->emoji) != std::optional<std::size_t>{1}) {
-                return std::format("{} una emoji per volta: nessun addebito.", context.username);
+                return std::format("🛋️ {} una emoji per volta.", context.username);
             }
             const bool telegram = carried->target.starts_with('@');
             const std::string_view name = telegram ? carried->target.substr(1) : carried->target;
@@ -1047,7 +1079,7 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
             }
             /* The slot is his choice only on his own name: elsewhere the emoji takes the first free one. */
             if (carried->position) {
-                return std::format("{} la posizione si sceglie solo sul tuo nome: scrivi We {} {}.",
+                return std::format("🛋️ {} la posizione si sceglie solo sul tuo nome: scrivi We {} {}.",
                                    context.username, carried->target, carried->emoji);
             }
             if (names_the_place(carried->target)) {
@@ -1066,14 +1098,15 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
                     telegram ? target.substr(1) : target,
                     telegram ? RaidTargetKind::telegram : RaidTargetKind::irc, seconds_now(),
                     context.config.zodiac_signs);
+                const std::string departure = departure_line(bound, investment.departure, seconds_now());
                 if (investment.status == InvestmentStatus::withdrawn) {
-                    return std::format("🏦 {} hai ritirato {} palle (rendimento: {} palle). Saldo: {} palle.",
-                                       context.username, investment.amount, signed_amount(investment.interest),
-                                       investment.score);
+                    return departure + std::format("🏦 {} hai ritirato {} palle (rendimento: {} palle). Saldo: {} palle.",
+                                                   context.username, investment.amount, signed_amount(investment.interest),
+                                                   investment.score);
                 }
                 if (investment.status == InvestmentStatus::balance_limit) {
-                    return std::format("🏦 {} il saldo è troppo alto per ritirare l'investimento: contatta il proprietario del bot.",
-                                       context.username);
+                    return departure + std::format("🏦 {} il saldo è troppo alto per ritirare l'investimento: contatta il proprietario del bot.",
+                                                   context.username);
                 }
             }
             return handle_raid(bound, target);

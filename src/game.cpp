@@ -155,6 +155,17 @@ Settlement leave_place(ConquisterState &state, std::int64_t now, zodiac::Overrid
     return settle_hold(state, holder.username, holder.since, now, signs);
 }
 
+/* From @TheConquister37 a line meant for home takes him there first; anywhere else nothing happens. */
+Departure go_home(ConquisterState &state, const std::string &player, std::int64_t now, zodiac::Overrides signs) {
+    if (!state.current || !text::equals_ignore_case(state.current->username, player)) {
+        return {};
+    }
+    const Settlement settled = leave_place(state, now, signs);
+    log_info("left the place user={} earned={}", player, settled.earned);
+    return {.left = true, .earned = settled.earned, .boost_multiplier = settled.boost_multiplier,
+            .zodiac_percent = settled.zodiac_percent};
+}
+
 /* A raid takes the player away from home until the return trip ends. */
 bool is_away(const ConquisterState &state, const std::string &username) {
     return std::ranges::any_of(state.raids, [&username](const Raid &raid) {
@@ -856,7 +867,8 @@ bool give_emoji(ConquisterState &state, const std::string &player, const std::st
 }
 
 FurnitureMoveResult furniture_move(Storage &storage, const std::string &username,
-                                   std::int64_t from, std::int64_t to, std::size_t limit) {
+                                   std::int64_t from, std::int64_t to, std::size_t limit,
+                                   std::int64_t now, zodiac::Overrides signs) {
     const FurnitureMoveResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         FurnitureMoveResult outcome;
@@ -873,6 +885,7 @@ FurnitureMoveResult furniture_move(Storage &storage, const std::string &username
             outcome.status = FurnitureMoveStatus::same_position;
             return outcome;
         }
+        outcome.departure = go_home(state, username, now, signs);
         if (!at_home(state, username)) {
             outcome.status = FurnitureMoveStatus::not_home;
             return outcome;
@@ -896,19 +909,21 @@ FurnitureMoveResult furniture_move(Storage &storage, const std::string &username
     return result;
 }
 
-std::optional<std::string> furniture_burn(Storage &storage, const std::string &player, const std::string &emoji) {
-    const std::optional<std::string> shown =
-        storage.transaction([&](StorageSession &session) -> std::optional<std::string> {
-            ConquisterState &state = session.state();
-            if (!take_emoji(state, player, emoji)) {
-                return std::nullopt;
-            }
-            return furniture_of(state, player);
-        });
-    if (shown) {
+FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, const std::string &emoji) {
+    const FurnitureBurnResult result = storage.transaction([&](StorageSession &session) {
+        ConquisterState &state = session.state();
+        if (is_away(state, player)) {
+            return FurnitureBurnResult{.status = FurnitureBurnStatus::travelling, .shown = {}};
+        }
+        if (!take_emoji(state, player, emoji)) {
+            return FurnitureBurnResult{.status = FurnitureBurnStatus::not_owned, .shown = {}};
+        }
+        return FurnitureBurnResult{.status = FurnitureBurnStatus::burned, .shown = furniture_of(state, player)};
+    });
+    if (result.status == FurnitureBurnStatus::burned) {
         log_info("emoji burned user={} emoji={}", player, emoji);
     }
-    return shown;
+    return result;
 }
 
 FurnitureResult furniture_buy(
@@ -917,11 +932,14 @@ FurnitureResult furniture_buy(
     const std::string &emoji,
     std::int64_t position,
     std::int64_t cost,
-    std::size_t limit
+    std::size_t limit,
+    std::int64_t now,
+    zodiac::Overrides signs
 ) {
     const FurnitureResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         FurnitureResult outcome;
+        outcome.departure = go_home(state, username, now, signs);
         outcome.available_score = counter(state.scores, username);
         if (!at_home(state, username)) {
             outcome.status = FurnitureStatus::not_home;
@@ -1001,6 +1019,10 @@ BurnResult palle_burn(Storage &storage, const std::string &player, std::int64_t 
         BurnResult outcome;
         const std::int64_t score = counter(state.scores, player);
         outcome.score = score;
+        if (is_away(state, player)) {
+            outcome.status = BurnStatus::travelling;
+            return outcome;
+        }
         if (amount <= 0) {
             outcome.status = BurnStatus::invalid_amount;
             return outcome;
@@ -1035,14 +1057,7 @@ InvestmentResult investment_deposit(Storage &storage, const std::string &player,
             result.status = InvestmentStatus::invalid_amount;
             return result;
         }
-        /* From @TheConquister37 the same line is the way home, and the deposit is made there. */
-        if (state.current && text::equals_ignore_case(state.current->username, player)) {
-            const Settlement settled = leave_place(state, now, signs);
-            result.left_place = true;
-            result.earned = settled.earned;
-            result.boost_multiplier = settled.boost_multiplier;
-            result.hold_percent = settled.zodiac_percent;
-        }
+        result.departure = go_home(state, player, now, signs);
         if (!at_home(state, player)) {
             result.status = InvestmentStatus::not_home;
         } else {
@@ -1063,9 +1078,6 @@ InvestmentResult investment_deposit(Storage &storage, const std::string &player,
         }
         return result;
     });
-    if (outcome.left_place) {
-        log_info("left the place to invest user={} earned={} amount={}", player, outcome.earned, amount);
-    }
     return outcome;
 }
 
@@ -1079,6 +1091,14 @@ InvestmentResult investment_withdraw(Storage &storage, const std::string &player
             result.status = InvestmentStatus::not_self;
             return result;
         }
+        /* Nothing to withdraw leaves him where he is: the same line then means going home. */
+        if (std::ranges::none_of(state.investments, [&player](const InvestmentDeposit &deposit) {
+                return deposit.player == player;
+            })) {
+            result.status = InvestmentStatus::no_investment;
+            return result;
+        }
+        result.departure = go_home(state, player, now, signs);
         if (!at_home(state, player)) {
             result.status = InvestmentStatus::not_home;
             return result;

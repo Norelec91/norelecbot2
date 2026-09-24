@@ -1,5 +1,15 @@
 # Raids and their defenses
 
+## Where each line works
+
+At home every line works. From @TheConquister37, the lines naming the sender
+(withdraw, deposit, buying or moving furniture) take him home first, paying
+what the hold earned, and then do their job; leaving is instantaneous, since the
+place is not on the map. Burning palle or emoji happens there too, while raids
+and deliveries cannot set off from there. On the road
+the only line that works is `We @yourname`, which turns him around; every other
+one is refused with a reminder of that line.
+
 ## Balloon
 
 Every player always has a balloon, unless he owns a boost, which rules it out

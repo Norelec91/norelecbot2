@@ -40,6 +40,15 @@ struct ClaimResult {
     int zodiac_percent = 100;
 };
 
+/* A line meant for home, written from @TheConquister37, takes him home first: what the hold he gave
+   up was worth, and what made it worth that. */
+struct Departure {
+    bool left = false;
+    std::int64_t earned = 0;
+    std::int64_t boost_multiplier = 0;
+    int zodiac_percent = 100;
+};
+
 enum class BoostStatus { bought, already_owned, holding_place, insufficient_score };
 
 enum class FurnitureStatus { bought, full, invalid_position, already_there, insufficient_score, not_home };
@@ -55,6 +64,7 @@ struct FurnitureResult {
     /* How many of that emoji already hung from anybody's name, and what it cost for that. */
     std::size_t copies = 0;
     std::int64_t charged = 0;
+    Departure departure;
 };
 
 enum class FurnitureMoveStatus { moved, swapped, empty_slot, invalid_position, same_position, not_home };
@@ -65,6 +75,7 @@ struct FurnitureMoveResult {
     std::string shown;
     std::string moved;
     std::string swapped;
+    Departure departure;
 };
 
 struct BoostResult {
@@ -93,7 +104,7 @@ enum class RaidStatus {
 
 enum class RaidTargetKind { any, telegram, irc };
 
-enum class BurnStatus { burned, invalid_amount, insufficient_score };
+enum class BurnStatus { burned, invalid_amount, insufficient_score, travelling };
 
 struct BurnResult {
     BurnStatus status = BurnStatus::burned;
@@ -112,12 +123,7 @@ struct InvestmentResult {
     std::int64_t score = 0;
     int zodiac_percent = 100;
     int daily_rate = 0;
-    /* A deposit made from @TheConquister37 first takes him home: what the hold he gave up was worth,
-       and what made it worth that. */
-    bool left_place = false;
-    std::int64_t earned = 0;
-    std::int64_t boost_multiplier = 0;
-    int hold_percent = 100;
+    Departure departure;
 };
 
 struct RaidRules {
@@ -277,21 +283,32 @@ void debug_set(Storage &storage, const std::string &username, bool wanted);
     const std::string &emoji,
     std::int64_t position,
     std::int64_t cost,
-    std::size_t limit
+    std::size_t limit,
+    std::int64_t now,
+    zodiac::Overrides signs = {}
 );
 /* Moves the emoji in one slot to another, both from 1, swapping it with whatever hangs there. Free,
    and only at home. */
 [[nodiscard]] FurnitureMoveResult furniture_move(Storage &storage, const std::string &username,
-                                                 std::int64_t from, std::int64_t to, std::size_t limit);
+                                                 std::int64_t from, std::int64_t to, std::size_t limit,
+                                                 std::int64_t now, zodiac::Overrides signs = {});
 /* Everybody's emoji, for whoever only has names to write. */
 [[nodiscard]] Authors furniture_all(Storage &storage);
 
-/* Palle brought back to @TheConquister37 leave the game: nobody receives them. */
+/* Palle brought back to @TheConquister37 leave the game: nobody receives them. Not from the road. */
 [[nodiscard]] BurnResult palle_burn(Storage &storage, const std::string &player, std::int64_t amount);
+enum class FurnitureBurnStatus { burned, not_owned, travelling };
+
+struct FurnitureBurnResult {
+    FurnitureBurnStatus status = FurnitureBurnStatus::burned;
+    /* How his name reads once it is gone. */
+    std::string shown;
+};
+
 /* An emoji brought back to @TheConquister37 leaves the game too: the first slot that holds it is
-   emptied. Nothing when he has no emoji like it; otherwise how his name reads now. */
-[[nodiscard]] std::optional<std::string> furniture_burn(Storage &storage, const std::string &player,
-                                                        const std::string &emoji);
+   emptied. Not from the road. */
+[[nodiscard]] FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player,
+                                                 const std::string &emoji);
 
 /* Sends a player to rob another one, if he is at home and the target is somebody the bot knows.
    Naming himself sends him home instead: at once from @TheConquister37, at the end of the ride if he
@@ -310,8 +327,9 @@ void debug_set(Storage &storage, const std::string &username, bool wanted);
     std::string_view gift_emoji = {}
 );
 
-/* Funds leave the stealable score until withdrawn while the owner is home. A deposit from
-   @TheConquister37 takes him home first, paying what the hold earned. */
+/* Funds leave the stealable score until withdrawn while the owner is home. From @TheConquister37 both
+   take him home first, paying what the hold earned; a withdrawal only when there is something to
+   withdraw. */
 [[nodiscard]] InvestmentResult investment_deposit(Storage &storage, const std::string &player,
     std::string_view target, RaidTargetKind platform, std::int64_t amount, std::int64_t now,
     zodiac::Overrides signs = {});
