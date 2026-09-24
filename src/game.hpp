@@ -241,6 +241,8 @@ enum class ProfilePlace { home, conquister, road };
 struct Profile {
     std::string name;
     std::string furniture;
+    /* Whether he plays from Telegram, where his home is written with the mention. */
+    bool on_telegram = false;
     std::int64_t score = 0;
     /* 0 when he has no palle on file yet, out of how many players are in the ranking. */
     std::size_t rank = 0;

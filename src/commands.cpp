@@ -790,7 +790,7 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
         }
     }
     const Profile &profile = *found;
-    /* The bare name: whoever looks at a profile should not tag its owner. */
+    /* The bare name at the top; his home below is written like everywhere else. */
     std::string card = profile.furniture.empty() ? std::format("👤 {}\n", profile.name)
                                                  : std::format("👤 {} ({})\n", profile.name, profile.furniture);
     card += profile.rank == 0 ? std::string{"💰 nessuna palla ancora\n"}
@@ -803,7 +803,7 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
                         percent == 100 ? std::string{"x1"} : std::format("x{}.{:02}", percent / 100, percent % 100));
     switch (profile.place) {
     case ProfilePlace::home:
-        card += "🪐 a casa\n";
+        card += std::format("🪐 in {}{}\n", profile.on_telegram ? "@" : "", profile.name);
         break;
     case ProfilePlace::conquister:
         card += std::format("🪐 in {} da {}{}\n", conquister_place, format_wait(std::max<std::int64_t>(now - profile.since, 0)),
@@ -814,10 +814,12 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
                             profile.heading, format_wait(profile.home_in));
         break;
     }
-    card += profile.balloon_survived == 0
-        ? std::string{"🎈 palloncino nuovo\n"}
-        : std::format("🎈 palloncino: ha retto {} tentativ{}, il prossimo lo buca al {}%\n", profile.balloon_survived,
-                      profile.balloon_survived == 1 ? "o" : "i", profile.balloon_chance);
+    /* Everybody has a balloon: only a worn one is news. */
+    if (profile.balloon_survived > 0) {
+        card += std::format("🎈 palloncino: ha retto {} tentativ{}, il prossimo lo buca al {}%\n",
+                            profile.balloon_survived, profile.balloon_survived == 1 ? "o" : "i",
+                            profile.balloon_chance);
+    }
     if (profile.invested > 0) {
         card += std::format("🏦 investite {} palle, ora ne valgono {}\n", profile.invested, profile.investment_value);
     }

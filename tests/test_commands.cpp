@@ -686,7 +686,7 @@ TEST_CASE("the profile shows where a player stands") {
     /* Carol has no palle yet, so the ranking has two players. */
     CHECK(mine.starts_with("👤 Alice (🍕[]⚡)\n💰 4000 palle, 2° su 2 in classifica\n"));
     CHECK(mine.contains(": oggi è giorno di "));
-    CHECK(mine.contains("\n🪐 a casa\n"));
+    CHECK(mine.contains("\n🪐 in @Alice\n"));
     CHECK(mine.contains("\n🎈 palloncino: ha retto 1 tentativo, il prossimo lo buca al 50%\n"));
     CHECK(mine.contains("\n🏦 investite 1000 palle, ora ne valgono "));
     CHECK(mine.ends_with("\n📜 3 citazioni"));
@@ -696,7 +696,8 @@ TEST_CASE("the profile shows where a player stands") {
     CHECK(command_dispatch(bob, "/profile @Nessuno") == "👤 non conosco nessun giocatore di nome @Nessuno.");
     const std::string irc = command_dispatch(bob, "/profile Carol").value_or("");
     CHECK(irc.starts_with("👤 Carol\n💰 nessuna palla ancora\n"));
-    CHECK(irc.contains("\n🎈 palloncino nuovo"));
+    CHECK_FALSE(irc.contains("🎈"));
+    CHECK(irc.contains("\n🪐 in Carol"));
 
     /* In the place with a ⚡, and on the road. */
     REQUIRE(command_dispatch(alice, "We @TheConquister37"));

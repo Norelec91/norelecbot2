@@ -633,6 +633,7 @@ Profile profile_from(StorageSession &session, ConquisterState &state, const std:
     Profile profile;
     profile.name = display_name(state, key);
     profile.furniture = furniture_of(state, key);
+    profile.on_telegram = counter(state.telegram_ids, key) != 0;
     profile.players = state.scores.size();
     if (const Counters::value_type *score = find_ignore_case(state.scores, key); score != nullptr) {
         profile.score = score->second;
