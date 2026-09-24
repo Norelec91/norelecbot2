@@ -142,7 +142,8 @@ TEST_CASE("a balloon defends the holder until it pops") {
     const ClaimResult entered = conquister_claim(storage, 1, "alice", 0);
     CHECK(entered.status == ClaimStatus::taken);
     CHECK(entered.balloon_active);
-    CHECK(read_json(paths.conquister).at("balloons").at("alice") == 0);
+    /* Everybody has a balloon: a fresh one leaves no trace on file until something hits it. */
+    CHECK_FALSE(read_json(paths.conquister).at("balloons").contains("alice"));
 
     int attempts = 0;
     ClaimResult attack;
@@ -162,11 +163,16 @@ TEST_CASE("a balloon defends the holder until it pops") {
     CHECK(attack.status == ClaimStatus::taken);
     CHECK(attack.balloon_popped);
     CHECK(attack.previous_username == "alice");
-    CHECK(read_json(paths.conquister).at("balloons").at("bob") == 0);
-    CHECK_FALSE(read_json(paths.conquister).at("balloons").contains("alice"));
-
-    CHECK(raid_start(storage, 2, "bob", "bob", 9000, RaidRules{}).status == RaidStatus::left_place);
+    /* Popped and kicked out, alice is back to a fresh balloon; bob brought his own, untouched. */
     CHECK(read_json(paths.conquister).at("balloons").empty());
+
+    /* Worn at the place, the balloon goes home with him just as worn: it is the same one. */
+    storage.transaction([](StorageSession &session) {
+        session.state().balloons["bob"] = 2;
+        return 0;
+    });
+    CHECK(raid_start(storage, 2, "bob", "bob", 9000, RaidRules{}).status == RaidStatus::left_place);
+    CHECK(read_json(paths.conquister).at("balloons").at("bob") == 2);
     const ClaimResult again = conquister_claim(storage, 1, "alice", 9001);
     CHECK(again.status == ClaimStatus::taken);
     CHECK(again.balloon_active);
@@ -176,8 +182,9 @@ TEST_CASE("a penalty blocks the next attempts") {
     const TestPaths paths{"cooldown-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
+        /* Alice's balloon already took three attempts, so the next one pops it for sure. */
         file << R"({"current":{"user_id":1,"username":"alice","since":0},"scores":{},)"
-             << R"("quotes_added":{},"balloons":{},"cooldowns":{"bob":1000}})";
+             << R"("quotes_added":{},"balloons":{"alice":3},"cooldowns":{"bob":1000}})";
     }
     Storage storage{paths.conquister, paths.quotes};
 
@@ -285,7 +292,7 @@ TEST_CASE("a boost multiplies what the hold earns, once") {
     SUBCASE("it is cashed in when the place is taken away") {
         CHECK(raid_start(storage, 2, "bob", "bob", 1999, RaidRules{}).status == RaidStatus::left_place);
         static_cast<void>(conquister_claim(storage, 1, "alice", 2000));
-        CHECK(read_json(paths.conquister).at("balloons").empty());
+        CHECK_FALSE(read_json(paths.conquister).at("balloons").contains("alice"));
         const ClaimResult kicked = conquister_claim(storage, 2, "bob", 2100);
         CHECK(kicked.previous_username == "alice");
         CHECK(kicked.boost_multiplier == 3);
@@ -309,7 +316,8 @@ TEST_CASE("a boost multiplies what the hold earns, once") {
         const ClaimResult boosted = conquister_claim(storage, 1, "alice", 2000);
         CHECK(boosted.status == ClaimStatus::taken);
         CHECK_FALSE(boosted.balloon_active);
-        CHECK(read_json(paths.conquister).at("balloons").empty());
+        /* The boost rules out even the balloon she had brought home from her last hold. */
+        CHECK_FALSE(read_json(paths.conquister).at("balloons").contains("alice"));
     }
 }
 
@@ -350,7 +358,7 @@ TEST_CASE("a boost replaces the automatic balloon on entry") {
     CHECK_FALSE(conquister_claim(storage, 1, "alice", 0).balloon_active);
     CHECK(read_json(paths.conquister).at("balloons").empty());
     CHECK(conquister_claim(storage, 2, "bob", 100).balloon_active);
-    CHECK(read_json(paths.conquister).at("balloons").at("bob") == 0);
+    CHECK(read_json(paths.conquister).at("balloons").empty());
 }
 
 TEST_CASE("bought raid shields leave old saves without a refund") {
@@ -445,7 +453,7 @@ TEST_CASE("a raid on an empty house is marked undefended") {
     CHECK(arrivals[1].loot == 200);
 }
 
-TEST_CASE("a temporary balloon never defends against raids and disappears on departure") {
+TEST_CASE("the balloon guards only where its owner is, and follows him home") {
     const TestPaths paths{"raid-balloon-holder-away-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
@@ -454,29 +462,37 @@ TEST_CASE("a temporary balloon never defends against raids and disappears on dep
              << R"("balloons":{"alice":3},"ids":{"alice":0,"bob":5000}})";
     }
     Storage storage{paths.conquister, paths.quotes};
+    /* She is in @TheConquister37 with it, so her house is empty. */
     CHECK(raid_start(storage, 0, "bob", "alice", 0, full_rides()).status == RaidStatus::started);
     const std::vector<RaidEvent> first = raid_due(storage, 5, full_rides());
     REQUIRE(first.size() == 1);
     CHECK(first[0].kind == RaidEvent::Kind::stolen);
     CHECK(first[0].undefended);
+    CHECK_FALSE(first[0].balloon_held);
+    CHECK_FALSE(first[0].balloon_popped);
     CHECK(read_json(paths.conquister).at("balloons").at("alice") == 3);
 
     static_cast<void>(raid_due(storage, 10, full_rides()));
     CHECK(raid_start(storage, 1, "alice", "alice", 11, full_rides()).status == RaidStatus::left_place);
-    CHECK(read_json(paths.conquister).at("balloons").empty());
+    CHECK(read_json(paths.conquister).at("balloons").at("alice") == 3);
+    /* Home with the same balloon, three attempts already behind it: the fourth pops it for sure. */
     CHECK(raid_start(storage, 0, "bob", "alice", 12, full_rides()).status == RaidStatus::started);
     const std::vector<RaidEvent> second = raid_due(storage, 17, full_rides());
     REQUIRE(second.size() == 1);
     CHECK_FALSE(second[0].undefended);
     CHECK(second[0].kind == RaidEvent::Kind::stolen);
+    CHECK(second[0].balloon_popped);
+    CHECK(second[0].loot > 0);
+    CHECK_FALSE(read_json(paths.conquister).at("balloons").contains("alice"));
 }
 
 TEST_CASE("raid resistance follows the victim across attackers, persists, and recovers") {
     const TestPaths paths{"raid-resistance-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
+        /* Her boost keeps her balloon out of the way, so every raid gets through. */
         file << R"({"current":null,"scores":{"alice":1000000,"bob":0,"carol":0},)"
-             << R"("ids":{"alice":0,"bob":5000,"carol":4000}})";
+             << R"("ids":{"alice":0,"bob":5000,"carol":4000},"boosts":{"alice":3}})";
     }
     RaidRules rules = full_rides();
     rules.loot_share = 0;
@@ -533,7 +549,9 @@ TEST_CASE("a raid takes a quarter of what the target has, and carries it home") 
     const TestPaths paths{"raid-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":null,"scores":{"alice":1000,"bob":40},"quotes_added":{}})";
+        /* Her boost keeps her balloon out of the way, so the raid gets through. */
+        file << R"({"current":null,"scores":{"alice":1000,"bob":40},"quotes_added":{},)"
+             << R"("boosts":{"alice":3}})";
     }
     Storage storage{paths.conquister, paths.quotes};
 
@@ -648,21 +666,43 @@ TEST_CASE("palle taken along change hands on arrival and come home on a turnarou
     CHECK(conquister_user(storage, "alice")->score == 1200);
 }
 
-TEST_CASE("old balloons held at home are removed before raids") {
+TEST_CASE("a balloon at home holds off raids until it pops") {
     const TestPaths paths{"raid-balloon-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":null,"scores":{"alice":1000,"bob":500},"quotes_added":{},)"
-             << R"("balloons":{"alice":3}})";
+             << R"("balloons":{"alice":0}})";
     }
     Storage storage{paths.conquister, paths.quotes};
+    /* Kept across a restart: a balloon at home is no longer a leftover. */
+    CHECK(read_json(paths.conquister).at("balloons").at("alice") == 0);
 
-    CHECK(read_json(paths.conquister).at("balloons").empty());
-    static_cast<void>(raid_start(storage, 0, "bob", "alice", 0, quick_rides()));
-    const std::vector<RaidEvent> arrival = raid_due(storage, 5, quick_rides());
-    REQUIRE(arrival.size() == 1);
-    CHECK(arrival[0].kind == RaidEvent::Kind::stolen);
-    CHECK(arrival[0].loot > 0);
+    int raids = 0;
+    RaidEvent arrival;
+    do {
+        const std::int64_t now = std::int64_t{20} * raids;
+        REQUIRE(raid_start(storage, 0, "bob", "alice", now, quick_rides()).status == RaidStatus::started);
+        const std::vector<RaidEvent> arrived = raid_due(storage, now + 5, quick_rides());
+        REQUIRE(arrived.size() == 1);
+        arrival = arrived[0];
+        ++raids;
+        if (arrival.balloon_held) {
+            /* Nothing taken, nothing to build resistance on, and the next raid has better odds. */
+            CHECK(arrival.loot == 0);
+            CHECK(arrival.next_chance == 25 * (raids + 1));
+            CHECK(conquister_user(storage, "alice")->score == 1000);
+            CHECK_FALSE(read_json(paths.conquister).at("raid_resistance_levels").contains("alice"));
+        }
+        const std::vector<RaidEvent> home = raid_due(storage, now + 10, quick_rides());
+        REQUIRE(home.size() == 1);
+        CHECK(home[0].loot == arrival.loot);
+    } while (arrival.balloon_held && raids < 8);
+
+    CHECK(raids <= 4);
+    CHECK(arrival.balloon_popped);
+    CHECK(arrival.loot > 0);
+    CHECK(conquister_user(storage, "alice")->score == 1000 - arrival.loot);
+    CHECK_FALSE(read_json(paths.conquister).at("balloons").contains("alice"));
 }
 
 TEST_CASE("an empty house has no defences") {
@@ -674,7 +714,7 @@ TEST_CASE("an empty house has no defences") {
     }
     Storage storage{paths.conquister, paths.quotes};
 
-    /* A saved balloon cannot remain at home or guard the raider. */
+    /* Her balloon stays with her: out on the road, the house she left has nothing in it. */
     static_cast<void>(raid_start(storage, 0, "alice", "carol", 0, quick_rides()));
     static_cast<void>(raid_start(storage, 0, "bob", "alice", 0, quick_rides()));
 
@@ -684,9 +724,11 @@ TEST_CASE("an empty house has no defences") {
         CHECK(event.kind == RaidEvent::Kind::stolen);
         if (event.raider == "bob") {
             CHECK(event.undefended);
+            CHECK_FALSE(event.balloon_held);
+            CHECK_FALSE(event.balloon_popped);
         }
     }
-    CHECK(read_json(paths.conquister).at("balloons").empty());
+    CHECK(read_json(paths.conquister).at("balloons").at("alice") == 0);
 }
 
 TEST_CASE("nobody takes the place from the road") {

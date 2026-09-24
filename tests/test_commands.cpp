@@ -109,8 +109,8 @@ TEST_CASE("the bot answers the commands it knows and ignores the rest") {
         context.username = "dave";
         const std::string deprecated_balloon =
             "🎈 /buyballoon è deprecato: non serve più comprare il palloncino. "
-            "Lo ricevi gratis quando entri in @TheConquister37, se non hai un boost. "
-            "Sparisce quando lasci il posto e non protegge a casa.";
+            "Ce l'hai sempre, se non hai un boost, e protegge il posto dove sei: "
+            "@TheConquister37 o casa tua. Quando scoppia, se ne forma subito uno nuovo.";
         CHECK(command_is_for_bot("/buyballoon"));
         CHECK(reply("/buyballoon") == deprecated_balloon);
         context.user_id = 5;
@@ -642,6 +642,17 @@ TEST_CASE("the raids tell what happened") {
           "💰 bob hai rubato 250 palle a @alice, che non era a casa! Torni in bob tra 52 secondi.");
 
     event.undefended = false;
+    event.balloon_held = true;
+    event.next_chance = 50;
+    CHECK(raid_event_reply(event) ==
+          "🎈 bob il palloncino di @alice ha resistito: niente bottino. "
+          "Ora il palloncino ha il 50% di probabilità di essere bucato. Torni in bob tra 52 secondi.");
+    event.balloon_held = false;
+    event.balloon_popped = true;
+    CHECK(raid_event_reply(event) ==
+          "💰 bob hai bucato il palloncino di @alice e rubato 250 palle! Torni in bob tra 52 secondi.");
+    event.balloon_popped = false;
+
     event.raider_percent = 125;
     event.target_percent = 75;
     CHECK(raid_event_reply(event) ==

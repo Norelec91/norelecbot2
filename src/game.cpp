@@ -86,6 +86,29 @@ std::int64_t charge_attacker(ConquisterState &state, const std::string &username
     return charged;
 }
 
+enum class BalloonRoll : std::uint8_t { none, held, popped };
+
+/* Everybody always has a balloon, unless a boost rules it out. The file keeps how many attempts it
+   has survived; one that pops is replaced by a fresh one at once, and a fresh one has no entry. */
+BalloonRoll balloon_attempt(StorageSession &session, ConquisterState &state, const std::string &player) {
+    if (find_entry(state.boosts, player) != state.boosts.end()) {
+        return BalloonRoll::none;
+    }
+    const std::int64_t attempt = counter(state.balloons, player) + 1;
+    if (static_cast<std::int64_t>(session.random_index(balloon_attempts)) < attempt) {
+        state.balloons.erase(player);
+        return BalloonRoll::popped;
+    }
+    state.balloons[player] = attempt;
+    return BalloonRoll::held;
+}
+
+/* The chance, in percent, that the next attempt pops the player's balloon. */
+int balloon_pop_chance(const ConquisterState &state, const std::string &player) {
+    return static_cast<int>((counter(state.balloons, player) + 1) * 100 /
+                            static_cast<std::int64_t>(balloon_attempts));
+}
+
 std::int64_t resistance_adjusted_loot(ConquisterState &state, const std::string &target,
                                       std::int64_t loot, std::int64_t now) {
     if (loot <= 0) {
@@ -527,25 +550,22 @@ ClaimResult conquister_claim(
             outcome.previous_user_id = !ambiguous_legacy(state, holder) &&
                 counter(state.telegram_ids, holder) != 0
                 ? counter(state.telegram_ids, holder) : state.current->user_id;
-            if (const auto balloon = find_entry(state.balloons, holder); balloon != state.balloons.end()) {
-                const std::int64_t attempt = balloon->second + 1;
-                if (static_cast<std::int64_t>(session.random_index(balloon_attempts)) >= attempt) {
-                    balloon->second = attempt;
-                    if (rules.cooldown_seconds > 0) {
-                        state.cooldowns[username] = now + rules.cooldown_seconds;
-                        outcome.penalty_seconds = rules.cooldown_seconds;
-                    }
-                    outcome.attack_cost = charge_attacker(state, username, rules.attack_cost);
-                    outcome.status = ClaimStatus::defended;
-                    outcome.previous_username = display_name(state, holder);
-                    outcome.previous_key = holder;
-                    outcome.next_chance =
-                        static_cast<int>((attempt + 1) * 100 / static_cast<std::int64_t>(balloon_attempts));
-                    return outcome;
+            const BalloonRoll balloon = balloon_attempt(session, state, holder);
+            if (balloon == BalloonRoll::held) {
+                if (rules.cooldown_seconds > 0) {
+                    state.cooldowns[username] = now + rules.cooldown_seconds;
+                    outcome.penalty_seconds = rules.cooldown_seconds;
                 }
-                state.balloons.erase(holder);
-                outcome.balloon_popped = true;
+                outcome.attack_cost = charge_attacker(state, username, rules.attack_cost);
+                outcome.status = ClaimStatus::defended;
+                outcome.previous_username = display_name(state, holder);
+                outcome.previous_key = holder;
+                outcome.next_chance = balloon_pop_chance(state, holder);
+                return outcome;
             }
+            outcome.balloon_popped = balloon == BalloonRoll::popped;
+            /* Kicked out, he gets a fresh balloon, even one a boost had kept out of the way. */
+            state.balloons.erase(holder);
             outcome.previous_username = display_name(state, holder);
             outcome.previous_key = holder;
             const Settlement settled = settle_hold(state, holder, state.current->since, now, rules.signs);
@@ -553,12 +573,9 @@ ClaimResult conquister_claim(
             outcome.boost_multiplier = settled.boost_multiplier;
             outcome.zodiac_percent = settled.zodiac_percent;
         }
-        state.balloons.clear();
         state.current = Holder{user_id, username, now};
-        if (find_entry(state.boosts, username) == state.boosts.end()) {
-            state.balloons[username] = 0;
-            outcome.balloon_active = true;
-        }
+        /* He brings his own balloon, as worn as it is, unless a boost rules it out for this hold. */
+        outcome.balloon_active = find_entry(state.boosts, username) == state.boosts.end();
         return outcome;
     });
 
@@ -897,7 +914,7 @@ RaidResult raid_start(
                 const std::string holder = state.current->username;
                 const Settlement settled =
                     settle_hold(state, holder, state.current->since, now, rules.signs);
-                state.balloons.erase(holder);
+                /* The balloon is his, not the place's: it comes home with him. */
                 state.current.reset();
                 outcome.status = RaidStatus::left_place;
                 outcome.earned = settled.earned;
@@ -963,6 +980,30 @@ RaidResult raid_start(
     return result;
 }
 
+namespace {
+
+/* A raid on a player at home meets his balloon first; while he is away it guards nothing. */
+bool defended_at_home(StorageSession &session, ConquisterState &state, const std::string &target,
+                      RaidEvent &event) {
+    if (!at_home(state, target)) {
+        return false;
+    }
+    switch (balloon_attempt(session, state, target)) {
+    case BalloonRoll::held:
+        event.balloon_held = true;
+        event.next_chance = balloon_pop_chance(state, target);
+        return true;
+    case BalloonRoll::popped:
+        event.balloon_popped = true;
+        return false;
+    case BalloonRoll::none:
+        break;
+    }
+    return false;
+}
+
+}
+
 std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRules &rules) {
     const std::vector<RaidEvent> events = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
@@ -984,6 +1025,8 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                     event.gift = raid.gift;
                     state.scores[raid.target] = counter(state.scores, raid.target) + raid.gift;
                     raid.gift = 0;
+                } else if (defended_at_home(session, state, raid.target, event)) {
+                    raid.loot = 0;
                 } else {
                     event.undefended = !at_home(state, raid.target);
                     const std::int64_t theirs = counter(state.scores, raid.target);
@@ -1038,12 +1081,13 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
         switch (event.kind) {
         case RaidEvent::Kind::stolen:
             log_info(
-                "raid stolen user={} target={} loot={} resistance={} undefended={} percent={}/{}",
+                "raid stolen user={} target={} loot={} resistance={} undefended={} balloon={} percent={}/{}",
                 event.raider,
                 event.target,
                 event.loot,
                 event.resistance_absorbed,
                 event.undefended ? 1 : 0,
+                event.balloon_held ? "held" : event.balloon_popped ? "popped" : "none",
                 event.raider_percent,
                 event.target_percent
             );

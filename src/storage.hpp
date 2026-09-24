@@ -68,7 +68,8 @@ struct ConquisterState {
     std::optional<Holder> current;
     Counters scores;
     Counters quotes_added;
-    /* Current holder's temporary balloon mapped to attempts already survived. */
+    /* The attempts each player's balloon already survived. Everybody has one, which guards
+       @TheConquister37 while he holds it and his home while he is there; a fresh one has no entry. */
     Counters balloons;
     /* Users mapped to the instant their claim penalty expires. */
     Counters cooldowns;

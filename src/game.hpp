@@ -140,6 +140,11 @@ struct RaidEvent {
     std::int64_t resistance_absorbed = 0;
     /* The target was away, so there was nothing to get past. */
     bool undefended = false;
+    /* The target was home with his balloon: it held and nothing was taken, with the chance the next
+       raid has of popping it, or it popped and the raid went on. */
+    bool balloon_held = false;
+    bool balloon_popped = false;
+    int next_chance = 0;
     /* Whether the target is known to be on Telegram, where a mention reaches them. */
     bool target_on_telegram = false;
 };

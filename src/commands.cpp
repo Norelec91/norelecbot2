@@ -538,8 +538,8 @@ std::string handle_buy_furniture(const CommandContext &context, std::string_view
 
 std::string handle_buy_balloon(const CommandContext &, std::string_view) {
     return "🎈 /buyballoon è deprecato: non serve più comprare il palloncino. "
-           "Lo ricevi gratis quando entri in @TheConquister37, se non hai un boost. "
-           "Sparisce quando lasci il posto e non protegge a casa.";
+           "Ce l'hai sempre, se non hai un boost, e protegge il posto dove sei: "
+           "@TheConquister37 o casa tua. Quando scoppia, se ne forma subito uno nuovo.";
 }
 
 /* The owner is an admin with more powers, so he never has to be listed twice. */
@@ -745,13 +745,21 @@ std::string raid_event_reply(const RaidEvent &event) {
             format_wait(event.seconds)
         );
     }
-    std::string reply = std::format(
-        "💰 {} hai rubato {} palle a {}{}",
-        raider,
-        event.loot,
-        mention,
-        target
-    );
+    if (event.balloon_held) {
+        return std::format(
+            "🎈 {} il palloncino di {}{} ha resistito: niente bottino. "
+            "Ora il palloncino ha il {}% di probabilità di essere bucato. Torni in {} tra {}.",
+            raider,
+            mention,
+            target,
+            event.next_chance,
+            home,
+            format_wait(event.seconds)
+        );
+    }
+    std::string reply = event.balloon_popped
+        ? std::format("💰 {} hai bucato il palloncino di {}{} e rubato {} palle", raider, mention, target, event.loot)
+        : std::format("💰 {} hai rubato {} palle a {}{}", raider, event.loot, mention, target);
     if (event.undefended) {
         reply += ", che non era a casa";
     }

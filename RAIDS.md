@@ -1,23 +1,33 @@
 # Raid resistance
 
-## Temporary Conquister balloon
+## Balloon
 
-A successful entry into @TheConquister37 grants a free balloon unless the
-player has a boost for that hold. It protects only that hold: it can repel at
-most three claim attempts, and the fourth attempt always pops it. Leaving the
-place voluntarily or being displaced removes it. It never protects against a
-raid at home. Old balloons saved
-for players outside @TheConquister37 are removed when this version first loads
-the game state. The old `/buyballoon` command remains as an informational
-deprecation reply; it no longer buys anything.
+Every player always has a balloon, unless he owns a boost, which rules it out
+until the boost is spent. It guards wherever he is: @TheConquister37 while he
+holds it, his home while he is there. On the road it guards nothing, neither
+the place nor the house he left.
+
+Claims against the holder and raids against a player at home wear the same
+balloon: the first attempt has one chance in four of popping it, the second two,
+the third three, and the fourth always does. A claim it holds off costs the
+attacker a penalty and palle; a raid it holds off takes nothing, raises no
+resistance, and the raider rides home empty-handed. When it pops, the claim or
+the raid goes through as usual, and right after it a fresh balloon takes its
+place. Being kicked out of @TheConquister37 always leaves the kicked player with
+a fresh one. Entering the place or going home does not renew it: he carries the
+same balloon, as worn as it is.
+
+`conquister.json` keeps, under `balloons`, how many attempts each balloon has
+survived; a fresh balloon has no entry. The old `/buyballoon` command remains as
+an informational deprecation reply; it no longer buys anything.
 
 ## Retired raid shield
 
 The raid shield bought with `/buyshield` no longer exists. `/buyshield`
 remains as an informational deprecation reply and buys nothing. Shields saved
 by older versions are removed from `conquister.json` when this version first
-loads the game state, without refunding the palle they cost. Resistance is the
-only defense left against raids.
+loads the game state, without refunding the palle they cost. Against raids
+there remain the balloon, while its owner is home, and resistance.
 
 ## Resistance
 
@@ -29,8 +39,8 @@ attacks. One level recovers every two hours, even if the target is raided again
 in the meantime.
 
 A raid that takes no palle does not increase resistance. Resistance remains effective when the
-owner is away; a balloon protects only the holder of @TheConquister37 and never
-blocks a raid. Raid announcements report the amount
+owner is away, unlike the balloon, which guards only the place where he is. A
+raid the balloon holds off never reaches resistance. Raid announcements report the amount
 stolen but do not attribute reductions to resistance.
 Zodiac modifiers still affect the loot calculation but are not shown in raid
 announcements.
