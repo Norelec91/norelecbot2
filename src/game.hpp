@@ -171,6 +171,8 @@ struct RaidEvent {
     int next_chance = 0;
     /* Whether the target is known to be on Telegram, where a mention reaches them. */
     bool target_on_telegram = false;
+    /* The same for the raider, whose planet is named after him. */
+    bool raider_on_telegram = false;
 };
 
 struct LeaderboardEntry {

@@ -770,7 +770,7 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
                                telegram ? RaidTargetKind::telegram : RaidTargetKind::irc, now,
                                context.config.zodiac_signs);
         if (!found) {
-            return std::format("👤 non conosco nessun giocatore di nome {}.", wanted);
+            return std::format("👤 {} non conosco nessun giocatore di nome {}.", context.username, wanted);
         }
     }
     const Profile &profile = *found;
@@ -944,7 +944,8 @@ bool command_is_for_bot(std::string_view text) {
 
 std::optional<std::string> raid_event_reply(const RaidEvent &event) {
     const std::string_view mention = event.target_on_telegram ? "@" : "";
-    const std::string &home = event.raider;
+    /* His planet, with the mention where it reaches him, as everywhere else. */
+    const std::string home = std::format("{}{}", event.raider_on_telegram ? "@" : "", event.raider);
     /* The bare name for whoever is spoken to, the dressed one when somebody is named. */
     const auto with_emoji = [](std::string_view name, std::string_view emoji) {
         return emoji.empty() ? std::string{name} : std::format("{} ({})", name, emoji);

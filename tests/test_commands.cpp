@@ -634,6 +634,12 @@ TEST_CASE("the raids tell what happened") {
     /* He turned back, so the palle he was carrying are his again. */
     home.gift = 700;
     CHECK(raid_event_reply(home) == "🎁 bob torni in bob con le tue 700 palle ancora in tasca.");
+
+    /* A raider from Telegram has his planet written with the mention, as everywhere else. */
+    home.raider_on_telegram = true;
+    CHECK(raid_event_reply(home) == "🎁 bob torni in @bob con le tue 700 palle ancora in tasca.");
+    given.raider_on_telegram = true;
+    CHECK(raid_event_reply(given) == "🎁 bob hai consegnato 700 palle a @alice! Torni in @bob tra 52 secondi.");
 }
 
 TEST_CASE("the profile shows where a player stands") {
@@ -673,7 +679,7 @@ TEST_CASE("the profile shows where a player stands") {
 
     /* The same card, seen by somebody else, with the name as it is written on that platform. */
     CHECK(command_dispatch(bob, "/profile @Alice") == mine);
-    CHECK(command_dispatch(bob, "/profile @Nessuno") == "👤 non conosco nessun giocatore di nome @Nessuno.");
+    CHECK(command_dispatch(bob, "/profile @Nessuno") == "👤 Bob non conosco nessun giocatore di nome @Nessuno.");
     const std::string irc = command_dispatch(bob, "/profile Carol").value_or("");
     CHECK(irc.starts_with("👤 Carol\n💰 nessuna palla ancora\n"));
     CHECK_FALSE(irc.contains("🎈"));
