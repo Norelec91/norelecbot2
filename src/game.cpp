@@ -144,6 +144,17 @@ Settlement settle_hold(
     return settled;
 }
 
+/* Takes the holder out of @TheConquister37, paying what the hold earned. His balloon is his, not the
+   place's: it comes home with him. */
+Settlement leave_place(ConquisterState &state, std::int64_t now, zodiac::Overrides signs) {
+    if (!state.current) {
+        return {};
+    }
+    const Holder holder = *state.current;
+    state.current.reset();
+    return settle_hold(state, holder.username, holder.since, now, signs);
+}
+
 /* A raid takes the player away from home until the return trip ends. */
 bool is_away(const ConquisterState &state, const std::string &username) {
     return std::ranges::any_of(state.raids, [&username](const Raid &raid) {
@@ -681,41 +692,258 @@ bool debug_on(Storage &storage, const std::string &username) {
     });
 }
 
+namespace {
+
+constexpr std::string_view empty_slot = "[]";
+
+/* The same emoji whether or not it asks to be drawn in colour: ❤ and ❤️ are one heart. */
+std::string without_variation(std::string_view emoji) {
+    std::string plain;
+    for (std::size_t at = 0; at < emoji.size();) {
+        const std::string_view rest = emoji.substr(at);
+        if (rest.starts_with("\xEF\xB8\x8F") || rest.starts_with("\xEF\xB8\x8E")) {
+            at += 3;
+            continue;
+        }
+        plain += emoji[at];
+        ++at;
+    }
+    return plain;
+}
+
+/* The emoji a player has on the road, empty when he carries none. */
+std::string emoji_travelling(const ConquisterState &state, const std::string &player) {
+    const auto trip = std::ranges::find_if(state.raids, [&player](const Raid &raid) {
+        return raid.raider == player && !raid.gift_emoji.empty();
+    });
+    return trip == state.raids.end() ? std::string{} : trip->gift_emoji;
+}
+
+/* How many of a name's slots, up to the limit, have nothing hanging in them. */
+std::size_t empty_slots(const std::vector<std::string> &slots, std::size_t limit) {
+    const std::size_t used = std::min(slots.size(), limit);
+    const auto holes = std::ranges::count_if(slots.begin(), slots.begin() + static_cast<std::ptrdiff_t>(used),
+                                             [](const std::string &slot) { return slot.empty(); });
+    return static_cast<std::size_t>(holes) + (limit - used);
+}
+
+/* The price doubled once for every copy, stopping at the largest number rather than wrapping. */
+std::int64_t inflated(std::int64_t cost, std::size_t copies) {
+    if (cost <= 0) {
+        return 0;
+    }
+    constexpr auto most = std::numeric_limits<std::int64_t>::max();
+    if (copies >= 63 || cost > (most >> copies)) {
+        return most;
+    }
+    return cost << copies;
+}
+
+}
+
+std::vector<std::string> furniture_slots(std::string_view stored) {
+    std::vector<std::string> slots;
+    while (!stored.empty()) {
+        if (stored.starts_with(empty_slot)) {
+            slots.emplace_back();
+            stored.remove_prefix(empty_slot.size());
+            continue;
+        }
+        const std::size_t end = std::min(stored.find(empty_slot), stored.size());
+        const std::string_view piece = stored.substr(0, end);
+        if (const auto emoji = text::emoji_split(piece)) {
+            slots.insert(slots.end(), emoji->begin(), emoji->end());
+        } else {
+            /* Whatever an older version saved stays where it was, as one slot. */
+            slots.emplace_back(piece);
+        }
+        stored.remove_prefix(end);
+    }
+    return slots;
+}
+
+std::string furniture_stored(std::vector<std::string> slots) {
+    while (!slots.empty() && slots.back().empty()) {
+        slots.pop_back();
+    }
+    std::string stored;
+    for (const std::string &slot : slots) {
+        stored += slot.empty() ? std::string{empty_slot} : slot;
+    }
+    return stored;
+}
+
+namespace {
+
+bool same_emoji(std::string_view one, std::string_view other) {
+    return without_variation(one) == without_variation(other);
+}
+
+std::vector<std::string> slots_of(const ConquisterState &state, const std::string &player) {
+    return furniture_slots(furniture_of(state, player));
+}
+
+/* Writes a name's slots back; a name left with nothing loses its entry. */
+void hang(ConquisterState &state, const std::string &player, std::vector<std::string> slots) {
+    std::string stored = furniture_stored(std::move(slots));
+    const auto mine = find_entry(state.furniture, player);
+    if (stored.empty()) {
+        if (mine != state.furniture.end()) {
+            const std::string key = mine->first;
+            state.furniture.erase(key);
+        }
+    } else if (mine != state.furniture.end()) {
+        mine->second = std::move(stored);
+    } else {
+        state.furniture[player] = std::move(stored);
+    }
+}
+
+/* The first empty slot on a name, or nothing when every one of them is taken. */
+std::optional<std::size_t> free_slot(const std::vector<std::string> &slots, std::size_t limit) {
+    const auto empty = std::ranges::find_if(slots, [](const std::string &slot) { return slot.empty(); });
+    const auto index = static_cast<std::size_t>(empty - slots.begin());
+    return index < limit ? std::optional<std::size_t>{index} : std::nullopt;
+}
+
+/* Whether a name can take one more emoji and still keep a slot for its own one on the road. */
+bool has_room(const ConquisterState &state, const std::string &player, std::size_t limit) {
+    const std::size_t needed = emoji_travelling(state, player).empty() ? 1 : 2;
+    return empty_slots(slots_of(state, player), limit) >= needed;
+}
+
+bool has_emoji(const ConquisterState &state, const std::string &player, std::string_view emoji) {
+    return std::ranges::any_of(slots_of(state, player), [emoji](const std::string &slot) {
+        return !slot.empty() && same_emoji(slot, emoji);
+    });
+}
+
+/* Takes the first copy of an emoji off a name, leaving a hole where it hung. */
+bool take_emoji(ConquisterState &state, const std::string &player, std::string_view emoji) {
+    std::vector<std::string> slots = slots_of(state, player);
+    const auto found = std::ranges::find_if(slots, [emoji](const std::string &slot) {
+        return !slot.empty() && same_emoji(slot, emoji);
+    });
+    if (found == slots.end()) {
+        return false;
+    }
+    found->clear();
+    hang(state, player, std::move(slots));
+    return true;
+}
+
+/* Hangs an emoji in the first empty slot of a name; false when the name is full. */
+bool give_emoji(ConquisterState &state, const std::string &player, const std::string &emoji, std::size_t limit) {
+    std::vector<std::string> slots = slots_of(state, player);
+    const std::optional<std::size_t> slot = free_slot(slots, limit);
+    if (!slot) {
+        return false;
+    }
+    if (*slot >= slots.size()) {
+        slots.resize(*slot + 1);
+    }
+    slots[*slot] = emoji;
+    hang(state, player, std::move(slots));
+    return true;
+}
+
+}
+
+std::optional<std::string> furniture_burn(Storage &storage, const std::string &player, const std::string &emoji) {
+    const std::optional<std::string> shown =
+        storage.transaction([&](StorageSession &session) -> std::optional<std::string> {
+            ConquisterState &state = session.state();
+            if (!take_emoji(state, player, emoji)) {
+                return std::nullopt;
+            }
+            return furniture_of(state, player);
+        });
+    if (shown) {
+        log_info("emoji burned user={} emoji={}", player, emoji);
+    }
+    return shown;
+}
+
 FurnitureResult furniture_buy(
     Storage &storage,
     const std::string &username,
     const std::string &emoji,
-    int cost,
+    std::int64_t position,
+    std::int64_t cost,
     std::size_t limit
 ) {
     const FurnitureResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
-        const std::int64_t score = counter(state.scores, username);
+        FurnitureResult outcome;
+        outcome.available_score = counter(state.scores, username);
         const auto mine = find_entry(state.furniture, username);
-        const std::string kept = mine == state.furniture.end() ? std::string{} : mine->second;
-        const std::size_t had = text::emoji_count(kept).value_or(0);
-        const std::size_t asked = text::emoji_count(emoji).value_or(0);
-        if (had + asked > limit) {
-            return FurnitureResult{FurnitureStatus::too_many, score, kept, had};
-        }
-        if (score < cost) {
-            return FurnitureResult{FurnitureStatus::insufficient_score, score, kept, had};
-        }
-        state.scores[username] = score - cost;
-        const std::string shown = kept + emoji;
-        if (mine != state.furniture.end()) {
-            mine->second = shown;
+        std::vector<std::string> slots =
+            furniture_slots(mine == state.furniture.end() ? std::string_view{} : std::string_view{mine->second});
+        outcome.shown = furniture_stored(slots);
+        std::size_t index = 0;
+        if (position == 0) {
+            const auto empty = std::ranges::find_if(slots, [](const std::string &slot) { return slot.empty(); });
+            index = static_cast<std::size_t>(empty - slots.begin());
+            if (index >= limit) {
+                outcome.status = FurnitureStatus::full;
+                return outcome;
+            }
+        } else if (position < 0 || static_cast<std::uint64_t>(position) > limit) {
+            outcome.status = FurnitureStatus::invalid_position;
+            return outcome;
         } else {
-            state.furniture[username] = shown;
+            index = static_cast<std::size_t>(position - 1);
         }
-        return FurnitureResult{FurnitureStatus::bought, score - cost, shown, had + asked};
+        outcome.position = index + 1;
+        /* With an emoji of his on the road, one empty slot stays free for it: he can fill any other,
+           or overwrite, but not the last one left. */
+        outcome.travelling = emoji_travelling(state, username);
+        const bool fills_empty = index >= slots.size() || slots[index].empty();
+        if (!outcome.travelling.empty() && fills_empty && empty_slots(slots, limit) < 2) {
+            outcome.status = FurnitureStatus::in_transit;
+            return outcome;
+        }
+        const std::string wanted = without_variation(emoji);
+        if (index < slots.size() && without_variation(slots[index]) == wanted) {
+            outcome.status = FurnitureStatus::already_there;
+            outcome.replaced = slots[index];
+            return outcome;
+        }
+        for (const Authors::value_type &hung : state.furniture) {
+            outcome.copies += static_cast<std::size_t>(std::ranges::count_if(
+                furniture_slots(hung.second), [&wanted](const std::string &slot) {
+                    return !slot.empty() && without_variation(slot) == wanted;
+                }));
+        }
+        outcome.charged = inflated(cost, outcome.copies);
+        if (outcome.available_score < outcome.charged) {
+            outcome.status = FurnitureStatus::insufficient_score;
+            return outcome;
+        }
+        if (index >= slots.size()) {
+            slots.resize(index + 1);
+        }
+        outcome.replaced = slots[index];
+        slots[index] = emoji;
+        outcome.shown = furniture_stored(std::move(slots));
+        outcome.available_score -= outcome.charged;
+        state.scores[username] = outcome.available_score;
+        if (mine != state.furniture.end()) {
+            mine->second = outcome.shown;
+        } else {
+            state.furniture[username] = outcome.shown;
+        }
+        outcome.status = FurnitureStatus::bought;
+        return outcome;
     });
 
     log_info(
-        "furniture user={} status={} howmany={}",
+        "furniture user={} status={} position={} copies={} charged={}",
         username,
         static_cast<int>(result.status),
-        result.howmany
+        result.position,
+        result.copies,
+        result.charged
     );
     return result;
 }
@@ -753,15 +981,27 @@ BurnResult palle_burn(Storage &storage, const std::string &player, std::int64_t 
 InvestmentResult investment_deposit(Storage &storage, const std::string &player,
                                     std::string_view target, RaidTargetKind platform,
                                     std::int64_t amount, std::int64_t now, zodiac::Overrides signs) {
-    return storage.transaction([&](StorageSession &session) {
+    const InvestmentResult outcome = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         InvestmentResult result;
         if (player_by_name(state, target, platform) != player) {
             result.status = InvestmentStatus::not_self;
-        } else if (!at_home(state, player)) {
-            result.status = InvestmentStatus::not_home;
-        } else if (amount <= 0) {
+            return result;
+        }
+        if (amount <= 0) {
             result.status = InvestmentStatus::invalid_amount;
+            return result;
+        }
+        /* From @TheConquister37 the same line is the way home, and the deposit is made there. */
+        if (state.current && text::equals_ignore_case(state.current->username, player)) {
+            const Settlement settled = leave_place(state, now, signs);
+            result.left_place = true;
+            result.earned = settled.earned;
+            result.boost_multiplier = settled.boost_multiplier;
+            result.hold_percent = settled.zodiac_percent;
+        }
+        if (!at_home(state, player)) {
+            result.status = InvestmentStatus::not_home;
         } else {
             const std::int64_t score = counter(state.scores, player);
             if (amount > score) {
@@ -780,6 +1020,10 @@ InvestmentResult investment_deposit(Storage &storage, const std::string &player,
         }
         return result;
     });
+    if (outcome.left_place) {
+        log_info("left the place to invest user={} earned={} amount={}", player, outcome.earned, amount);
+    }
+    return outcome;
 }
 
 InvestmentResult investment_withdraw(Storage &storage, const std::string &player,
@@ -844,7 +1088,8 @@ RaidResult raid_start(
     std::int64_t now,
     const RaidRules &rules,
     RaidTargetKind target_kind,
-    std::int64_t gift
+    std::int64_t gift,
+    std::string_view gift_emoji
 ) {
     const RaidResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
@@ -858,6 +1103,10 @@ RaidResult raid_start(
             : player_by_name(state, target, target_kind);
         if (!known) {
             outcome.status = RaidStatus::unknown_target;
+            return outcome;
+        }
+        if (!gift_emoji.empty() && homewards) {
+            outcome.status = RaidStatus::not_to_yourself;
             return outcome;
         }
         const bool holds_place = state.current && text::equals_ignore_case(state.current->username, username);
@@ -880,11 +1129,7 @@ RaidResult raid_start(
                 return outcome;
             }
             if (holds_place) {
-                const std::string holder = state.current->username;
-                const Settlement settled =
-                    settle_hold(state, holder, state.current->since, now, rules.signs);
-                /* The balloon is his, not the place's: it comes home with him. */
-                state.current.reset();
+                const Settlement settled = leave_place(state, now, rules.signs);
                 outcome.status = RaidStatus::left_place;
                 outcome.earned = settled.earned;
                 outcome.boost_multiplier = settled.boost_multiplier;
@@ -920,6 +1165,18 @@ RaidResult raid_start(
             state.scores[username] = score - gift;
             outcome.score = score - gift;
         }
+        /* An emoji taken along leaves his name as he sets off, if the target has somewhere to hang it. */
+        if (!gift_emoji.empty()) {
+            if (!has_emoji(state, username, gift_emoji)) {
+                outcome.status = RaidStatus::no_such_emoji;
+                return outcome;
+            }
+            if (!has_room(state, *known, rules.furniture_limit)) {
+                outcome.status = RaidStatus::no_room;
+                return outcome;
+            }
+            static_cast<void>(take_emoji(state, username, gift_emoji));
+        }
         outcome.target = display_name(state, *known);
         const position::Point home = position::coordinates_of(player_id(session, state, username));
         const position::Point theirs = position::coordinates_of(player_id(session, state, *known));
@@ -932,13 +1189,14 @@ RaidResult raid_start(
             .arrived = false,
             .loot = 0,
             .gift = gift,
+            .gift_emoji = std::string{gift_emoji},
         });
         return outcome;
     });
 
     if (result.status == RaidStatus::started) {
-        log_info("raid started user={} target={} travel={} gift={}", username, result.target, result.seconds,
-                 gift);
+        log_info("raid started user={} target={} travel={} gift={} emoji={}", username, result.target,
+                 result.seconds, gift, gift_emoji);
     }
     if (result.status == RaidStatus::left_place) {
         log_info("left the place user={} earned={}", username, result.earned);
@@ -988,12 +1246,25 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 event.target_on_telegram = counter(state.telegram_ids, raid.target) != 0;
                 event.raider_emoji = furniture_of(state, raid.raider);
                 event.target_emoji = furniture_of(state, raid.target);
-                /* Whoever came to give hands the palle over and robs nothing. */
-                if (raid.gift > 0) {
+                /* Whoever came to give hands the palle or the emoji over and robs nothing. */
+                if (raid.gift > 0 || !raid.gift_emoji.empty()) {
                     event.kind = RaidEvent::Kind::delivered;
                     event.gift = raid.gift;
-                    state.scores[raid.target] = counter(state.scores, raid.target) + raid.gift;
-                    raid.gift = 0;
+                    if (raid.gift > 0) {
+                        state.scores[raid.target] = counter(state.scores, raid.target) + raid.gift;
+                        raid.gift = 0;
+                    }
+                    if (!raid.gift_emoji.empty()) {
+                        event.gift_emoji = raid.gift_emoji;
+                        /* A name that filled up meanwhile sends it back the way it came. */
+                        if (has_room(state, raid.target, rules.furniture_limit) &&
+                            give_emoji(state, raid.target, raid.gift_emoji, rules.furniture_limit)) {
+                            raid.gift_emoji.clear();
+                            event.target_emoji = furniture_of(state, raid.target);
+                        } else {
+                            event.no_room = true;
+                        }
+                    }
                 } else if (defended_at_home(session, state, raid.target, event)) {
                     raid.loot = 0;
                 } else {
@@ -1028,12 +1299,18 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 if (brought > 0) {
                     state.scores[raid.raider] = carried + brought;
                 }
+                /* An emoji nobody took goes back on his name: its slot was kept free while it travelled. */
+                if (!raid.gift_emoji.empty()) {
+                    static_cast<void>(give_emoji(state, raid.raider, raid.gift_emoji,
+                                                 std::numeric_limits<std::size_t>::max()));
+                }
                 settled.push_back(RaidEvent{
                     .kind = RaidEvent::Kind::returned,
                     .raider = display_name(state, raid.raider),
                     .target = display_name(state, raid.target),
                     .loot = raid.loot,
                     .gift = raid.gift,
+                    .gift_emoji = raid.gift_emoji,
                     .raider_emoji = furniture_of(state, raid.raider),
                     .target_emoji = furniture_of(state, raid.target),
                 });
@@ -1059,11 +1336,12 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
             );
             break;
         case RaidEvent::Kind::delivered:
-            log_info("raid delivered user={} target={} gift={}", event.raider, event.target, event.gift);
+            log_info("raid delivered user={} target={} gift={} emoji={} no_room={}", event.raider, event.target,
+                     event.gift, event.gift_emoji, event.no_room ? 1 : 0);
             break;
         case RaidEvent::Kind::returned:
-            log_info("raid returned user={} target={} loot={} gift={}", event.raider, event.target,
-                     event.loot, event.gift);
+            log_info("raid returned user={} target={} loot={} gift={} emoji={}", event.raider,
+                     event.target, event.loot, event.gift, event.gift_emoji);
             break;
         }
     }

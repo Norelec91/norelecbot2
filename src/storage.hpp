@@ -49,6 +49,8 @@ struct Raid {
     std::int64_t loot = 0;
     /* Palle taken along for the target, handed over on arrival and carried back if he turns around. */
     std::int64_t gift = 0;
+    /* An emoji taken off his own name for the target, handed over like the palle. */
+    std::string gift_emoji;
 
     bool operator==(const Raid &) const = default;
 };

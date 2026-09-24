@@ -859,36 +859,59 @@ TEST_CASE("a quote remembers who added it") {
 }
 
 
-TEST_CASE("furniture is bought, piles up and stops at the limit") {
+TEST_CASE("furniture hangs in numbered slots, leaves holes and can be overwritten") {
     const TestPaths paths{"furniture-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":null,"scores":{"alice":25000,"bob":100},"quotes_added":{}})";
+        file << R"({"current":null,"scores":{"alice":25000,"bob":100},"quotes_added":{},)"
+             << R"("furniture":{"carol":"🎲🧀"}})";
     }
     Storage storage{paths.conquister, paths.quotes};
 
-    /* The first purchase takes the cost and hangs the emoji. */
-    const FurnitureResult first = furniture_buy(storage, "alice", "🎈🍕", 10000, 10);
+    /* An older save, emoji one after the other, reads as the first slots. */
+    CHECK(furniture_slots("🎲🧀") == std::vector<std::string>{"🎲", "🧀"});
+    CHECK(furniture_slots("🎈[]🍕[][]🐟") == std::vector<std::string>{"🎈", "", "🍕", "", "", "🐟"});
+    CHECK(furniture_stored({"🎈", "", "🍕", "", ""}) == "🎈[]🍕");
+
+    /* No slot named: the first empty one. */
+    const FurnitureResult first = furniture_buy(storage, "alice", "🎈", 0, 1000, 10);
     CHECK(first.status == FurnitureStatus::bought);
-    CHECK(first.shown == "🎈🍕");
-    CHECK(first.howmany == 2);
-    CHECK(conquister_user(storage, "alice")->score == 15000);
+    CHECK(first.position == 1);
+    CHECK(first.shown == "🎈");
+    CHECK(first.charged == 1000);
+    CHECK(conquister_user(storage, "alice")->score == 24000);
 
-    /* The second one is added to them instead of replacing them. */
-    const FurnitureResult second = furniture_buy(storage, "alice", "🐟", 10000, 10);
-    CHECK(second.status == FurnitureStatus::bought);
-    CHECK(second.shown == "🎈🍕🐟");
-    CHECK(second.howmany == 3);
-    CHECK(conquister_user(storage, "alice")->score == 5000);
+    /* A slot further on leaves a hole, shown as [] only between emoji. */
+    const FurnitureResult third = furniture_buy(storage, "alice", "🍕", 3, 1000, 10);
+    CHECK(third.status == FurnitureStatus::bought);
+    CHECK(third.shown == "🎈[]🍕");
+    CHECK(third.replaced.empty());
 
-    /* Past the limit it refuses without charging. */
-    const FurnitureResult too_many = furniture_buy(storage, "alice", "🚀🎲🧀🐝🌊🪐🎺🐕", 10000, 10);
-    CHECK(too_many.status == FurnitureStatus::too_many);
-    CHECK(too_many.howmany == 3);
-    CHECK(conquister_user(storage, "alice")->score == 5000);
+    /* The hole is the first empty slot now. */
+    CHECK(furniture_buy(storage, "alice", "🐟", 0, 1000, 10).shown == "🎈🐟🍕");
+
+    /* Overwriting pays the full price and says what was there. */
+    const FurnitureResult swapped = furniture_buy(storage, "alice", "🚀", 3, 1000, 10);
+    CHECK(swapped.status == FurnitureStatus::bought);
+    CHECK(swapped.replaced == "🍕");
+    CHECK(swapped.shown == "🎈🐟🚀");
+    CHECK(conquister_user(storage, "alice")->score == 21000);
+
+    /* The same emoji in the same slot, or a slot that does not exist, costs nothing. */
+    const FurnitureResult same = furniture_buy(storage, "alice", "🚀", 3, 1000, 10);
+    CHECK(same.status == FurnitureStatus::already_there);
+    CHECK(furniture_buy(storage, "alice", "🎺", 11, 1000, 10).status == FurnitureStatus::invalid_position);
+    CHECK(furniture_buy(storage, "alice", "🎺", -1, 1000, 10).status == FurnitureStatus::invalid_position);
+    CHECK(conquister_user(storage, "alice")->score == 21000);
+
+    /* Every slot full and none named: refused without a charge. */
+    for (std::int64_t slot = 4; slot <= 10; ++slot) {
+        REQUIRE(furniture_buy(storage, "alice", "🌊", slot, 0, 10).status == FurnitureStatus::bought);
+    }
+    CHECK(furniture_buy(storage, "alice", "🎺", 0, 1000, 10).status == FurnitureStatus::full);
 
     /* With no palle nothing is bought and nothing is left hanging. */
-    const FurnitureResult broke = furniture_buy(storage, "bob", "🎈", 10000, 10);
+    const FurnitureResult broke = furniture_buy(storage, "bob", "🎈", 0, 1000, 10);
     CHECK(broke.status == FurnitureStatus::insufficient_score);
     CHECK(conquister_user(storage, "bob")->score == 100);
     const Authors hung = furniture_all(storage);
@@ -898,7 +921,151 @@ TEST_CASE("furniture is bought, piles up and stops at the limit") {
     Storage again{paths.conquister, paths.quotes};
     const Authors kept = furniture_all(again);
     REQUIRE(kept.find("alice") != kept.end());
-    CHECK(kept.find("alice")->second == "🎈🍕🐟");
+    CHECK(kept.find("alice")->second == "🎈🐟🚀🌊🌊🌊🌊🌊🌊🌊");
+}
+
+TEST_CASE("an emoji costs double for every copy already hanging from anybody's name") {
+    const TestPaths paths{"furniture-inflation-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":100000,"bob":100000,"carol":100000},"quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+
+    CHECK(furniture_buy(storage, "alice", "🍕", 0, 1000, 10).charged == 1000);
+    const FurnitureResult second = furniture_buy(storage, "bob", "🍕", 0, 1000, 10);
+    CHECK(second.copies == 1);
+    CHECK(second.charged == 2000);
+    /* Copies in his own other slots count as well. */
+    const FurnitureResult third = furniture_buy(storage, "bob", "🍕", 2, 1000, 10);
+    CHECK(third.copies == 2);
+    CHECK(third.charged == 4000);
+    CHECK(conquister_user(storage, "bob")->score == 100000 - 2000 - 4000);
+
+    /* Overwritten, a copy stops counting and the price comes down. */
+    REQUIRE(furniture_buy(storage, "alice", "🐟", 1, 1000, 10).status == FurnitureStatus::bought);
+    CHECK(furniture_buy(storage, "carol", "🍕", 0, 1000, 10).charged == 4000);
+
+    /* A heart is a heart, drawn in colour or not. */
+    REQUIRE(furniture_buy(storage, "alice", "❤", 2, 1000, 10).status == FurnitureStatus::bought);
+    const FurnitureResult heart = furniture_buy(storage, "carol", "❤️", 2, 1000, 10);
+    CHECK(heart.copies == 1);
+    CHECK(heart.charged == 2000);
+
+    /* So many copies that the price would wrap around stops at the largest number instead. */
+    storage.transaction([](StorageSession &session) {
+        std::string lots;
+        for (int copy = 0; copy < 70; ++copy) {
+            lots += "🐝";
+        }
+        session.state().furniture["dave"] = lots;
+        return 0;
+    });
+    const FurnitureResult dear = furniture_buy(storage, "alice", "🐝", 3, 1000, 10);
+    CHECK(dear.status == FurnitureStatus::insufficient_score);
+    CHECK(dear.charged == std::numeric_limits<std::int64_t>::max());
+}
+
+TEST_CASE("an emoji is carried to another player, or burnt at the place") {
+    const TestPaths paths{"emoji-gift-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":10,"bob":10},"quotes_added":{},)"
+             << R"("furniture":{"alice":"🍕🎈"}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    const auto hung = [&storage](const std::string &player) {
+        const Authors all = furniture_all(storage);
+        const auto found = all.find(player);
+        return found == all.end() ? std::string{} : found->second;
+    };
+
+    /* Only an emoji he has, only to somebody else. */
+    CHECK(raid_start(storage, 0, "alice", "bob", 0, quick_rides(), RaidTargetKind::any, 0, "🐟").status ==
+          RaidStatus::no_such_emoji);
+    CHECK(raid_start(storage, 0, "alice", "alice", 0, quick_rides(), RaidTargetKind::any, 0, "🍕").status ==
+          RaidStatus::not_to_yourself);
+
+    /* It leaves her name as she sets off, a hole where it hung. */
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 0, quick_rides(), RaidTargetKind::any, 0, "🍕").status ==
+            RaidStatus::started);
+    CHECK(hung("alice") == "[]🎈");
+    const std::vector<RaidEvent> arrival = raid_due(storage, 5, quick_rides());
+    REQUIRE(arrival.size() == 1);
+    CHECK(arrival[0].kind == RaidEvent::Kind::delivered);
+    CHECK(arrival[0].gift_emoji == "🍕");
+    CHECK_FALSE(arrival[0].no_room);
+    CHECK(arrival[0].target_emoji == "🍕");
+    CHECK(hung("bob") == "🍕");
+    CHECK(conquister_user(storage, "bob")->score == 10);
+    const std::vector<RaidEvent> home = raid_due(storage, 10, quick_rides());
+    REQUIRE(home.size() == 1);
+    CHECK(home[0].gift_emoji.empty());
+
+    /* A full name is refused at the start... */
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["bob"] = "🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕";
+        return 0;
+    });
+    CHECK(raid_start(storage, 0, "alice", "bob", 11, quick_rides(), RaidTargetKind::any, 0, "🎈").status ==
+          RaidStatus::no_room);
+    CHECK(hung("alice") == "[]🎈");
+
+    /* ...and one that fills up on the way sends it back home with her. */
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["bob"] = "🍕";
+        return 0;
+    });
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 20, quick_rides(), RaidTargetKind::any, 0, "🎈").status ==
+            RaidStatus::started);
+    CHECK(hung("alice").empty());
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["bob"] = "🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕";
+        return 0;
+    });
+    const std::vector<RaidEvent> refused = raid_due(storage, 25, quick_rides());
+    REQUIRE(refused.size() == 1);
+    CHECK(refused[0].no_room);
+    const std::vector<RaidEvent> back = raid_due(storage, 30, quick_rides());
+    REQUIRE(back.size() == 1);
+    CHECK(back[0].gift_emoji == "🎈");
+    CHECK(hung("alice") == "🎈");
+
+    /* While it travels, one empty slot stays kept for it: she can buy into any other or overwrite,
+       but neither she nor a gift can take the last one. Turning around, it finds its way back home. */
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["bob"] = "🍕";
+        session.state().furniture["carol"] = "🧀";
+        return 0;
+    });
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 40, quick_rides(), RaidTargetKind::any, 0, "🎈").status ==
+            RaidStatus::started);
+    /* Plenty of room: buying goes on as usual. */
+    REQUIRE(furniture_buy(storage, "alice", "🐝", 0, 0, 10).status == FurnitureStatus::bought);
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["alice"] = "🐝🐝🐝🐝🐝🐝🐝🐝🐝";
+        return 0;
+    });
+    const FurnitureResult waiting = furniture_buy(storage, "alice", "🚀", 0, 0, 10);
+    CHECK(waiting.status == FurnitureStatus::in_transit);
+    CHECK(waiting.travelling == "🎈");
+    CHECK(furniture_buy(storage, "alice", "🚀", 10, 0, 10).status == FurnitureStatus::in_transit);
+    CHECK(furniture_buy(storage, "alice", "🚀", 3, 0, 10).status == FurnitureStatus::bought);
+    CHECK(raid_start(storage, 0, "carol", "alice", 41, quick_rides(), RaidTargetKind::any, 0, "🧀").status ==
+          RaidStatus::no_room);
+    const RaidResult turned = raid_start(storage, 0, "alice", "alice", 42, quick_rides());
+    REQUIRE(turned.status == RaidStatus::coming_home);
+    const std::vector<RaidEvent> returned = raid_due(storage, 42 + turned.seconds, quick_rides());
+    REQUIRE(returned.size() == 1);
+    CHECK(returned[0].gift_emoji == "🎈");
+    CHECK(hung("alice") == "🐝🐝🚀🐝🐝🐝🐝🐝🐝🎈");
+    CHECK(furniture_buy(storage, "alice", "🚀", 0, 0, 10).status == FurnitureStatus::full);
+
+    /* Brought to the place, an emoji is gone: the first copy, leaving a hole. */
+    CHECK(furniture_burn(storage, "alice", "🐝") == std::optional<std::string>{"[]🐝🚀🐝🐝🐝🐝🐝🐝🎈"});
+    CHECK_FALSE(furniture_burn(storage, "alice", "🎺"));
+    CHECK(furniture_burn(storage, "bob", "🍕") == std::optional<std::string>{""});
+    CHECK(hung("bob").empty());
 }
 
 TEST_CASE("turning back mid journey only costs the road already walked") {

@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace norelecbot::text {
 
@@ -22,6 +23,8 @@ namespace norelecbot::text {
    zero width joiners is one, a thumb with a skin tone is one, a flag is one. Nothing at all if
    there is something in there that is not an emoji. */
 [[nodiscard]] std::optional<std::size_t> emoji_count(std::string_view text);
+/* The same emoji, one by one, or nothing if there is something in there that is not an emoji. */
+[[nodiscard]] std::optional<std::vector<std::string>> emoji_split(std::string_view text);
 
 }
 

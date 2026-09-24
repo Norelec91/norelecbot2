@@ -603,7 +603,8 @@ TEST_CASE("investment replies explain the zodiac sign without a percentage multi
         CHECK_FALSE(message.contains("oroscopo 125%"));
     };
     check_reply(1, "Alice", "+69", "favorevole");
-    check_reply(2, "Bob", "+0", "neutro");
+    /* Nothing gained or lost carries no sign. */
+    check_reply(2, "Bob", "0", "neutro");
     check_reply(3, "Carol", "-69", "sfavorevole");
 }
 
@@ -678,6 +679,68 @@ TEST_CASE("the raids tell what happened") {
     CHECK(raid_event_reply(home) == "🎁 bob sei tornato in bob con le tue 700 palle ancora in tasca.");
 }
 
+TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
+    const TestPaths paths{"emoji-command-test"};
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    config.travel_divisor = 1000000;
+    Storage storage{paths.conquister, paths.quotes};
+    const CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
+    const CommandContext bob{.storage = storage, .config = config, .user_id = 2, .username = "Bob"};
+    REQUIRE(command_dispatch(alice, "/leaderboard"));
+    REQUIRE(command_dispatch(bob, "/leaderboard"));
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["tg:1"] = "🍕🎈🐟";
+        return 0;
+    });
+
+    CHECK(command_is_for_bot("We @Bob 🍕"));
+    CHECK(command_is_for_bot("We @TheConquister37 🍕"));
+    CHECK_FALSE(command_is_for_bot("We @Bob 🍕🎈"));
+    CHECK(command_dispatch(alice, "We @Bob 🚀") == "🎁 Alice non hai 🚀 appesa al nome.");
+    CHECK(command_dispatch(alice, "We @Alice 🍕") == "🎁 Alice le emoji si portano agli altri giocatori.");
+    CHECK(command_dispatch(alice, "We @Nessuno 🍕") == "🚀 Alice non conosco nessun giocatore di nome @Nessuno.");
+
+    CHECK(command_dispatch(alice, "We @TheConquister37 🐟") ==
+          "🔥 Alice hai riportato 🐟 in @TheConquister37: è uscita dal gioco.");
+    CHECK(command_dispatch(alice, "We @TheConquister37 🐟") == "🔥 Alice non hai 🐟 appesa al nome.");
+
+    const std::string leaving = command_dispatch(alice, "We @Bob 🍕").value_or("");
+    CHECK(leaving.starts_with("🎁 Alice parti per Bob con 🍕 da consegnare: arrivi tra "));
+    CHECK(furniture_all(storage).at("tg:1") == "[]🎈");
+    /* The only empty slot left is kept for the pizza on the road; overwriting is still fine. */
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["tg:1"] = "[]🎈🎈🎈🎈🎈🎈🎈🎈🎈";
+        session.state().scores["tg:1"] = 100000;
+        return 0;
+    });
+    CHECK(command_dispatch(alice, "/buyfurniture 🚀") ==
+          "Alice l'ultimo posto libero è tenuto per 🍕, che è in viaggio: sostituisci un'emoji con "
+          "/buyfurniture <emoji> <posizione> o aspetta che lo scambio sia concluso. Nessun addebito.");
+    CHECK(command_dispatch(alice, "/buyfurniture 🚀 2")->ends_with(": 🚀 nel posto 2, al posto di 🎈."));
+
+    RaidEvent given;
+    given.kind = RaidEvent::Kind::delivered;
+    given.raider = "Alice";
+    given.target = "Bob";
+    given.target_on_telegram = true;
+    given.gift_emoji = "🍕";
+    given.target_emoji = "🍕";
+    given.seconds = 5;
+    CHECK(raid_event_reply(given) == "🎁 Alice hai consegnato 🍕 a @Bob (🍕)! Torni in Alice tra 5 secondi.");
+    given.no_room = true;
+    given.target_emoji = "🐝🐝";
+    CHECK(raid_event_reply(given) ==
+          "🎁 Alice @Bob (🐝🐝) non ha più posto per 🍕: te la riporti a casa. Torni in Alice tra 5 secondi.");
+
+    RaidEvent home;
+    home.kind = RaidEvent::Kind::returned;
+    home.raider = "Alice";
+    home.gift_emoji = "🍕";
+    CHECK(raid_event_reply(home) == "🎁 Alice sei tornato in Alice con 🍕 ancora in tasca.");
+}
+
 TEST_CASE("the quotes are open to the admins as well as to the owner") {
     const TestPaths paths{"admin-command-test"};
     AppConfig config;
@@ -705,6 +768,40 @@ TEST_CASE("the quotes are open to the admins as well as to the owner") {
     context.owner = true;
     CHECK(reply("/quotes") == "Nessuna citazione in collezione.");
     CHECK(reply("/debug 0").contains("Debug spento"));
+}
+
+TEST_CASE("We with a number for yourself from the place takes you home and invests") {
+    const TestPaths paths{"invest-from-place-command-test"};
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{paths.conquister, paths.quotes};
+    const CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
+    REQUIRE(command_dispatch(alice, "We @TheConquister37"));
+    storage.transaction([](StorageSession &session) {
+        session.state().scores["tg:1"] = 2000;
+        return 0;
+    });
+    REQUIRE(conquister_user(storage, "Alice", RaidTargetKind::telegram)->in_conquister);
+
+    /* A number that makes no sense does not even take her out of the place. */
+    CHECK(command_dispatch(alice, "We @Alice 0")->contains("maggiore di zero"));
+    CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->in_conquister);
+
+    const std::string reply = command_dispatch(alice, "We @Alice 1000").value_or("");
+    CHECK(reply.starts_with("🪐 Alice sei tornato da @TheConquister37 in @Alice con "));
+    CHECK(reply.contains("\n🏦 Alice hai investito 1000 palle. "));
+    const auto after = conquister_user(storage, "Alice", RaidTargetKind::telegram);
+    REQUIRE(after);
+    CHECK_FALSE(after->in_conquister);
+    CHECK(after->score >= 1000);
+
+    /* Too many palle: she still goes home, and is told what she has. */
+    REQUIRE(command_dispatch(alice, "We @TheConquister37"));
+    const std::string broke = command_dispatch(alice, "We @Alice 999999").value_or("");
+    CHECK(broke.starts_with("🪐 Alice sei tornato da @TheConquister37"));
+    CHECK(broke.contains("\n🏦 Alice hai solo "));
+    CHECK_FALSE(conquister_user(storage, "Alice", RaidTargetKind::telegram)->in_conquister);
 }
 
 TEST_CASE("We with a number for the place destroys the palle") {
@@ -800,6 +897,7 @@ TEST_CASE("a bought emoji follows the name everywhere") {
     AppConfig config;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
+    config.furniture_cost = 1000;
     Storage storage{config.conquister_path, config.quotes_path};
 
     const CommandContext context{
@@ -811,29 +909,39 @@ TEST_CASE("a bought emoji follows the name everywhere") {
         .owner = false,
     };
 
-    /* Bought, and the reply already shows the name dressed. */
-    const std::optional<std::string> bought = command_dispatch(context, "/buyfurniture 🎈🍕");
-    REQUIRE(bought);
-    CHECK(bought->contains("alice (🎈🍕)"));
-    CHECK(bought->contains("2 su 10"));
+    const auto reply = [&](std::string_view text) { return command_dispatch(context, text).value_or(""); };
 
-    /* Anything that is not an emoji is turned away without a charge. */
+    /* No slot named: the first one, and the reply already shows the name dressed. */
+    CHECK(reply("/buyfurniture 🎈").starts_with("🛋️ alice (🎈) hai speso "));
+    /* The emoji first, then the slot: the one in between stays a hole. */
+    const std::string third = reply("/buyfurniture 🍕 3");
+    CHECK(third.contains("alice (🎈[]🍕) hai speso "));
+    CHECK(third.ends_with(": 🍕 nel posto 3."));
+    CHECK(reply("/buyfurniture 🐟 3").ends_with(": 🐟 nel posto 3, al posto di 🍕."));
+
+    /* Anything else is turned away without a charge. */
     const std::int64_t before = conquister_user(storage, "alice")->score;
-    const std::optional<std::string> refused = command_dispatch(context, "/buyfurniture ciao");
-    REQUIRE(refused);
-    CHECK(refused->contains("solo emoji"));
+    CHECK(reply("/buyfurniture ciao").contains("solo emoji"));
+    CHECK(reply("/buyfurniture 🍕🎈 3") == "alice una emoji per volta: nessun addebito.");
+    CHECK(reply("/buyfurniture 🍕 11") == "alice i posti vanno da 1 a 10: nessun addebito.");
+    CHECK(reply("/buyfurniture 🍕 0") == "alice i posti vanno da 1 a 10: nessun addebito.");
+    CHECK(reply("/buyfurniture 🐟 3") == "alice nel posto 3 c'è già 🐟: nessun addebito.");
+    CHECK(reply("/buyfurniture").starts_with("Uso: /buyfurniture <emoji> [posizione 1-10]."));
     CHECK(conquister_user(storage, "alice")->score == before);
 
     /* The leaderboard shows the dressed name, and whoever bought nothing stays bare. */
     const std::optional<std::string> board = command_dispatch(context, "/leaderboard");
     REQUIRE(board);
-    CHECK(board->contains("alice (🎈🍕)"));
+    CHECK(board->contains("alice (🎈[]🐟)"));
     CHECK(board->contains("bob —"));
 
     /* And taking the seat, too. */
     const std::optional<std::string> claimed = command_dispatch(context, conquister_trigger);
     REQUIRE(claimed);
-    CHECK(claimed->contains("alice (🎈🍕) sei in"));
+    CHECK(claimed->contains("alice (🎈[]🐟) sei in"));
+
+    /* A keycap is an emoji like any other, and fills the hole. */
+    CHECK(reply("/buyfurniture 3️⃣").contains("alice (🎈3️⃣🐟)"));
 }
 
 TEST_CASE("the owner turns the prices off for himself, not for everyone") {

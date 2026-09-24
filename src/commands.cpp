@@ -67,6 +67,28 @@ std::optional<ParsedInvestment> investment_target(std::string_view message) {
     return std::nullopt;
 }
 
+struct ParsedEmoji {
+    std::string_view target;
+    std::string_view emoji;
+};
+
+/* "We name emoji": one emoji of his own, carried to a player or back to @TheConquister37. */
+std::optional<ParsedEmoji> emoji_target(std::string_view message) {
+    if (!message.starts_with(raid_trigger)) {
+        return std::nullopt;
+    }
+    const std::string_view rest = message.substr(raid_trigger.size());
+    const std::size_t separator = rest.find_first_of(" \t\r\n");
+    if (separator == std::string_view::npos || !valid_raid_target(rest.substr(0, separator))) {
+        return std::nullopt;
+    }
+    const std::string_view emoji = text::trim(rest.substr(separator));
+    if (text::parse_int64(emoji) || text::emoji_count(emoji) != std::optional<std::size_t>{1}) {
+        return std::nullopt;
+    }
+    return ParsedEmoji{rest.substr(0, separator), emoji};
+}
+
 ParsedCommand parse_command(std::string_view message) {
     const std::size_t length = std::min(message.find_first_of(" \t\r\n"), message.size());
     std::string name{message.substr(0, length)};
@@ -194,10 +216,12 @@ RaidRules raid_rules(const CommandContext &context) {
         .loot_share = context.config.raid_share,
         .travel_divisor = context.config.travel_divisor,
         .signs = context.config.zodiac_signs,
+        .furniture_limit = static_cast<std::size_t>(context.config.furniture_limit),
     };
 }
 
-std::string handle_raid(const CommandContext &context, std::string_view target, std::int64_t gift = 0) {
+std::string handle_raid(const CommandContext &context, std::string_view target, std::int64_t gift = 0,
+                        std::string_view gift_emoji = {}) {
     if (context.username.empty()) {
         return missing_username_reply();
     }
@@ -215,7 +239,8 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
         seconds_now(),
         raid_rules(context),
         telegram_target ? RaidTargetKind::telegram : RaidTargetKind::irc,
-        gift
+        gift,
+        gift_emoji
     );
     switch (result.status) {
     case RaidStatus::already_travelling:
@@ -246,8 +271,24 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
         return std::format("🎁 {} hai solo {} palle disponibili.", username, result.score);
     case RaidStatus::invalid_amount:
         return std::format("🎁 {} indica un numero di palle maggiore di zero.", username);
+    case RaidStatus::no_such_emoji:
+        return std::format("🎁 {} non hai {} appesa al nome.", username, gift_emoji);
+    case RaidStatus::no_room:
+        return std::format("🎁 {} {} non ha posti liberi per {}.", username, target, gift_emoji);
+    case RaidStatus::not_to_yourself:
+        return std::format("🎁 {} le emoji si portano agli altri giocatori.", username);
     case RaidStatus::started:
         break;
+    }
+    if (!gift_emoji.empty()) {
+        return std::format(
+            "🎁 {} parti per {} con {} da consegnare: arrivi tra {}. {} resta scoperto.",
+            username,
+            result.target,
+            gift_emoji,
+            format_wait(result.seconds),
+            username
+        );
     }
     if (gift > 0) {
         return std::format(
@@ -297,6 +338,17 @@ std::string handle_burn(const CommandContext &context, std::int64_t amount) {
     );
 }
 
+/* "We @TheConquister37 emoji": the first copy on his name goes back to the place, out of the game. */
+std::string handle_emoji_burn(const CommandContext &context, std::string_view emoji) {
+    if (context.username.empty()) {
+        return missing_username_reply();
+    }
+    if (!furniture_burn(context.storage, std::string{context.player_key}, std::string{emoji})) {
+        return std::format("🔥 {} non hai {} appesa al nome.", context.username, emoji);
+    }
+    return std::format("🔥 {} hai riportato {} in {}: è uscita dal gioco.", context.username, emoji, conquister_place);
+}
+
 /* "We nome numero" toward somebody else: the palle travel with him and change hands when he arrives. */
 std::string handle_gift(const CommandContext &context, const ParsedInvestment &request) {
     if (context.username.empty()) {
@@ -308,6 +360,11 @@ std::string handle_gift(const CommandContext &context, const ParsedInvestment &r
     return handle_raid(context, request.target, request.amount);
 }
 
+/* A change with its sign, except nothing, which has none. */
+std::string signed_amount(std::int64_t value) {
+    return value == 0 ? std::string{"0"} : std::format("{:+}", value);
+}
+
 /* Nothing when the named player is somebody else: those palle are a delivery, not a deposit. */
 std::optional<std::string> handle_investment(const CommandContext &context, const ParsedInvestment &request) {
     if (context.username.empty()) {
@@ -315,18 +372,32 @@ std::optional<std::string> handle_investment(const CommandContext &context, cons
     }
     const bool telegram = request.target.starts_with('@');
     const std::string_view name = telegram ? request.target.substr(1) : request.target;
+    const std::int64_t now = seconds_now();
     const InvestmentResult result = investment_deposit(context.storage, std::string{context.player_key}, name,
-        telegram ? RaidTargetKind::telegram : RaidTargetKind::irc, request.amount, seconds_now(),
+        telegram ? RaidTargetKind::telegram : RaidTargetKind::irc, request.amount, now,
         context.config.zodiac_signs);
+    /* From @TheConquister37 the deposit is made on the way home: first what the hold was worth. */
+    std::string departure;
+    if (result.left_place) {
+        departure = std::format(
+            "🪐 {} sei tornato da {} in {}{} con {} palle{}.\n",
+            context.username,
+            conquister_place,
+            context.user_id != 0 ? "@" : "",
+            context.username,
+            result.earned,
+            hold_note(context, std::string{context.username}, result.boost_multiplier, result.hold_percent, now)
+        );
+    }
     switch (result.status) {
     case InvestmentStatus::deposited: {
         const std::string_view horoscope = result.zodiac_percent == 125 ? "favorevole" :
             result.zodiac_percent == 75 ? "sfavorevole" : "neutro";
-        return std::format("🏦 {} hai investito {} palle. "
-                           "Rendimento di oggi: {:+}% (oroscopo {}). "
-                           "Saldo disponibile: {} palle.",
-                           context.username, result.amount, result.daily_rate,
-                           horoscope, result.score);
+        return departure + std::format("🏦 {} hai investito {} palle. "
+                                       "Rendimento di oggi: {}% (oroscopo {}). "
+                                       "Saldo disponibile: {} palle.",
+                                       context.username, result.amount, signed_amount(result.daily_rate),
+                                       horoscope, result.score);
     }
     case InvestmentStatus::not_self:
         return std::nullopt;
@@ -335,7 +406,7 @@ std::optional<std::string> handle_investment(const CommandContext &context, cons
     case InvestmentStatus::invalid_amount:
         return std::format("🏦 {} indica un numero di palle maggiore di zero.", context.username);
     case InvestmentStatus::insufficient_score:
-        return std::format("🏦 {} hai solo {} palle disponibili.", context.username, result.score);
+        return departure + std::format("🏦 {} hai solo {} palle disponibili.", context.username, result.score);
     default:
         return std::string{internal_error_reply};
     }
@@ -494,6 +565,7 @@ std::string handle_add_quote(const CommandContext &context, std::string_view arg
     );
 }
 
+/* "/buyfurniture emoji [position]": one emoji into one slot, the first empty one when no slot is named. */
 std::string handle_buy_furniture(const CommandContext &context, std::string_view argument) {
     if (context.username.empty()) {
         return missing_username_reply();
@@ -501,39 +573,79 @@ std::string handle_buy_furniture(const CommandContext &context, std::string_view
     const std::string username{context.username};
     const int cost = price(context, context.config.furniture_cost);
     const auto limit = static_cast<std::size_t>(context.config.furniture_limit);
-    const std::string emoji{text::trim(argument)};
-    if (emoji.empty()) {
-        return std::format("Uso: /buyfurniture <emoji>. Costa {} palle.", cost);
+    std::string_view wanted = text::trim(argument);
+    std::int64_t position = 0;
+    if (const std::size_t space = wanted.find_last_of(" \t"); space != std::string_view::npos) {
+        if (const std::optional<std::int64_t> slot = text::parse_int64(wanted.substr(space + 1))) {
+            if (*slot < 1 || static_cast<std::uint64_t>(*slot) > limit) {
+                return std::format("{} i posti vanno da 1 a {}: nessun addebito.", username, limit);
+            }
+            position = *slot;
+            wanted = text::trim(wanted.substr(0, space));
+        }
     }
-    const std::optional<std::size_t> howmany = text::emoji_count(emoji);
+    if (wanted.empty()) {
+        return std::format(
+            "Uso: /buyfurniture <emoji> [posizione 1-{}]. Costa {} palle, il doppio per ogni copia di "
+            "quell'emoji già appesa.",
+            limit,
+            cost
+        );
+    }
+    const std::optional<std::size_t> howmany = text::emoji_count(wanted);
     if (!howmany) {
         return std::format("{} al nome si attaccano solo emoji: nessun addebito.", username);
     }
-    const FurnitureResult result = furniture_buy(context.storage, std::string{context.player_key}, emoji, cost, limit);
-    if (result.status == FurnitureStatus::too_many) {
+    if (*howmany != 1) {
+        return std::format("{} una emoji per volta: nessun addebito.", username);
+    }
+    const std::string emoji{wanted};
+    const FurnitureResult result =
+        furniture_buy(context.storage, std::string{context.player_key}, emoji, position, cost, limit);
+    switch (result.status) {
+    case FurnitureStatus::full:
         return std::format(
-            "{} ne hai già {} su {}: non ci stanno anche queste, nessun addebito.",
+            "{} hai già tutti i {} posti pieni: scegli quale sostituire con /buyfurniture <emoji> <posizione>. "
+            "Nessun addebito.",
             username,
-            result.howmany,
             limit
         );
+    case FurnitureStatus::invalid_position:
+        return std::format("{} i posti vanno da 1 a {}: nessun addebito.", username, limit);
+    case FurnitureStatus::in_transit:
+        return std::format("{} l'ultimo posto libero è tenuto per {}, che è in viaggio: sostituisci un'emoji "
+                           "con /buyfurniture <emoji> <posizione> o aspetta che lo scambio sia concluso. "
+                           "Nessun addebito.", username, result.travelling);
+    case FurnitureStatus::already_there:
+        return std::format("{} nel posto {} c'è già {}: nessun addebito.", username, result.position, result.replaced);
+    case FurnitureStatus::insufficient_score:
+        if (result.copies > 0) {
+            return std::format("{} ti servono {} palle per {} (ce ne sono già {} in giro, ne hai {}).",
+                               username, result.charged, emoji, result.copies, result.available_score);
+        }
+        return std::format("{} ti servono {} palle per {} (ne hai {}).",
+                           username, result.charged, emoji, result.available_score);
+    case FurnitureStatus::bought:
+        break;
     }
-    if (result.status == FurnitureStatus::insufficient_score) {
-        return std::format(
-            "{} ti servono {} palle per un soprammobile (ne hai {}).",
-            username,
-            cost,
-            result.available_score
-        );
-    }
-    return std::format(
-        "🛋️ {} ({}) hai speso {} palle: {} su {} appesi al nome.",
+    std::string reply = std::format(
+        "🛋️ {} ({}) hai speso {} palle: {} nel posto {}",
         username,
         result.shown,
-        cost,
-        result.howmany,
-        limit
+        result.charged,
+        emoji,
+        result.position
     );
+    if (!result.replaced.empty()) {
+        reply += std::format(", al posto di {}", result.replaced);
+    }
+    if (result.copies > 0) {
+        reply += std::format(" (ce n'{} già {} in giro, prezzo x{})",
+                             result.copies == 1 ? "era" : "erano",
+                             result.copies,
+                             std::int64_t{1} << std::min<std::size_t>(result.copies, 62));
+    }
+    return reply + ".";
 }
 
 std::string handle_buy_balloon(const CommandContext &, std::string_view) {
@@ -712,6 +824,7 @@ const CommandDefinition *find_command(std::string_view name) {
 bool command_is_for_bot(std::string_view text) {
     const std::string_view message = text::trim(text);
     return message == conquister_trigger || !raid_target(message).empty() || investment_target(message).has_value() ||
+           emoji_target(message).has_value() ||
            (!message.empty() && find_command(parse_command(message).name) != nullptr);
 }
 
@@ -725,6 +838,9 @@ std::string raid_event_reply(const RaidEvent &event) {
     const std::string raider = with_emoji(event.raider, event.raider_emoji);
     const std::string target = with_emoji(event.target, event.target_emoji);
     if (event.kind == RaidEvent::Kind::returned) {
+        if (!event.gift_emoji.empty()) {
+            return std::format("🎁 {} sei tornato in {} con {} ancora in tasca.", raider, home, event.gift_emoji);
+        }
         if (event.gift > 0) {
             return std::format("🎁 {} sei tornato in {} con le tue {} palle ancora in tasca.",
                                raider, home, event.gift);
@@ -733,6 +849,14 @@ std::string raid_event_reply(const RaidEvent &event) {
             return std::format("🪐 {} sei tornato in {} con {} palle.", raider, home, event.loot);
         }
         return std::format("🪐 {} sei tornato in {} a mani vuote.", raider, home);
+    }
+    if (event.kind == RaidEvent::Kind::delivered && !event.gift_emoji.empty()) {
+        if (event.no_room) {
+            return std::format("🎁 {} {}{} non ha più posto per {}: te la riporti a casa. Torni in {} tra {}.",
+                               raider, mention, target, event.gift_emoji, home, format_wait(event.seconds));
+        }
+        return std::format("🎁 {} hai consegnato {} a {}{}! Torni in {} tra {}.",
+                           raider, event.gift_emoji, mention, target, home, format_wait(event.seconds));
     }
     if (event.kind == RaidEvent::Kind::delivered) {
         return std::format(
@@ -799,6 +923,16 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
             }
             return handle_gift(bound, *investment);
         }
+        if (const auto carried = emoji_target(message)) {
+            if (!context.claims_allowed) {
+                return std::nullopt;
+            }
+            remember_sender();
+            if (names_the_place(carried->target)) {
+                return handle_emoji_burn(bound, carried->emoji);
+            }
+            return handle_raid(bound, carried->target, 0, carried->emoji);
+        }
         if (const std::string_view target = raid_target(message); !target.empty()) {
             if (!context.claims_allowed) {
                 return std::nullopt;
@@ -811,8 +945,9 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
                     telegram ? RaidTargetKind::telegram : RaidTargetKind::irc, seconds_now(),
                     context.config.zodiac_signs);
                 if (investment.status == InvestmentStatus::withdrawn) {
-                    return std::format("🏦 {} hai ritirato {} palle (rendimento: {:+} palle). Saldo: {} palle.",
-                                       context.username, investment.amount, investment.interest, investment.score);
+                    return std::format("🏦 {} hai ritirato {} palle (rendimento: {} palle). Saldo: {} palle.",
+                                       context.username, investment.amount, signed_amount(investment.interest),
+                                       investment.score);
                 }
                 if (investment.status == InvestmentStatus::balance_limit) {
                     return std::format("🏦 {} il saldo è troppo alto per ritirare l'investimento: contatta il proprietario del bot.",

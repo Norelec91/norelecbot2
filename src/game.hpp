@@ -42,14 +42,21 @@ struct ClaimResult {
 
 enum class BoostStatus { bought, already_owned, holding_place, insufficient_score };
 
-enum class FurnitureStatus { bought, too_many, insufficient_score };
+enum class FurnitureStatus { bought, full, invalid_position, already_there, insufficient_score, in_transit };
 
 struct FurnitureResult {
     FurnitureStatus status = FurnitureStatus::bought;
     std::int64_t available_score = 0;
-    /* How the name reads now, and how many pieces hang from it. */
+    /* How the name reads now: the emoji in their slots, "[]" for an empty one in between. */
     std::string shown;
-    std::size_t howmany = 0;
+    /* The slot, from 1, and what was hanging there before, empty if nothing was. */
+    std::size_t position = 0;
+    std::string replaced;
+    /* How many of that emoji already hung from anybody's name, and what it cost for that. */
+    std::size_t copies = 0;
+    std::int64_t charged = 0;
+    /* in_transit: the emoji of his that is on the road; the last empty slot is kept for it. */
+    std::string travelling;
 };
 
 struct BoostResult {
@@ -68,7 +75,12 @@ enum class RaidStatus {
     home_already,
     /* Only when palle are taken along: not enough of them, or a number that makes no sense. */
     insufficient_score,
-    invalid_amount
+    invalid_amount,
+    /* Only when an emoji is taken along: he has none like it, the target has no empty slot, or the
+       target is himself. */
+    no_such_emoji,
+    no_room,
+    not_to_yourself
 };
 
 enum class RaidTargetKind { any, telegram, irc };
@@ -92,6 +104,12 @@ struct InvestmentResult {
     std::int64_t score = 0;
     int zodiac_percent = 100;
     int daily_rate = 0;
+    /* A deposit made from @TheConquister37 first takes him home: what the hold he gave up was worth,
+       and what made it worth that. */
+    bool left_place = false;
+    std::int64_t earned = 0;
+    std::int64_t boost_multiplier = 0;
+    int hold_percent = 100;
 };
 
 struct RaidRules {
@@ -102,6 +120,8 @@ struct RaidRules {
     /* Seconds of travel per unit of distance, and the share of the loot: a quarter by default. */
     int travel_divisor = 1000;
     zodiac::Overrides signs;
+    /* How many emoji a name can carry: an emoji brought to a full name has nowhere to go. */
+    std::size_t furniture_limit = 10;
 };
 
 struct RaidResult {
@@ -127,6 +147,10 @@ struct RaidEvent {
     std::int64_t loot = 0;
     /* The palle carried from home: handed to the target on delivery, brought back on a turnaround. */
     std::int64_t gift = 0;
+    /* The emoji carried from home: hung on the target on delivery, or brought back. no_room: the
+       target's name was full on arrival. */
+    std::string gift_emoji;
+    bool no_room = false;
     /* The furniture hung beside the two names, to be shown along with them. */
     std::string raider_emoji;
     std::string target_emoji;
@@ -228,12 +252,19 @@ struct Wealth {
 void debug_set(Storage &storage, const std::string &username, bool wanted);
 [[nodiscard]] bool debug_on(Storage &storage, const std::string &username);
 
-/* Hangs the bought emoji on the name, if they fit and the palle are enough. */
+/* A name's furniture slot by slot: an emoji, or an empty string where "[]" marks an empty slot. */
+[[nodiscard]] std::vector<std::string> furniture_slots(std::string_view stored);
+/* The slots back into what is saved and shown: "[]" for an empty one, none after the last emoji. */
+[[nodiscard]] std::string furniture_stored(std::vector<std::string> slots);
+
+/* Hangs one emoji in a slot, from 1, overwriting what was there; position 0 takes the first empty
+   one. The price is the base cost doubled for every copy of that emoji already hanging anywhere. */
 [[nodiscard]] FurnitureResult furniture_buy(
     Storage &storage,
     const std::string &username,
     const std::string &emoji,
-    int cost,
+    std::int64_t position,
+    std::int64_t cost,
     std::size_t limit
 );
 /* Everybody's emoji, for whoever only has names to write. */
@@ -241,6 +272,10 @@ void debug_set(Storage &storage, const std::string &username, bool wanted);
 
 /* Palle brought back to @TheConquister37 leave the game: nobody receives them. */
 [[nodiscard]] BurnResult palle_burn(Storage &storage, const std::string &player, std::int64_t amount);
+/* An emoji brought back to @TheConquister37 leaves the game too: the first slot that holds it is
+   emptied. Nothing when he has no emoji like it; otherwise how his name reads now. */
+[[nodiscard]] std::optional<std::string> furniture_burn(Storage &storage, const std::string &player,
+                                                        const std::string &emoji);
 
 /* Sends a player to rob another one, if he is at home and the target is somebody the bot knows.
    Naming himself sends him home instead: at once from @TheConquister37, at the end of the ride if he
@@ -254,10 +289,13 @@ void debug_set(Storage &storage, const std::string &username, bool wanted);
     const RaidRules &rules,
     RaidTargetKind target_kind = RaidTargetKind::any,
     /* Palle to hand over on arrival instead of robbing the target. */
-    std::int64_t gift = 0
+    std::int64_t gift = 0,
+    /* An emoji of his own to hang on the target on arrival instead of robbing him. */
+    std::string_view gift_emoji = {}
 );
 
-/* Funds leave the stealable score until withdrawn while the owner is home. */
+/* Funds leave the stealable score until withdrawn while the owner is home. A deposit from
+   @TheConquister37 takes him home first, paying what the hold earned. */
 [[nodiscard]] InvestmentResult investment_deposit(Storage &storage, const std::string &player,
     std::string_view target, RaidTargetKind platform, std::int64_t amount, std::int64_t now,
     zodiac::Overrides signs = {});

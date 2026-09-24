@@ -3,7 +3,9 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
 
+#include <string>
 #include <string_view>
+#include <vector>
 
 namespace text = norelecbot::text;
 
@@ -90,4 +92,17 @@ TEST_CASE("counting emoji, with everything that sticks to them") {
 
     /* Spaces around them are forgiven. */
     CHECK(emoji_count("  🎈🍕  ") == std::optional<std::size_t>{2});
+}
+
+TEST_CASE("emoji come apart one by one, keeping together what belongs together") {
+    using Pieces = std::vector<std::string>;
+    CHECK(text::emoji_split("🍕") == Pieces{"🍕"});
+    CHECK(text::emoji_split("👨‍👩‍👧🍕") == Pieces{"👨‍👩‍👧", "🍕"});
+    CHECK(text::emoji_split("👍🏽👍") == Pieces{"👍🏽", "👍"});
+    CHECK(text::emoji_split("🇮🇹🇫🇷") == Pieces{"🇮🇹", "🇫🇷"});
+    CHECK(text::emoji_split("1️⃣❤️") == Pieces{"1️⃣", "❤️"});
+    CHECK_FALSE(text::emoji_split(""));
+    CHECK_FALSE(text::emoji_split("ciao"));
+    CHECK_FALSE(text::emoji_split("🍕 🍕"));
+    CHECK_FALSE(text::emoji_split("[]"));
 }

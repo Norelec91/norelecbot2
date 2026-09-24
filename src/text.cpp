@@ -4,6 +4,7 @@
 #include <cctype>
 #include <charconv>
 #include <system_error>
+#include <vector>
 
 namespace norelecbot::text {
 namespace {
@@ -159,14 +160,16 @@ bool is_regional(char32_t code) { return code >= 0x1F1E6 && code <= 0x1F1FF; }
 
 }
 
-std::optional<std::size_t> emoji_count(std::string_view text) {
+std::optional<std::vector<std::string>> emoji_split(std::string_view text) {
     const std::string_view emoji = trim(text);
     if (emoji.empty()) {
         return std::nullopt;
     }
-    std::size_t howmany = 0;
+    /* Where each emoji begins: it runs up to where the next one does. */
+    std::vector<std::size_t> starts;
     bool joined = false;
     for (std::size_t at = 0; at < emoji.size();) {
+        const std::size_t begin = at;
         const Letter letter = letter_at(emoji, at);
         at += letter.width;
         /* A letter or a space is not an ornament. A digit is one only when it wears the keycap
@@ -189,7 +192,7 @@ std::optional<std::size_t> emoji_count(std::string_view text) {
                 return std::nullopt;
             }
             at += next.width;
-            ++howmany;
+            starts.push_back(begin);
             continue;
         }
         if (sticks_to_the_one_before(letter.code)) {
@@ -207,9 +210,25 @@ std::optional<std::size_t> emoji_count(std::string_view text) {
                 at += second.width;
             }
         }
-        ++howmany;
+        starts.push_back(begin);
     }
-    return howmany == 0 ? std::nullopt : std::optional<std::size_t>{howmany};
+    if (starts.empty()) {
+        return std::nullopt;
+    }
+    /* Whatever sticks in front of the first one belongs to it. */
+    starts.front() = 0;
+    std::vector<std::string> pieces;
+    pieces.reserve(starts.size());
+    for (std::size_t index = 0; index < starts.size(); ++index) {
+        const std::size_t end = index + 1 < starts.size() ? starts[index + 1] : emoji.size();
+        pieces.emplace_back(emoji.substr(starts[index], end - starts[index]));
+    }
+    return pieces;
+}
+
+std::optional<std::size_t> emoji_count(std::string_view text) {
+    const std::optional<std::vector<std::string>> pieces = emoji_split(text);
+    return pieces ? std::optional<std::size_t>{pieces->size()} : std::nullopt;
 }
 
 }

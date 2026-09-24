@@ -10,7 +10,11 @@ each keeps its own start time.
 Deposited palle leave the score immediately. They cannot be stolen or spent on
 items or quotes while invested. Interest continues to accrue even when the
 player later travels or occupies @TheConquister37, but deposits and withdrawals
-are possible only while the player is back home.
+are possible only while the player is back home. Written from @TheConquister37,
+the deposit line takes the holder home first, paying what the hold earned, and
+then makes the deposit there; a non-positive amount is refused before he leaves.
+If the palle are not enough even after the hold is paid, he is home anyway and
+nothing is deposited.
 
 `We @YourTelegramUsername` (or `We YourIrcNick` on IRC) withdraws the entire
 investment if the sender is home. Without an investment, the existing `We`

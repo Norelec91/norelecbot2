@@ -51,6 +51,23 @@ Naming himself during the ride turns him around, and the undelivered palle come
 back to him when he reaches home. Palle in transit are kept in the `gift` field
 of the `raids` section of `conquister.json`.
 
+## Emoji carried to another player
+
+`We @someone 🍕` (or `We ircnick 🍕` on IRC) makes the same journey with one
+emoji of the sender's own instead of palle. The first slot holding that emoji
+is emptied as he sets off, leaving a hole. He must have that emoji, the target
+must be somebody else, and the target's name must have an empty slot; all three
+are checked before he leaves. On arrival the emoji goes into the target's first
+empty slot. If the target's name filled up on the way, the emoji rides home
+with the traveller, as it does when he turns around, and goes back into his own
+first empty slot. It always finds one: while it travels, the last empty slot on
+the traveller's name is kept for it. He can still buy into any other empty slot
+or overwrite one that is taken, but not fill the last empty one, and a gift
+brought to him needs two empty slots on his name. Carrying
+an emoji does not change how many copies of it hang in the game, so it does not
+change its price. An emoji in transit is kept in the `gift_emoji` field of the
+`raids` section.
+
 ## Palle brought back to the place
 
 `We @TheConquister37 N` gives `N` palle back to the place they were earned in,
@@ -59,3 +76,7 @@ they are gone the moment the line is written. The amount must be positive and no
 larger than the available score, and the place is recognised with or without the
 mention. It is the only way palle leave the game, so it is also the only brake
 on the wealth the prices follow.
+
+`We @TheConquister37 🍕` does the same with an emoji: the first slot holding it
+is emptied on the spot and the emoji leaves the game, which lowers the price of
+the copies still hanging.
