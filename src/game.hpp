@@ -234,6 +234,40 @@ struct ClaimRules {
     std::int64_t now,
     const ClaimRules &rules = {}
 );
+/* Where a player is right now. */
+enum class ProfilePlace { home, conquister, road };
+
+/* Everything the group can know about one player. */
+struct Profile {
+    std::string name;
+    std::string furniture;
+    std::int64_t score = 0;
+    /* 0 when he has no palle on file yet, out of how many players are in the ranking. */
+    std::size_t rank = 0;
+    std::size_t players = 0;
+    std::int64_t quotes_added = 0;
+    ProfilePlace place = ProfilePlace::home;
+    /* conquister: since when, and what the hold is multiplied by. */
+    std::int64_t since = 0;
+    std::int64_t multiplier = 0;
+    /* road: the player he rides to or back from, whether he is already coming back, and when he is home. */
+    std::string heading;
+    bool returning = false;
+    std::int64_t home_in = 0;
+    /* How many attempts his balloon took, and the chance the next one pops it. */
+    std::int64_t balloon_survived = 0;
+    int balloon_chance = 0;
+    /* What he put in the bank, and what it is worth now. */
+    std::int64_t invested = 0;
+    std::int64_t investment_value = 0;
+};
+
+/* A player named as on that platform; nothing for a name nobody plays under. */
+[[nodiscard]] std::optional<Profile> player_profile(Storage &storage, std::string_view name, RaidTargetKind platform,
+                                                   std::int64_t now, zodiac::Overrides signs = {});
+/* The player behind an internal key, even one with nothing on file yet. */
+[[nodiscard]] Profile player_profile_of(Storage &storage, const std::string &key, std::int64_t now,
+                                        zodiac::Overrides signs = {});
 /* limit 0 returns every entry. */
 [[nodiscard]] Leaderboard conquister_leaderboard(Storage &storage, std::size_t limit);
 /* Case-insensitive lookup; rank is 0 when the user has no score yet. */

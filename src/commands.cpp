@@ -763,10 +763,69 @@ std::string handle_help(const CommandContext &context, std::string_view) {
     line(std::format("We {} 🍕", conquister_place), "bruci una 🍕");
     help += std::format("\nDa {} le righe col tuo nome ti riportano prima a casa. "
                         "In viaggio si può solo tornare indietro: We {}.\n", conquister_place, me);
-    help += std::format("\n{0}leaderboard — classifica\n{0}addquote <testo> — aggiungi una citazione\n"
+    help += std::format("\n{0}leaderboard — classifica\n{0}profile [nome] — il tuo profilo, o quello di un altro\n"
+                        "{0}addquote <testo> — aggiungi una citazione\n"
                         "{0}link <nome> — collega account Telegram e nick IRC",
                         slash);
     return help;
+}
+
+/* "/profile [name]": his own card, or the one of the player named as on that platform. */
+std::string handle_profile(const CommandContext &context, std::string_view argument) {
+    const std::string_view wanted = text::trim(argument);
+    const std::int64_t now = seconds_now();
+    std::optional<Profile> found;
+    if (wanted.empty()) {
+        if (context.username.empty()) {
+            return missing_username_reply();
+        }
+        found = player_profile_of(context.storage, std::string{context.player_key}, now, context.config.zodiac_signs);
+    } else {
+        const bool telegram = wanted.starts_with('@');
+        found = player_profile(context.storage, telegram ? wanted.substr(1) : wanted,
+                               telegram ? RaidTargetKind::telegram : RaidTargetKind::irc, now,
+                               context.config.zodiac_signs);
+        if (!found) {
+            return std::format("👤 non conosco nessun giocatore di nome {}.", wanted);
+        }
+    }
+    const Profile &profile = *found;
+    /* The bare name: whoever looks at a profile should not tag its owner. */
+    std::string card = profile.furniture.empty() ? std::format("👤 {}\n", profile.name)
+                                                 : std::format("👤 {} ({})\n", profile.name, profile.furniture);
+    card += profile.rank == 0 ? std::string{"💰 nessuna palla ancora\n"}
+                              : std::format("💰 {} palle, {}° su {} in classifica\n", profile.score, profile.rank,
+                                            profile.players);
+    const zodiac::Sign sign = zodiac::sign_of(profile.name, context.config.zodiac_signs);
+    const int percent = zodiac::percent_for(profile.name, now, context.config.zodiac_signs);
+    card += std::format("{} {}: oggi è giorno di {}, {}\n", sign.symbol, sign.name,
+                        zodiac::element_name(zodiac::element_of_day(now)),
+                        percent == 100 ? std::string{"x1"} : std::format("x{}.{:02}", percent / 100, percent % 100));
+    switch (profile.place) {
+    case ProfilePlace::home:
+        card += "🪐 a casa\n";
+        break;
+    case ProfilePlace::conquister:
+        card += std::format("🪐 in {} da {}{}\n", conquister_place, format_wait(std::max<std::int64_t>(now - profile.since, 0)),
+                            profile.multiplier > 1 ? std::format(" col ⚡ x{}", profile.multiplier) : std::string{});
+        break;
+    case ProfilePlace::road:
+        card += std::format("🚀 {} {}: a casa tra {}\n", profile.returning ? "sulla via del ritorno da" : "in viaggio verso",
+                            profile.heading, format_wait(profile.home_in));
+        break;
+    }
+    card += profile.balloon_survived == 0
+        ? std::string{"🎈 palloncino nuovo\n"}
+        : std::format("🎈 palloncino: ha retto {} tentativ{}, il prossimo lo buca al {}%\n", profile.balloon_survived,
+                      profile.balloon_survived == 1 ? "o" : "i", profile.balloon_chance);
+    if (profile.invested > 0) {
+        card += std::format("🏦 investite {} palle, ora ne valgono {}\n", profile.invested, profile.investment_value);
+    }
+    if (profile.quotes_added > 0) {
+        card += std::format("📜 {} citazion{}\n", profile.quotes_added, profile.quotes_added == 1 ? "e" : "i");
+    }
+    card.pop_back();
+    return card;
 }
 
 std::string handle_buy_balloon(const CommandContext &context, std::string_view) {
@@ -900,6 +959,7 @@ std::string handle_link(const CommandContext &context, std::string_view argument
 constexpr std::array commands{
     CommandDefinition{"/leaderboard", handle_leaderboard},
     CommandDefinition{"/help", handle_help},
+    CommandDefinition{"/profile", handle_profile},
     CommandDefinition{"/addquote", handle_add_quote},
     CommandDefinition{"/buyballoon", handle_buy_balloon},
     CommandDefinition{"/buyboost", handle_buy_boost},

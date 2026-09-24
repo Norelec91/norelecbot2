@@ -626,6 +626,65 @@ Leaderboard conquister_leaderboard(Storage &storage, std::size_t limit) {
     });
 }
 
+namespace {
+
+Profile profile_from(StorageSession &session, ConquisterState &state, const std::string &key, std::int64_t now,
+                     zodiac::Overrides signs) {
+    Profile profile;
+    profile.name = display_name(state, key);
+    profile.furniture = furniture_of(state, key);
+    profile.players = state.scores.size();
+    if (const Counters::value_type *score = find_ignore_case(state.scores, key); score != nullptr) {
+        profile.score = score->second;
+        profile.rank = static_cast<std::size_t>(std::ranges::count_if(state.scores,
+            [score](const Counters::value_type &other) { return ranks_before(other, *score); })) + 1;
+    }
+    profile.quotes_added = counter(state.quotes_added, key);
+    if (state.current && state.current->username == key) {
+        profile.place = ProfilePlace::conquister;
+        profile.since = state.current->since;
+        profile.multiplier = state.current->multiplier;
+    } else if (const Raid *trip = raid_of(state, key); trip != nullptr) {
+        profile.place = ProfilePlace::road;
+        profile.heading = display_name(state, trip->target);
+        profile.returning = trip->arrived;
+        profile.home_in = std::max<std::int64_t>(trip->back - now, 0);
+    }
+    profile.balloon_survived = counter(state.balloons, key);
+    profile.balloon_chance = balloon_pop_chance(state, key);
+    long double value = 0;
+    for (const InvestmentDeposit &deposit : state.investments) {
+        if (deposit.player == key) {
+            profile.invested += deposit.amount;
+            value += investment_value(session, state, deposit, now, signs);
+        }
+    }
+    constexpr auto most = static_cast<long double>(std::numeric_limits<std::int64_t>::max());
+    profile.investment_value = value >= most ? std::numeric_limits<std::int64_t>::max()
+                                             : static_cast<std::int64_t>(std::floor(value));
+    return profile;
+}
+
+}
+
+std::optional<Profile> player_profile(Storage &storage, std::string_view name, RaidTargetKind platform,
+                                      std::int64_t now, zodiac::Overrides signs) {
+    return storage.transaction([&](StorageSession &session) -> std::optional<Profile> {
+        ConquisterState &state = session.state();
+        const std::optional<std::string> key = player_by_name(state, name, platform);
+        if (!key) {
+            return std::nullopt;
+        }
+        return profile_from(session, state, *key, now, signs);
+    });
+}
+
+Profile player_profile_of(Storage &storage, const std::string &key, std::int64_t now, zodiac::Overrides signs) {
+    return storage.transaction([&](StorageSession &session) {
+        return profile_from(session, session.state(), key, now, signs);
+    });
+}
+
 std::optional<ConquisterUser> conquister_user(Storage &storage, std::string_view username,
                                              RaidTargetKind platform) {
     return storage.transaction([username, platform](StorageSession &session) -> std::optional<ConquisterUser> {

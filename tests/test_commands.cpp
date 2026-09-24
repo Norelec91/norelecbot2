@@ -657,6 +657,54 @@ TEST_CASE("the raids tell what happened") {
     CHECK(raid_event_reply(home) == "🎁 bob torni in bob con le tue 700 palle ancora in tasca.");
 }
 
+TEST_CASE("the profile shows where a player stands") {
+    const TestPaths paths{"profile-command-test"};
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    config.travel_divisor = 1000000;
+    Storage storage{paths.conquister, paths.quotes};
+    const CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
+    const CommandContext bob{.storage = storage, .config = config, .user_id = 2, .username = "Bob"};
+    const CommandContext carol{.storage = storage, .config = config, .user_id = 0, .username = "Carol"};
+    REQUIRE(command_dispatch(alice, "/leaderboard"));
+    REQUIRE(command_dispatch(bob, "/leaderboard"));
+    REQUIRE(command_dispatch(carol, "/leaderboard"));
+    storage.transaction([](StorageSession &session) {
+        ConquisterState &state = session.state();
+        state.scores["tg:1"] = 5000;
+        state.scores["tg:2"] = 7000;
+        state.furniture["tg:1"] = "🍕[]⚡";
+        state.quotes_added["tg:1"] = 3;
+        state.balloons["tg:1"] = 1;
+        return 0;
+    });
+    REQUIRE(command_dispatch(alice, "We @Alice 1000")->contains("hai investito 1000 palle"));
+
+    CHECK(command_is_for_bot("/profile"));
+    const std::string mine = command_dispatch(alice, "/profile").value_or("");
+    /* Carol has no palle yet, so the ranking has two players. */
+    CHECK(mine.starts_with("👤 Alice (🍕[]⚡)\n💰 4000 palle, 2° su 2 in classifica\n"));
+    CHECK(mine.contains(": oggi è giorno di "));
+    CHECK(mine.contains("\n🪐 a casa\n"));
+    CHECK(mine.contains("\n🎈 palloncino: ha retto 1 tentativo, il prossimo lo buca al 50%\n"));
+    CHECK(mine.contains("\n🏦 investite 1000 palle, ora ne valgono "));
+    CHECK(mine.ends_with("\n📜 3 citazioni"));
+
+    /* The same card, seen by somebody else, with the name as it is written on that platform. */
+    CHECK(command_dispatch(bob, "/profile @Alice") == mine);
+    CHECK(command_dispatch(bob, "/profile @Nessuno") == "👤 non conosco nessun giocatore di nome @Nessuno.");
+    const std::string irc = command_dispatch(bob, "/profile Carol").value_or("");
+    CHECK(irc.starts_with("👤 Carol\n💰 nessuna palla ancora\n"));
+    CHECK(irc.contains("\n🎈 palloncino nuovo"));
+
+    /* In the place with a ⚡, and on the road. */
+    REQUIRE(command_dispatch(alice, "We @TheConquister37"));
+    CHECK(command_dispatch(alice, "/profile")->contains("\n🪐 in @TheConquister37 da "));
+    REQUIRE(command_dispatch(bob, "We @Alice")->contains("parti per Alice"));
+    CHECK(command_dispatch(alice, "/profile @Bob")->contains("\n🚀 in viaggio verso Alice: a casa tra "));
+}
+
 TEST_CASE("the help lists every We line with the asker's own name") {
     const TestPaths paths{"help-command-test"};
     AppConfig config;
@@ -674,6 +722,7 @@ TEST_CASE("the help lists every We line with the asker's own name") {
     CHECK(help.contains("\nWe @giocatore 500 — gli porti 500 palle\n"));
     CHECK(help.contains("\nWe @TheConquister37 🍕 — bruci una 🍕\n"));
     CHECK(help.contains("\n/leaderboard — classifica\n"));
+    CHECK(help.contains("\n/profile [nome] — il tuo profilo, o quello di un altro\n"));
 
     /* On IRC: bare nicks and the bang instead of the slash; the place keeps its @. */
     const std::string on_irc = command_dispatch(irc, "/help").value_or("");
