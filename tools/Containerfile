@@ -3,5 +3,5 @@ RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       cmake make g++ libc6-dev pkg-config ca-certificates \
       nlohmann-json3-dev libcpp-httplib-dev libspdlog-dev doctest-dev \
-      clang clang-tidy cppcheck libclang-rt-19-dev \
+      clang clang-tidy cppcheck libclang-rt-19-dev git \
  && rm -rf /var/lib/apt/lists/*
