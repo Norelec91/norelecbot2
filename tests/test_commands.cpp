@@ -453,7 +453,7 @@ TEST_CASE("We @someone sends the player out to rob them") {
         return command_dispatch(context, text).value_or("<nessuna risposta>");
     };
 
-    CHECK(reply("We @alice") == "🚀 bob parti per alice: arrivi tra 5 secondi. bob resta scoperto.");
+    CHECK(reply("We @alice") == "🚀 bob parti per alice: arrivi tra 5 secondi. La tua casa resta scoperta.");
     CHECK(reply("We @alice") == "🚀 bob sei già in viaggio, torni tra 10 secondi.");
     /* Another player, who is at home and can therefore get an answer of his own. */
     context.username = "carol";
@@ -660,7 +660,7 @@ TEST_CASE("the raids tell what happened") {
     home.raider = "bob";
     home.target = "alice";
     home.loot = 250;
-    CHECK(raid_event_reply(home) == "🪐 bob sei tornato in bob con 250 palle.");
+    CHECK(raid_event_reply(home) == "🪐 bob torni in bob con 250 palle.");
     home.loot = 0;
     CHECK_FALSE(raid_event_reply(home));
 
@@ -676,7 +676,32 @@ TEST_CASE("the raids tell what happened") {
 
     /* He turned back, so the palle he was carrying are his again. */
     home.gift = 700;
-    CHECK(raid_event_reply(home) == "🎁 bob sei tornato in bob con le tue 700 palle ancora in tasca.");
+    CHECK(raid_event_reply(home) == "🎁 bob torni in bob con le tue 700 palle ancora in tasca.");
+}
+
+TEST_CASE("the help lists every We line with the asker's own name") {
+    const TestPaths paths{"help-command-test"};
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{paths.conquister, paths.quotes};
+    const CommandContext telegram{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
+    const CommandContext irc{.storage = storage, .config = config, .user_id = 0, .username = "Bob"};
+
+    CHECK(command_is_for_bot("/help"));
+    const std::string help = command_dispatch(telegram, "/help").value_or("");
+    CHECK(help.starts_with("📖 Come si gioca\n\n"));
+    CHECK(help.contains("\nWe @Alice 🍕 3 — appendi 🍕 nel posto 3\n"));
+    CHECK(help.contains("\nWe @giocatore 500 — gli porti 500 palle\n"));
+    CHECK(help.contains("\nWe @TheConquister37 🍕 — bruci una 🍕\n"));
+    CHECK(help.contains("\n/leaderboard — classifica\n"));
+
+    /* On IRC: bare nicks and the bang instead of the slash; the place keeps its @. */
+    const std::string on_irc = command_dispatch(irc, "/help").value_or("");
+    CHECK(on_irc.contains("\nWe Bob 1 2 — sposti l'emoji dal posto 1 al posto 2\n"));
+    CHECK(on_irc.contains("\nWe giocatore — parti per razziarlo\n"));
+    CHECK(on_irc.contains("We @TheConquister37 — entri nel posto"));
+    CHECK(on_irc.contains("\n!buyboost — "));
 }
 
 TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
@@ -708,6 +733,19 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     CHECK(command_dispatch(alice, "We @TheConquister37 🐟") ==
           "🔥 Alice hai riportato 🐟 in @TheConquister37: è uscita dal gioco.");
     CHECK(command_dispatch(alice, "We @TheConquister37 🐟") == "🔥 Alice non hai 🐟 appesa al nome.");
+    /* Two slots on her own name: the emoji change places. */
+    CHECK(command_is_for_bot("We @Alice 1 2"));
+    CHECK(command_dispatch(alice, "We @Alice 1 2") ==
+          "🛋️ Alice (🎈🍕) hai scambiato 🍕 e 🎈: ora 🍕 è nel posto 2 e 🎈 nel posto 1.");
+    CHECK(command_dispatch(alice, "We @Alice 2 4") == "🛋️ Alice (🎈[][]🍕) hai spostato 🍕 dal posto 2 al posto 4.");
+    CHECK(command_dispatch(alice, "We @Alice 4 1") ==
+          "🛋️ Alice (🍕[][]🎈) hai scambiato 🍕 e 🎈: ora 🍕 è nel posto 1 e 🎈 nel posto 4.");
+    CHECK(command_dispatch(alice, "We @Alice 4 2") == "🛋️ Alice (🍕🎈) hai spostato 🎈 dal posto 4 al posto 2.");
+    CHECK(command_dispatch(alice, "We @Alice 3 1") == "🛋️ Alice nel posto 3 non c'è nessuna emoji.");
+    CHECK(command_dispatch(alice, "We @Alice 1 1") == "🛋️ Alice il posto di partenza e quello di arrivo sono lo stesso.");
+    CHECK(command_dispatch(alice, "We @Alice 1 12") == "🛋️ Alice i posti vanno da 1 a 10.");
+    CHECK(command_dispatch(alice, "We @Bob 1 2") == "🛋️ Alice puoi spostare solo le emoji sul tuo nome.");
+
     /* A pile of poo is not just burnt: it is thrown. */
     storage.transaction([](StorageSession &session) {
         session.state().furniture["tg:1"] = "🍕🎈💩";
@@ -745,7 +783,7 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     home.kind = RaidEvent::Kind::returned;
     home.raider = "Alice";
     home.gift_emoji = "🍕";
-    CHECK(raid_event_reply(home) == "🎁 Alice sei tornato in Alice con 🍕 ancora in tasca.");
+    CHECK(raid_event_reply(home) == "🎁 Alice torni in Alice con 🍕 ancora in tasca.");
 }
 
 TEST_CASE("the quotes are open to the admins as well as to the owner") {
@@ -796,7 +834,7 @@ TEST_CASE("We with a number for yourself from the place takes you home and inves
     CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->in_conquister);
 
     const std::string reply = command_dispatch(alice, "We @Alice 1000").value_or("");
-    CHECK(reply.starts_with("🪐 Alice sei tornato da @TheConquister37 in @Alice con "));
+    CHECK(reply.starts_with("🪐 Alice torni da @TheConquister37 in @Alice con "));
     CHECK(reply.contains("\n🏦 Alice hai investito 1000 palle. "));
     const auto after = conquister_user(storage, "Alice", RaidTargetKind::telegram);
     REQUIRE(after);
@@ -806,7 +844,7 @@ TEST_CASE("We with a number for yourself from the place takes you home and inves
     /* Too many palle: she still goes home, and is told what she has. */
     REQUIRE(command_dispatch(alice, "We @TheConquister37"));
     const std::string broke = command_dispatch(alice, "We @Alice 999999").value_or("");
-    CHECK(broke.starts_with("🪐 Alice sei tornato da @TheConquister37"));
+    CHECK(broke.starts_with("🪐 Alice torni da @TheConquister37"));
     CHECK(broke.contains("\n🏦 Alice hai solo "));
     CHECK_FALSE(conquister_user(storage, "Alice", RaidTargetKind::telegram)->in_conquister);
 }
@@ -861,7 +899,7 @@ TEST_CASE("We with a number for somebody else sends the palle to them") {
 
     const std::string leaving = command_dispatch(alice, "We @Bob 400").value_or("");
     CHECK(leaving.contains("🎁 Alice parti per Bob con 400 palle da consegnare"));
-    CHECK(leaving.contains("Alice resta scoperto"));
+    CHECK(leaving.contains("La tua casa resta scoperta"));
     CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 600);
     /* Handed over only when he gets there, not when he sets off. */
     CHECK(conquister_user(storage, "Bob", RaidTargetKind::telegram)->score == 50);
@@ -948,7 +986,7 @@ TEST_CASE("a bought emoji follows the name everywhere") {
 
     /* In the place she is not at home; back home, a keycap is an emoji like any other and fills the hole. */
     CHECK(reply("We @alice 3️⃣") == "🛋️ alice le emoji si appendono al nome solo da casa.");
-    CHECK(reply("We @alice").contains("sei tornato da @TheConquister37"));
+    CHECK(reply("We @alice").contains("torni da @TheConquister37"));
     CHECK(reply("We @alice 3️⃣").contains("alice (🎈3️⃣🐟)"));
 }
 

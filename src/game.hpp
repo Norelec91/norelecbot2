@@ -57,6 +57,16 @@ struct FurnitureResult {
     std::int64_t charged = 0;
 };
 
+enum class FurnitureMoveStatus { moved, swapped, empty_slot, invalid_position, same_position, not_home };
+
+struct FurnitureMoveResult {
+    FurnitureMoveStatus status = FurnitureMoveStatus::moved;
+    /* How the name reads now, the emoji that moved, and the one it swapped places with. */
+    std::string shown;
+    std::string moved;
+    std::string swapped;
+};
+
 struct BoostResult {
     BoostStatus status = BoostStatus::bought;
     std::int64_t available_score = 0;
@@ -269,6 +279,10 @@ void debug_set(Storage &storage, const std::string &username, bool wanted);
     std::int64_t cost,
     std::size_t limit
 );
+/* Moves the emoji in one slot to another, both from 1, swapping it with whatever hangs there. Free,
+   and only at home. */
+[[nodiscard]] FurnitureMoveResult furniture_move(Storage &storage, const std::string &username,
+                                                 std::int64_t from, std::int64_t to, std::size_t limit);
 /* Everybody's emoji, for whoever only has names to write. */
 [[nodiscard]] Authors furniture_all(Storage &storage);
 

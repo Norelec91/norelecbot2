@@ -924,6 +924,42 @@ TEST_CASE("furniture hangs in numbered slots, leaves holes and can be overwritte
     CHECK(kept.find("alice")->second == "🎈🐟🚀🌊🌊🌊🌊🌊🌊🌊");
 }
 
+TEST_CASE("an emoji moves to another slot, swapping with what hangs there") {
+    const TestPaths paths{"furniture-move-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":10,"bob":10},"quotes_added":{},)"
+             << R"("furniture":{"alice":"🍕🎈"}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+
+    const FurnitureMoveResult swapped = furniture_move(storage, "alice", 1, 2, 10);
+    CHECK(swapped.status == FurnitureMoveStatus::swapped);
+    CHECK(swapped.moved == "🍕");
+    CHECK(swapped.swapped == "🎈");
+    CHECK(swapped.shown == "🎈🍕");
+
+    /* Into an empty slot: the one it left becomes a hole. */
+    const FurnitureMoveResult moved = furniture_move(storage, "alice", 1, 4, 10);
+    CHECK(moved.status == FurnitureMoveStatus::moved);
+    CHECK(moved.swapped.empty());
+    CHECK(moved.shown == "[]🍕[]🎈");
+    /* And no hole is kept at the end. */
+    CHECK(furniture_move(storage, "alice", 4, 1, 10).shown == "🎈🍕");
+
+    /* Nothing to move, a slot that does not exist, or the same slot twice: nothing changes. */
+    CHECK(furniture_move(storage, "alice", 3, 1, 10).status == FurnitureMoveStatus::empty_slot);
+    CHECK(furniture_move(storage, "alice", 1, 11, 10).status == FurnitureMoveStatus::invalid_position);
+    CHECK(furniture_move(storage, "alice", 0, 1, 10).status == FurnitureMoveStatus::invalid_position);
+    CHECK(furniture_move(storage, "alice", 2, 2, 10).status == FurnitureMoveStatus::same_position);
+    CHECK(furniture_all(storage).at("alice") == "🎈🍕");
+
+    /* Only at home. */
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 0, quick_rides()).status == RaidStatus::started);
+    CHECK(furniture_move(storage, "alice", 1, 2, 10).status == FurnitureMoveStatus::not_home);
+    CHECK(furniture_all(storage).at("alice") == "🎈🍕");
+}
+
 TEST_CASE("an emoji costs double for every copy already hanging from anybody's name") {
     const TestPaths paths{"furniture-inflation-test"};
     {

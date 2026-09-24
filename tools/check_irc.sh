@@ -67,7 +67,7 @@ grep -q 'WHOIS Marco189' transcript || fail "the registration was not verified"
 [[ $(grep -c 'WHOIS Marco189' transcript) == 1 ]] || fail "the WHOIS answer was not cached"
 if grep -q 'ciao a tutti' transcript; then fail "a plain message must not reach the bot"; fi
 
-run_case "an unregistered nick is turned away" "" 'PRIVMSG #test :Marco189 devi essere registrato'
+run_case "an unregistered nick is turned away" "" 'PRIVMSG #test :Marco189 per giocare serve un nick registrato'
 if grep -q 'sei in @TheConquister37' transcript; then fail "an unregistered nick must not play"; fi
 
 echo "-- irc check: ok"

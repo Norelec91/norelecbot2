@@ -60,8 +60,10 @@ sender's own name, in the first empty slot; `We @yourname 🍕 3` puts it in slo
 home, not on the road nor from @TheConquister37. The price is
 `NORELECBOT_FURNITURE_COST`, following the group's wealth like every price,
 doubled for every copy of that emoji already hanging from anybody's name.
-`/buyfurniture` remains as a deprecation reply that shows the new line with
-the sender's own name.
+`We @yourname 1 2` moves the emoji in slot 1 to slot 2, swapping it with
+whatever hangs there; it is free, works only at home and only on the sender's
+own name. `/buyfurniture` remains as a deprecation reply that shows the new line
+with the sender's own name.
 
 ## Emoji carried to another player
 

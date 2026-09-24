@@ -99,6 +99,35 @@ std::optional<ParsedEmoji> emoji_target(std::string_view message) {
     return ParsedEmoji{rest.substr(0, separator), emoji, position};
 }
 
+struct ParsedMove {
+    std::string_view target;
+    std::int64_t from = 0;
+    std::int64_t to = 0;
+};
+
+/* "We name from to": two slots on his own name whose emoji change places. */
+std::optional<ParsedMove> slot_move(std::string_view message) {
+    if (!message.starts_with(raid_trigger)) {
+        return std::nullopt;
+    }
+    const std::string_view rest = message.substr(raid_trigger.size());
+    const std::size_t separator = rest.find_first_of(" \t\r\n");
+    if (separator == std::string_view::npos || !valid_raid_target(rest.substr(0, separator))) {
+        return std::nullopt;
+    }
+    const std::string_view slots = text::trim(rest.substr(separator));
+    const std::size_t space = slots.find_first_of(" \t");
+    if (space == std::string_view::npos) {
+        return std::nullopt;
+    }
+    const std::optional<std::int64_t> from = text::parse_int64(slots.substr(0, space));
+    const std::optional<std::int64_t> to = text::parse_int64(slots.substr(space + 1));
+    if (!from || !to) {
+        return std::nullopt;
+    }
+    return ParsedMove{rest.substr(0, separator), *from, *to};
+}
+
 ParsedCommand parse_command(std::string_view message) {
     const std::size_t length = std::min(message.find_first_of(" \t\r\n"), message.size());
     std::string name{message.substr(0, length)};
@@ -261,7 +290,7 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
         return std::format("🚀 {} non conosco nessun giocatore di nome {}.", username, target);
     case RaidStatus::left_place:
         return std::format(
-            "🪐 {} sei tornato da {} in {} con {} palle{}.",
+            "🪐 {} torni da {} in {} con {} palle{}.",
             username,
             conquister_place,
             home,
@@ -292,30 +321,27 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
     }
     if (!gift_emoji.empty()) {
         return std::format(
-            "🎁 {} parti per {} con {} da consegnare: arrivi tra {}. {} resta scoperto.",
+            "🎁 {} parti per {} con {} da consegnare: arrivi tra {}. La tua casa resta scoperta.",
             username,
             result.target,
             gift_emoji,
-            format_wait(result.seconds),
-            username
+            format_wait(result.seconds)
         );
     }
     if (gift > 0) {
         return std::format(
-            "🎁 {} parti per {} con {} palle da consegnare: arrivi tra {}. {} resta scoperto.",
+            "🎁 {} parti per {} con {} palle da consegnare: arrivi tra {}. La tua casa resta scoperta.",
             username,
             result.target,
             gift,
-            format_wait(result.seconds),
-            username
+            format_wait(result.seconds)
         );
     }
     return std::format(
-        "🚀 {} parti per {}: arrivi tra {}. {} resta scoperto.",
+        "🚀 {} parti per {}: arrivi tra {}. La tua casa resta scoperta.",
         username,
         result.target,
-        format_wait(result.seconds),
-        username
+        format_wait(result.seconds)
     );
 }
 
@@ -351,6 +377,32 @@ std::string handle_burn(const CommandContext &context, std::int64_t amount) {
 /* His own name as he writes it after "We": with the mention on Telegram, bare on IRC. */
 std::string own_name(const CommandContext &context) {
     return std::format("{}{}", context.user_id != 0 ? "@" : "", context.username);
+}
+
+/* "We yourname from to": the emoji in one slot goes to another, swapping with what hangs there. */
+std::string handle_furniture_move(const CommandContext &context, const ParsedMove &move) {
+    const std::string username{context.username};
+    const auto limit = static_cast<std::size_t>(context.config.furniture_limit);
+    const FurnitureMoveResult result =
+        furniture_move(context.storage, std::string{context.player_key}, move.from, move.to, limit);
+    switch (result.status) {
+    case FurnitureMoveStatus::invalid_position:
+        return std::format("🛋️ {} i posti vanno da 1 a {}.", username, limit);
+    case FurnitureMoveStatus::same_position:
+        return std::format("🛋️ {} il posto di partenza e quello di arrivo sono lo stesso.", username);
+    case FurnitureMoveStatus::not_home:
+        return std::format("🛋️ {} le emoji si spostano solo da casa.", username);
+    case FurnitureMoveStatus::empty_slot:
+        return std::format("🛋️ {} nel posto {} non c'è nessuna emoji.", username, move.from);
+    case FurnitureMoveStatus::swapped:
+        return std::format("🛋️ {} ({}) hai scambiato {} e {}: ora {} è nel posto {} e {} nel posto {}.",
+                           username, result.shown, result.moved, result.swapped,
+                           result.moved, move.to, result.swapped, move.from);
+    case FurnitureMoveStatus::moved:
+        break;
+    }
+    return std::format("🛋️ {} ({}) hai spostato {} dal posto {} al posto {}.",
+                       username, result.shown, result.moved, move.from, move.to);
 }
 
 /* "We @TheConquister37 emoji": the first copy on his name goes back to the place, out of the game. */
@@ -399,7 +451,7 @@ std::optional<std::string> handle_investment(const CommandContext &context, cons
     std::string departure;
     if (result.left_place) {
         departure = std::format(
-            "🪐 {} sei tornato da {} in {}{} con {} palle{}.\n",
+            "🪐 {} torni da {} in {}{} con {} palle{}.\n",
             context.username,
             conquister_place,
             context.user_id != 0 ? "@" : "",
@@ -657,6 +709,35 @@ std::string handle_furniture(const CommandContext &context, std::string_view wan
     return reply + ".";
 }
 
+/* Every line the game understands, one example each, written the way the asker has to write it. */
+std::string handle_help(const CommandContext &context, std::string_view) {
+    const bool irc = context.user_id == 0;
+    const std::string me = context.username.empty() ? std::string{irc ? "tuonick" : "@tuonome"}
+                                                    : own_name(context);
+    const std::string_view other = irc ? "giocatore" : "@giocatore";
+    const std::string_view slash = irc ? "!" : "/";
+    std::string help = "📖 Come si gioca\n\n";
+    const auto line = [&help](std::string_view example, std::string_view meaning) {
+        help += std::format("{} — {}\n", example, meaning);
+    };
+    line(std::format("We {}", conquister_place), "entri nel posto: 1 palla al secondo finché lo tieni");
+    line(std::format("We {}", me), "torni a casa, dal posto o dal viaggio, o ritiri l'investimento");
+    line(std::format("We {} 1000", me), "investi 1000 palle");
+    line(std::format("We {} 🍕", me), "appendi 🍕 al nome nel primo posto libero, da casa");
+    line(std::format("We {} 🍕 3", me), "appendi 🍕 nel posto 3");
+    line(std::format("We {} 1 2", me), "sposti l'emoji dal posto 1 al posto 2");
+    line(std::format("We {}", other), "parti per razziarlo");
+    line(std::format("We {} 500", other), "gli porti 500 palle");
+    line(std::format("We {} 🍕", other), "gli porti una 🍕");
+    line(std::format("We {} 500", conquister_place), "bruci 500 palle");
+    line(std::format("We {} 🍕", conquister_place), "bruci una 🍕");
+    help += std::format("\n{0}leaderboard — classifica\n{0}addquote <testo> — aggiungi una citazione\n"
+                        "{0}buyboost — moltiplicatore per il prossimo possesso\n"
+                        "{0}link <nome> — collega account Telegram e nick IRC",
+                        slash);
+    return help;
+}
+
 std::string handle_buy_balloon(const CommandContext &, std::string_view) {
     return "🎈 /buyballoon è deprecato: non serve più comprare il palloncino. "
            "Ce l'hai sempre, se non hai un boost, e protegge il posto dove sei: "
@@ -810,6 +891,7 @@ std::string handle_link(const CommandContext &context, std::string_view argument
 
 constexpr std::array commands{
     CommandDefinition{"/leaderboard", handle_leaderboard},
+    CommandDefinition{"/help", handle_help},
     CommandDefinition{"/addquote", handle_add_quote},
     CommandDefinition{"/buyballoon", handle_buy_balloon},
     CommandDefinition{"/buyboost", handle_buy_boost},
@@ -833,7 +915,7 @@ const CommandDefinition *find_command(std::string_view name) {
 bool command_is_for_bot(std::string_view text) {
     const std::string_view message = text::trim(text);
     return message == conquister_trigger || !raid_target(message).empty() || investment_target(message).has_value() ||
-           emoji_target(message).has_value() ||
+           emoji_target(message).has_value() || slot_move(message).has_value() ||
            (!message.empty() && find_command(parse_command(message).name) != nullptr);
 }
 
@@ -848,14 +930,14 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
     const std::string target = with_emoji(event.target, event.target_emoji);
     if (event.kind == RaidEvent::Kind::returned) {
         if (!event.gift_emoji.empty()) {
-            return std::format("🎁 {} sei tornato in {} con {} ancora in tasca.", raider, home, event.gift_emoji);
+            return std::format("🎁 {} torni in {} con {} ancora in tasca.", raider, home, event.gift_emoji);
         }
         if (event.gift > 0) {
-            return std::format("🎁 {} sei tornato in {} con le tue {} palle ancora in tasca.",
+            return std::format("🎁 {} torni in {} con le tue {} palle ancora in tasca.",
                                raider, home, event.gift);
         }
         if (event.loot > 0) {
-            return std::format("🪐 {} sei tornato in {} con {} palle.", raider, home, event.loot);
+            return std::format("🪐 {} torni in {} con {} palle.", raider, home, event.loot);
         }
         /* Coming home with nothing is not news. */
         return std::nullopt;
@@ -932,6 +1014,22 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
                 return reply;
             }
             return handle_gift(bound, *investment);
+        }
+        if (const auto move = slot_move(message)) {
+            if (!context.claims_allowed) {
+                return std::nullopt;
+            }
+            remember_sender();
+            if (context.username.empty()) {
+                return missing_username_reply();
+            }
+            const bool telegram = move->target.starts_with('@');
+            const std::string_view name = telegram ? move->target.substr(1) : move->target;
+            if (bound.player_key.empty() || !names_player(context.storage, bound_key, name,
+                    telegram ? RaidTargetKind::telegram : RaidTargetKind::irc)) {
+                return std::format("🛋️ {} puoi spostare solo le emoji sul tuo nome.", context.username);
+            }
+            return handle_furniture_move(bound, *move);
         }
         if (const auto carried = emoji_target(message)) {
             if (!context.claims_allowed) {

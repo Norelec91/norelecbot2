@@ -12,7 +12,7 @@ namespace norelecbot::irc {
 namespace {
 
 constexpr std::string_view unregistered_reply =
-    "{} devi essere registrato e identificato con NickServ per giocare.";
+    "{} per giocare serve un nick registrato e identificato con NickServ.";
 /* On IRC a leading slash belongs to the client, so the commands are typed with an exclamation mark. */
 constexpr char irc_command_prefix = '!';
 

@@ -855,6 +855,47 @@ bool give_emoji(ConquisterState &state, const std::string &player, const std::st
 
 }
 
+FurnitureMoveResult furniture_move(Storage &storage, const std::string &username,
+                                   std::int64_t from, std::int64_t to, std::size_t limit) {
+    const FurnitureMoveResult result = storage.transaction([&](StorageSession &session) {
+        ConquisterState &state = session.state();
+        FurnitureMoveResult outcome;
+        std::vector<std::string> slots = slots_of(state, username);
+        outcome.shown = furniture_stored(slots);
+        const auto valid = [limit](std::int64_t slot) {
+            return slot >= 1 && static_cast<std::uint64_t>(slot) <= limit;
+        };
+        if (!valid(from) || !valid(to)) {
+            outcome.status = FurnitureMoveStatus::invalid_position;
+            return outcome;
+        }
+        if (from == to) {
+            outcome.status = FurnitureMoveStatus::same_position;
+            return outcome;
+        }
+        if (!at_home(state, username)) {
+            outcome.status = FurnitureMoveStatus::not_home;
+            return outcome;
+        }
+        const auto source = static_cast<std::size_t>(from - 1);
+        const auto target = static_cast<std::size_t>(to - 1);
+        if (source >= slots.size() || slots[source].empty()) {
+            outcome.status = FurnitureMoveStatus::empty_slot;
+            return outcome;
+        }
+        slots.resize(std::max(slots.size(), target + 1));
+        outcome.moved = slots[source];
+        outcome.swapped = slots[target];
+        std::swap(slots[source], slots[target]);
+        outcome.status = outcome.swapped.empty() ? FurnitureMoveStatus::moved : FurnitureMoveStatus::swapped;
+        hang(state, username, slots);
+        outcome.shown = furniture_stored(std::move(slots));
+        return outcome;
+    });
+    log_info("furniture move user={} from={} to={} status={}", username, from, to, static_cast<int>(result.status));
+    return result;
+}
+
 std::optional<std::string> furniture_burn(Storage &storage, const std::string &player, const std::string &emoji) {
     const std::optional<std::string> shown =
         storage.transaction([&](StorageSession &session) -> std::optional<std::string> {

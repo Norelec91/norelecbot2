@@ -144,8 +144,8 @@ TEST_CASE("only a nick identified with NickServ plays") {
         const auto refused = fixture.feed(":server 318 NorelecBot Marco189 :End of /WHOIS list.", 1001);
         REQUIRE(refused.size() == 1);
         CHECK(refused[0] ==
-              "PRIVMSG #regno :\xE2\x80\x8BMarco189 devi essere registrato e identificato con NickServ "
-              "per giocare.\r\n");
+              "PRIVMSG #regno :\xE2\x80\x8BMarco189 per giocare serve un nick registrato e identificato "
+              "con NickServ.\r\n");
         CHECK(fixture.calls.empty());
 
         CHECK(fixture.feed(":Marco189!~m@host PRIVMSG #regno :We @TheConquister37", 1002).empty());
@@ -156,7 +156,7 @@ TEST_CASE("only a nick identified with NickServ plays") {
         CHECK(retry[0] == "WHOIS Marco189\r\n");
         const auto told = fixture.feed(":server 318 NorelecBot Marco189 :End of /WHOIS list.", 1400);
         REQUIRE(told.size() == 1);
-        CHECK(told[0].contains("devi essere registrato"));
+        CHECK(told[0].contains("serve un nick registrato"));
     }
 
     SUBCASE("a nick that left before answering is dropped") {
