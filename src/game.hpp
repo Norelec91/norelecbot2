@@ -42,13 +42,6 @@ struct ClaimResult {
 
 enum class BoostStatus { bought, already_owned, holding_place, insufficient_score };
 
-enum class RaidShieldStatus { bought, already_owned, has_boost, insufficient_score };
-
-struct RaidShieldResult {
-    RaidShieldStatus status = RaidShieldStatus::bought;
-    std::int64_t available_score = 0;
-};
-
 enum class FurnitureStatus { bought, too_many, insufficient_score };
 
 struct FurnitureResult {
@@ -143,8 +136,6 @@ struct RaidEvent {
     std::int64_t seconds = 0;
     int raider_percent = 100;
     int target_percent = 100;
-    /* A purchased shield absorbed part of this raid's potential loot. */
-    std::int64_t shield_absorbed = 0;
     /* The target's raid resistance absorbed part of the remaining loot. */
     std::int64_t resistance_absorbed = 0;
     /* The target was away, so there was nothing to get past. */
@@ -247,12 +238,6 @@ void debug_set(Storage &storage, const std::string &username, bool wanted);
 
 /* Palle brought back to @TheConquister37 leave the game: nobody receives them. */
 [[nodiscard]] BurnResult palle_burn(Storage &storage, const std::string &player, std::int64_t amount);
-
-[[nodiscard]] RaidShieldResult raid_shield_buy(
-    Storage &storage,
-    const std::string &username,
-    int cost
-);
 
 /* Sends a player to rob another one, if he is at home and the target is somebody the bot knows.
    Naming himself sends him home instead: at once from @TheConquister37, at the end of the ride if he

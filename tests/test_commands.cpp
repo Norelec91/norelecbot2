@@ -130,32 +130,12 @@ TEST_CASE("the bot answers the commands it knows and ignores the rest") {
         context.username = "grace";
         CHECK(reply("/buyboost") == "grace ti servono 1500 palle per un boost (ne hai 0).");
 
-        config.raid_shield_cost = 0;
         context.user_id = 8;
         context.username = "heidi";
+        CHECK(command_is_for_bot("/buyshield"));
         CHECK(reply("/buyshield") ==
-              "🛡️ heidi hai comprato uno scudo spendendo 0 palle! "
-              "Ridurrà i furti mentre sei a casa, finché non compri un boost.");
-        CHECK(reply("/buyshield") == "heidi hai già uno scudo pronto.");
-        context.user_id = 10;
-        context.username = "jane";
-        CHECK(reply("/buyshield").contains("jane hai comprato uno scudo"));
-        config.boost_cost = 0;
-        CHECK(reply("/buyboost").contains("jane hai comprato un boost"));
-        CHECK(reply("/buyshield") == "jane hai un boost attivo: lo scudo puoi comprarlo dopo.");
-        config.boost_cost = 1500;
-        config.raid_shield_cost = 1000;
-        context.user_id = 9;
-        context.username = "ivan";
-        CHECK(reply("/buyshield") == "ivan ti servono 1000 palle per uno scudo (ne hai 0).");
-        config.raid_shield_cost = 0;
-        context.user_id = 4;
-        context.username = "dave";
-        CHECK(reply("/buyshield").contains("dave hai comprato uno scudo"));
-        config.raid_shield_cost = 1000;
-        context.user_id = 6;
-        context.username = "frank";
-        CHECK(reply("/buyshield") == "frank hai un boost attivo: lo scudo puoi comprarlo dopo.");
+              "🛡️ /buyshield è deprecato: lo scudo non esiste più. "
+              "Contro le razzie resta la resistenza, che dimezza il bottino dopo ogni furto subito.");
 
         config.quote_cost = 0;
         context.user_id = 3;
@@ -179,30 +159,30 @@ TEST_CASE("Telegram ID keeps its player after a rename and namesakes stay separa
     AppConfig config;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
-    config.raid_shield_cost = 0;
+    config.boost_cost = 0;
     Storage storage{paths.conquister, paths.quotes};
 
     CommandContext alice{.storage = storage, .config = config, .user_id = 11, .username = "Alice"};
-    CHECK(command_dispatch(alice, "/buyshield")->contains("hai comprato"));
+    CHECK(command_dispatch(alice, "/buyboost")->contains("hai comprato"));
     alice.username = "AliceNuova";
-    CHECK(command_dispatch(alice, "/buyshield") == "AliceNuova hai già uno scudo pronto.");
+    CHECK(command_dispatch(alice, "/buyboost") == "AliceNuova hai già un boost x3 pronto.");
     CHECK(command_dispatch(alice, "We @AliceNuova") == "🪐 AliceNuova sei già in @AliceNuova!");
     CHECK(command_dispatch(alice, "We @Alice") ==
           "🚀 AliceNuova non conosco nessun giocatore di nome @Alice.");
 
     const CommandContext namesake{.storage = storage, .config = config, .user_id = 22, .username = "Alice"};
-    CHECK(command_dispatch(namesake, "/buyshield")->contains("hai comprato"));
-    CHECK(command_dispatch(alice, "/buyshield") == "AliceNuova hai già uno scudo pronto.");
+    CHECK(command_dispatch(namesake, "/buyboost")->contains("hai comprato"));
+    CHECK(command_dispatch(alice, "/buyboost") == "AliceNuova hai già un boost x3 pronto.");
 
     const CommandContext irc{.storage = storage, .config = config, .user_id = 0, .username = "AliceNuova"};
-    CHECK(command_dispatch(irc, "/buyshield")->contains("hai comprato"));
+    CHECK(command_dispatch(irc, "/buyboost")->contains("hai comprato"));
     CHECK(command_dispatch(alice, "We AliceNuova")->contains("parti per AliceNuova"));
     CHECK(command_dispatch(irc, "We AliceNuova") == "🪐 AliceNuova sei già in AliceNuova!");
 
     const Json state = Json::parse(std::ifstream{paths.conquister});
     CHECK(state.at("accounts").at("tg:11") != state.at("accounts").at("tg:22"));
     CHECK(state.at("accounts").at("tg:11") != state.at("accounts").at("irc:alicenuova"));
-    CHECK(state.at("raid_shields").size() == 3);
+    CHECK(state.at("boosts").size() == 3);
 }
 
 TEST_CASE("two authenticated accounts link only after reciprocal confirmation") {
@@ -210,25 +190,25 @@ TEST_CASE("two authenticated accounts link only after reciprocal confirmation") 
     AppConfig config;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
-    config.raid_shield_cost = 0;
+    config.boost_cost = 0;
     Storage storage{paths.conquister, paths.quotes};
     const CommandContext telegram{.storage = storage, .config = config, .user_id = 11, .username = "Alice"};
     const CommandContext irc{.storage = storage, .config = config, .user_id = 0, .username = "Alice"};
 
-    CHECK(command_dispatch(telegram, "/buyshield")->contains("hai comprato"));
+    CHECK(command_dispatch(telegram, "/buyboost")->contains("hai comprato"));
     CHECK(command_dispatch(telegram, "/link Alice") ==
           "Non conosco ancora quell'account: deve prima usare un comando del gioco.");
     CHECK(command_dispatch(irc, "/leaderboard").has_value());
     CHECK(command_dispatch(telegram, "/link Alice")->contains("Richiesta registrata"));
     CHECK(command_dispatch(irc, "/link @Alice") ==
           "Account collegati: ora condividono lo stesso giocatore.");
-    CHECK(command_dispatch(irc, "/buyshield") == "Alice hai già uno scudo pronto.");
+    CHECK(command_dispatch(irc, "/buyboost") == "Alice hai già un boost x3 pronto.");
     const Json state = Json::parse(std::ifstream{paths.conquister});
     CHECK(state.at("accounts").at("tg:11") == state.at("accounts").at("irc:alice"));
     Storage reopened{paths.conquister, paths.quotes};
     const CommandContext after_restart{.storage = reopened, .config = config, .user_id = 0,
                                        .username = "Alice"};
-    CHECK(command_dispatch(after_restart, "/buyshield") == "Alice hai già uno scudo pronto.");
+    CHECK(command_dispatch(after_restart, "/buyboost") == "Alice hai già un boost x3 pronto.");
 }
 
 TEST_CASE("linking never silently merges two inventories") {
@@ -236,24 +216,24 @@ TEST_CASE("linking never silently merges two inventories") {
     AppConfig config;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
-    config.raid_shield_cost = 0;
+    config.boost_cost = 0;
     Storage storage{paths.conquister, paths.quotes};
     const CommandContext telegram{.storage = storage, .config = config, .user_id = 11, .username = "Alice"};
     const CommandContext irc{.storage = storage, .config = config, .user_id = 0, .username = "Alice"};
-    CHECK(command_dispatch(telegram, "/buyshield")->contains("hai comprato"));
-    CHECK(command_dispatch(irc, "/buyshield")->contains("hai comprato"));
+    CHECK(command_dispatch(telegram, "/buyboost")->contains("hai comprato"));
+    CHECK(command_dispatch(irc, "/buyboost")->contains("hai comprato"));
     CHECK(command_dispatch(telegram, "/link Alice")->contains("Richiesta registrata"));
     CHECK(command_dispatch(irc, "/link @Alice")->contains("fusione manuale"));
     const Json state = Json::parse(std::ifstream{paths.conquister});
     CHECK(state.at("accounts").at("tg:11") != state.at("accounts").at("irc:alice"));
-    CHECK(state.at("raid_shields").size() == 2);
+    CHECK(state.at("boosts").size() == 2);
 }
 
 TEST_CASE("legacy Telegram assets follow their recorded ID, not a reused name") {
     const TestPaths paths{"legacy-identity-command-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":null,"scores":{"Alice":1500},"raid_shields":{"Alice":1},)"
+        file << R"({"current":null,"scores":{"Alice":1500},"boosts":{"Alice":3},)"
                 R"("telegram_ids":{"Alice":11}})";
     }
     AppConfig config;
@@ -266,9 +246,9 @@ TEST_CASE("legacy Telegram assets follow their recorded ID, not a reused name") 
                                  .username = "Alice"};
     const CommandContext irc{.storage = storage, .config = config, .user_id = 0,
                             .username = "Alice"};
-    CHECK(command_dispatch(rightful, "/buyshield") == "AliceNuova hai già uno scudo pronto.");
-    CHECK(command_dispatch(namesake, "/buyshield")->contains("(ne hai 0)"));
-    CHECK(command_dispatch(irc, "/buyshield")->contains("(ne hai 0)"));
+    CHECK(command_dispatch(rightful, "/buyboost") == "AliceNuova hai già un boost x3 pronto.");
+    CHECK(command_dispatch(namesake, "/buyboost")->contains("(ne hai 0)"));
+    CHECK(command_dispatch(irc, "/buyboost")->contains("(ne hai 0)"));
     const Json state = Json::parse(std::ifstream{paths.conquister});
     CHECK(state.at("accounts").at("tg:11") == "Alice");
     CHECK(state.at("accounts").at("tg:22") != "Alice");
@@ -279,7 +259,7 @@ TEST_CASE("ambiguous cross-platform legacy assets remain unclaimed") {
     const TestPaths paths{"ambiguous-identity-command-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":null,"scores":{"Alice":1500},"raid_shields":{"Alice":1},)"
+        file << R"({"current":null,"scores":{"Alice":1500},"boosts":{"Alice":3},)"
                 R"("telegram_ids":{"Alice":11},"irc_names":{"Alice":1}})";
     }
     AppConfig config;
@@ -290,8 +270,8 @@ TEST_CASE("ambiguous cross-platform legacy assets remain unclaimed") {
                                   .username = "Alice"};
     const CommandContext irc{.storage = storage, .config = config, .user_id = 0,
                             .username = "Alice"};
-    CHECK(command_dispatch(telegram, "/buyshield")->contains("(ne hai 0)"));
-    CHECK(command_dispatch(irc, "/buyshield")->contains("(ne hai 0)"));
+    CHECK(command_dispatch(telegram, "/buyboost")->contains("(ne hai 0)"));
+    CHECK(command_dispatch(irc, "/buyboost")->contains("(ne hai 0)"));
     const Json state = Json::parse(std::ifstream{paths.conquister});
     CHECK(state.at("accounts").at("tg:11") != "Alice");
     CHECK(state.at("accounts").at("irc:alice") != "Alice");
@@ -310,7 +290,7 @@ TEST_CASE("unattributed legacy assets stay unclaimed") {
     Storage storage{paths.conquister, paths.quotes};
     const CommandContext telegram{.storage = storage, .config = config, .user_id = 11,
                                   .username = "Alice"};
-    CHECK(command_dispatch(telegram, "/buyshield")->contains("(ne hai 0)"));
+    CHECK(command_dispatch(telegram, "/buyboost")->contains("(ne hai 0)"));
     const Json state = Json::parse(std::ifstream{paths.conquister});
     CHECK(state.at("scores").at("Alice") == 1000);
     CHECK(state.at("accounts").at("tg:11") != "Alice");
@@ -321,16 +301,16 @@ TEST_CASE("IRC nick aliases share the verified NickServ account") {
     AppConfig config;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
-    config.raid_shield_cost = 0;
+    config.boost_cost = 0;
     Storage storage{paths.conquister, paths.quotes};
     CommandContext irc{.storage = storage, .config = config, .user_id = 0,
                        .username = "FirstNick", .account_name = "RegisteredAccount"};
-    CHECK(command_dispatch(irc, "/buyshield")->contains("hai comprato"));
+    CHECK(command_dispatch(irc, "/buyboost")->contains("hai comprato"));
     irc.username = "SecondNick";
-    CHECK(command_dispatch(irc, "/buyshield") == "SecondNick hai già uno scudo pronto.");
+    CHECK(command_dispatch(irc, "/buyboost") == "SecondNick hai già un boost x3 pronto.");
     const Json state = Json::parse(std::ifstream{paths.conquister});
     CHECK(state.at("accounts").at("irc:registeredaccount") == "irc:registeredaccount");
-    CHECK(state.at("raid_shields").size() == 1);
+    CHECK(state.at("boosts").size() == 1);
     CHECK(state.at("irc_nicks").find("firstnick") == state.at("irc_nicks").end());
     CHECK(state.at("irc_nicks").at("secondnick") == "irc:registeredaccount");
 }
@@ -652,18 +632,9 @@ TEST_CASE("the raids tell what happened") {
     event.seconds = 52;
     CHECK(raid_event_reply(event) == "💰 bob hai rubato 250 palle a alice! Torni in bob tra 52 secondi.");
 
-    event.shield_absorbed = 70;
-    CHECK(raid_event_reply(event) ==
-          "💰 bob hai rubato 250 palle a alice! Torni in bob tra 52 secondi.");
-    event.shield_absorbed = 0;
-
     event.resistance_absorbed = 125;
     CHECK(raid_event_reply(event) ==
           "💰 bob hai rubato 250 palle a alice! Torni in bob tra 52 secondi.");
-    event.shield_absorbed = 70;
-    CHECK(raid_event_reply(event) ==
-          "💰 bob hai rubato 250 palle a alice! Torni in bob tra 52 secondi.");
-    event.shield_absorbed = 0;
 
     event.target_on_telegram = true;
     event.undefended = true;
@@ -868,7 +839,7 @@ TEST_CASE("the owner turns the prices off for himself, not for everyone") {
     AppConfig config;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
-    config.raid_shield_cost = 1000;
+    config.boost_cost = 1000;
     Storage storage{config.conquister_path, config.quotes_path};
 
     const CommandContext player{
@@ -894,8 +865,8 @@ TEST_CASE("the owner turns the prices off for himself, not for everyone") {
     CHECK(refused->contains("Solo il proprietario"));
     CHECK_FALSE(debug_on(storage, "alice"));
 
-    /* Five hundred palle do not buy a shield that costs a thousand. */
-    const std::optional<std::string> broke = command_dispatch(player, "/buyshield");
+    /* Five hundred palle do not buy a boost that costs a thousand. */
+    const std::optional<std::string> broke = command_dispatch(player, "/buyboost");
     REQUIRE(broke);
     CHECK(broke->contains("ti servono"));
 
@@ -904,14 +875,14 @@ TEST_CASE("the owner turns the prices off for himself, not for everyone") {
     REQUIRE(on);
     CHECK(on->contains("per te"));
     CHECK(debug_on(storage, "norelec"));
-    const std::optional<std::string> bought = command_dispatch(owner, "/buyshield");
+    const std::optional<std::string> bought = command_dispatch(owner, "/buyboost");
     REQUIRE(bought);
-    CHECK(bought->contains("scudo"));
+    CHECK(bought->contains("boost"));
     CHECK(conquister_user(storage, "norelec")->score == 500);
 
     /* Everybody else goes on paying as before. */
     CHECK_FALSE(debug_on(storage, "alice"));
-    const std::optional<std::string> still_broke = command_dispatch(player, "/buyshield");
+    const std::optional<std::string> still_broke = command_dispatch(player, "/buyboost");
     REQUIRE(still_broke);
     CHECK(still_broke->contains("ti servono"));
     CHECK(conquister_user(storage, "alice")->score == 500);
@@ -939,7 +910,7 @@ TEST_CASE("prices follow how rich the group has become") {
     AppConfig config;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
-    config.raid_shield_cost = 1000;
+    config.boost_cost = 1000;
     config.price_percent = 20;
     config.price_ceiling = 50;
     Storage storage{config.conquister_path, config.quotes_path};
@@ -958,8 +929,8 @@ TEST_CASE("prices follow how rich the group has become") {
     CHECK(wealth.middle == 10000);
     CHECK(wealth.total == 955100);
 
-    /* The median is ten thousand, so a shield costs a fifth of it, not the list price. */
-    REQUIRE(command_dispatch(context, "/buyshield"));
+    /* The median is ten thousand, so a boost costs a fifth of it, not the list price. */
+    REQUIRE(command_dispatch(context, "/buyboost"));
     CHECK(conquister_user(storage, "d")->score == 38000);
 
     /* With the debug switch on, whoever threw it pays nothing. */
@@ -979,7 +950,7 @@ TEST_CASE("a poor group pays the list price, and a rich one stops at the ceiling
     AppConfig config;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
-    config.raid_shield_cost = 1000;
+    config.boost_cost = 1000;
     config.price_percent = 20;
     config.price_ceiling = 50;
     Storage storage{config.conquister_path, config.quotes_path};
@@ -993,7 +964,7 @@ TEST_CASE("a poor group pays the list price, and a rich one stops at the ceiling
         .owner = false,
     };
     /* A group with nothing pays the list price. */
-    REQUIRE(command_dispatch(context, "/buyshield"));
+    REQUIRE(command_dispatch(context, "/buyboost"));
     CHECK(conquister_user(storage, "a")->score == 1000);
 
     /* A group swimming in palle stops at the ceiling, fifty times the list price. */
@@ -1011,6 +982,6 @@ TEST_CASE("a poor group pays the list price, and a rich one stops at the ceiling
         .claims_allowed = true,
         .owner = false,
     };
-    REQUIRE(command_dispatch(loaded, "/buyshield"));
+    REQUIRE(command_dispatch(loaded, "/buyboost"));
     CHECK(conquister_user(rich, "a")->score == 90000000 - 50000);
 }

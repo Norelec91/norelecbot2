@@ -168,7 +168,6 @@ ConquisterState parse_state(const Json &json) {
         parse_balloons(json),
         parse_counters(json, "cooldowns"),
         parse_counters(json, "boosts"),
-        parse_counters(json, "raid_shields"),
         parse_counters(json, "raid_resistance_levels"),
         parse_counters(json, "raid_resistance_since"),
         parse_counters(json, "ids"),
@@ -221,7 +220,6 @@ Json state_to_json(const ConquisterState &state) {
         {"balloons", state.balloons},
         {"cooldowns", state.cooldowns},
         {"boosts", state.boosts},
-        {"raid_shields", state.raid_shields},
         {"raid_resistance_levels", state.raid_resistance_levels},
         {"raid_resistance_since", state.raid_resistance_since},
         {"ids", state.ids},
@@ -250,7 +248,8 @@ std::optional<ConquisterState> load_state(const std::string &path, bool *has_leg
         try {
             ConquisterState state = parse_state(*json);
             if (has_legacy_shields != nullptr) {
-                *has_legacy_shields = json->contains("shields");
+                /* Timed balloons and bought raid shields are both gone: rewrite without them. */
+                *has_legacy_shields = json->contains("shields") || json->contains("raid_shields");
             }
             return state;
         } catch (const std::exception &failure) {

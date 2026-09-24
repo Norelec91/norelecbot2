@@ -353,35 +353,19 @@ TEST_CASE("a boost replaces the automatic balloon on entry") {
     CHECK(read_json(paths.conquister).at("balloons").at("bob") == 0);
 }
 
-TEST_CASE("a paid raid shield survives a temporary balloon but is replaced by a boost") {
-    const TestPaths paths{"raid-shield-buy-test"};
+TEST_CASE("bought raid shields leave old saves without a refund") {
+    const TestPaths paths{"raid-shield-retired-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":null,"scores":{"alice":1200},"quotes_added":{}})";
+        file << R"({"current":null,"scores":{"alice":1200,"bob":40},"quotes_added":{},)"
+             << R"("raid_shields":{"alice":1,"bob":1}})";
     }
-    Storage storage{paths.conquister, paths.quotes};
-
-    CHECK(raid_shield_buy(storage, "bob", 1000).status == RaidShieldStatus::insufficient_score);
-    const RaidShieldResult bought = raid_shield_buy(storage, "alice", 1000);
-    CHECK(bought.status == RaidShieldStatus::bought);
-    CHECK(bought.available_score == 200);
-    CHECK(conquister_user(storage, "alice")->score == 200);
-    CHECK(raid_shield_buy(storage, "alice", 0).status == RaidShieldStatus::already_owned);
-    CHECK(conquister_claim(storage, 1, "alice", 0).balloon_active);
-    CHECK(conquister_user(storage, "alice")->score == 200);
-    CHECK(read_json(paths.conquister).at("raid_shields").at("alice") == 1);
-    CHECK(raid_start(storage, 1, "alice", "alice", 10, RaidRules{}).status == RaidStatus::left_place);
-    CHECK(read_json(paths.conquister).at("balloons").empty());
-    CHECK(read_json(paths.conquister).at("raid_shields").at("alice") == 1);
-
-    CHECK(boost_buy(storage, "erin", 0, 3).status == BoostStatus::bought);
-    CHECK(raid_shield_buy(storage, "erin", 0).status == RaidShieldStatus::has_boost);
-    CHECK(raid_shield_buy(storage, "frank", 0).status == RaidShieldStatus::bought);
-    CHECK(boost_buy(storage, "frank", 1, 3).status == BoostStatus::insufficient_score);
-    CHECK(read_json(paths.conquister).at("raid_shields").at("frank") == 1);
-    CHECK(boost_buy(storage, "frank", 0, 3).status == BoostStatus::bought);
-    CHECK_FALSE(read_json(paths.conquister).at("raid_shields").contains("frank"));
-    CHECK(raid_shield_buy(storage, "frank", 0).status == RaidShieldStatus::has_boost);
+    /* Opening the storage is enough: the old shields go on the first load. */
+    const Storage storage{paths.conquister, paths.quotes};
+    const Json saved = read_json(paths.conquister);
+    CHECK_FALSE(saved.contains("raid_shields"));
+    CHECK(saved.at("scores").at("alice") == 1200);
+    CHECK(saved.at("scores").at("bob") == 40);
 }
 
 TEST_CASE("an attempt that a balloon survives costs palle") {
@@ -437,92 +421,28 @@ RaidRules quick_rides() {
     return RaidRules{.loot_divisor = 50, .loot_share = 3, .travel_divisor = 1000000, .signs = {}};
 }
 
-RaidRules shield_rides() {
+RaidRules full_rides() {
     return RaidRules{.loot_divisor = 1, .loot_share = 10, .travel_divisor = 1000000, .signs = {}};
 }
 
 }
 
-TEST_CASE("a raid shield reduces the potential loot by x/(x+1000) on every raid") {
-    const TestPaths paths{"raid-shield-loot-test"};
-    {
-        std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":null,"scores":{"alice":11000,"bob":0},"quotes_added":{},)"
-             << R"("ids":{"alice":0,"bob":5000}})";
-    }
-    Storage storage{paths.conquister, paths.quotes};
-    CHECK(raid_shield_buy(storage, "alice", 1000).status == RaidShieldStatus::bought);
-    CHECK(raid_start(storage, 0, "bob", "alice", 0, shield_rides()).status == RaidStatus::started);
-
-    const std::vector<RaidEvent> first = raid_due(storage, 5, shield_rides());
-    REQUIRE(first.size() == 1);
-    CHECK(first[0].kind == RaidEvent::Kind::stolen);
-    CHECK(first[0].distance == 5000);
-    CHECK(first[0].loot == 500); /* raw 1000, then floor(1000 * 1000 / (1000 + 1000)). */
-    CHECK(first[0].shield_absorbed == 500);
-    CHECK(conquister_user(storage, "alice")->score == 9500);
-    CHECK(read_json(paths.conquister).at("raid_shields").at("alice") == 1);
-    const std::vector<RaidEvent> home = raid_due(storage, 10, shield_rides());
-    REQUIRE(home.size() == 1);
-    CHECK(home[0].loot == 500);
-    CHECK(conquister_user(storage, "bob")->score == 500);
-
-    CHECK(raid_start(storage, 0, "bob", "alice", 11, shield_rides()).status == RaidStatus::started);
-    const std::vector<RaidEvent> second = raid_due(storage, 16, shield_rides());
-    REQUIRE(second.size() == 1);
-    CHECK(second[0].loot == 231); /* raw 950, shield leaves 462, then raid resistance halves it. */
-    CHECK(second[0].shield_absorbed == 488);
-    CHECK(second[0].resistance_absorbed == 231);
-    CHECK(conquister_user(storage, "alice")->score == 9269);
-    CHECK(read_json(paths.conquister).at("raid_shields").at("alice") == 1);
-}
-
-TEST_CASE("a raid shield stays ready while its owner is away") {
-    const TestPaths paths{"raid-shield-away-test"};
+TEST_CASE("a raid on an empty house is marked undefended") {
+    const TestPaths paths{"raid-away-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":null,"scores":{"alice":2000,"bob":0,"carol":1000},"quotes_added":{},)"
              << R"("ids":{"alice":0,"bob":500,"carol":1000}})";
     }
     Storage storage{paths.conquister, paths.quotes};
-    CHECK(raid_shield_buy(storage, "alice", 1000).status == RaidShieldStatus::bought);
-    CHECK(raid_start(storage, 0, "alice", "carol", 0, shield_rides()).status == RaidStatus::started);
-    CHECK(raid_start(storage, 0, "bob", "alice", 0, shield_rides()).status == RaidStatus::started);
-    const std::vector<RaidEvent> arrivals = raid_due(storage, 5, shield_rides());
+    CHECK(raid_start(storage, 0, "alice", "carol", 0, full_rides()).status == RaidStatus::started);
+    CHECK(raid_start(storage, 0, "bob", "alice", 0, full_rides()).status == RaidStatus::started);
+    const std::vector<RaidEvent> arrivals = raid_due(storage, 5, full_rides());
     REQUIRE(arrivals.size() == 2);
     CHECK(arrivals[1].raider == "bob");
     CHECK(arrivals[1].undefended);
-    CHECK(arrivals[1].loot == 100);
-    CHECK(arrivals[1].shield_absorbed == 0);
-    CHECK(read_json(paths.conquister).at("raid_shields").at("alice") == 1);
-}
-
-TEST_CASE("holding the Conquister leaves the shield at home unguarded") {
-    const TestPaths paths{"raid-shield-holder-away-test"};
-    {
-        std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":{"user_id":1,"username":"alice","since":0},)"
-             << R"("scores":{"alice":2000,"bob":0},"quotes_added":{},)"
-             << R"("raid_shields":{"alice":1},"ids":{"alice":0,"bob":5000}})";
-    }
-    Storage storage{paths.conquister, paths.quotes};
-    CHECK(raid_start(storage, 0, "bob", "alice", 0, shield_rides()).status == RaidStatus::started);
-    const std::vector<RaidEvent> first = raid_due(storage, 5, shield_rides());
-    REQUIRE(first.size() == 1);
-    CHECK(first[0].kind == RaidEvent::Kind::stolen);
-    CHECK(first[0].undefended);
-    CHECK(first[0].loot == 200);
-    CHECK(first[0].shield_absorbed == 0);
-    CHECK(read_json(paths.conquister).at("raid_shields").at("alice") == 1);
-
-    static_cast<void>(raid_due(storage, 10, shield_rides()));
-    CHECK(raid_start(storage, 1, "alice", "alice", 11, shield_rides()).status == RaidStatus::left_place);
-    CHECK(raid_start(storage, 0, "bob", "alice", 12, shield_rides()).status == RaidStatus::started);
-    const std::vector<RaidEvent> second = raid_due(storage, 17, shield_rides());
-    REQUIRE(second.size() == 1);
-    CHECK_FALSE(second[0].undefended);
-    CHECK(second[0].shield_absorbed > 0);
-    CHECK(read_json(paths.conquister).at("raid_shields").at("alice") == 1);
+    /* A tenth of her 2000 palle: nobody at home to stand in the way. */
+    CHECK(arrivals[1].loot == 200);
 }
 
 TEST_CASE("a temporary balloon never defends against raids and disappears on departure") {
@@ -534,66 +454,21 @@ TEST_CASE("a temporary balloon never defends against raids and disappears on dep
              << R"("balloons":{"alice":3},"ids":{"alice":0,"bob":5000}})";
     }
     Storage storage{paths.conquister, paths.quotes};
-    CHECK(raid_start(storage, 0, "bob", "alice", 0, shield_rides()).status == RaidStatus::started);
-    const std::vector<RaidEvent> first = raid_due(storage, 5, shield_rides());
+    CHECK(raid_start(storage, 0, "bob", "alice", 0, full_rides()).status == RaidStatus::started);
+    const std::vector<RaidEvent> first = raid_due(storage, 5, full_rides());
     REQUIRE(first.size() == 1);
     CHECK(first[0].kind == RaidEvent::Kind::stolen);
     CHECK(first[0].undefended);
     CHECK(read_json(paths.conquister).at("balloons").at("alice") == 3);
 
-    static_cast<void>(raid_due(storage, 10, shield_rides()));
-    CHECK(raid_start(storage, 1, "alice", "alice", 11, shield_rides()).status == RaidStatus::left_place);
+    static_cast<void>(raid_due(storage, 10, full_rides()));
+    CHECK(raid_start(storage, 1, "alice", "alice", 11, full_rides()).status == RaidStatus::left_place);
     CHECK(read_json(paths.conquister).at("balloons").empty());
-    CHECK(raid_start(storage, 0, "bob", "alice", 12, shield_rides()).status == RaidStatus::started);
-    const std::vector<RaidEvent> second = raid_due(storage, 17, shield_rides());
+    CHECK(raid_start(storage, 0, "bob", "alice", 12, full_rides()).status == RaidStatus::started);
+    const std::vector<RaidEvent> second = raid_due(storage, 17, full_rides());
     REQUIRE(second.size() == 1);
     CHECK_FALSE(second[0].undefended);
     CHECK(second[0].kind == RaidEvent::Kind::stolen);
-}
-
-TEST_CASE("a raid shield rounds down and safely handles large loot") {
-    SUBCASE("one potential palla is stopped completely") {
-        const TestPaths paths{"raid-shield-one-test"};
-        {
-            std::ofstream file{paths.conquister, std::ios::binary};
-            file << R"({"current":null,"scores":{"alice":1,"bob":0},"quotes_added":{},)"
-                 << R"("ids":{"alice":0,"bob":500}})";
-        }
-        Storage storage{paths.conquister, paths.quotes};
-        CHECK(raid_shield_buy(storage, "alice", 0).status == RaidShieldStatus::bought);
-        RaidRules rules = shield_rides();
-        rules.loot_share = 0;
-        CHECK(raid_start(storage, 0, "bob", "alice", 0, rules).status == RaidStatus::started);
-        const std::vector<RaidEvent> arrival = raid_due(storage, 5, rules);
-        REQUIRE(arrival.size() == 1);
-        CHECK(arrival[0].loot == 0);
-        CHECK(arrival[0].shield_absorbed == 1);
-        CHECK_FALSE(read_json(paths.conquister).at("raid_resistance_levels").contains("alice"));
-        CHECK(conquister_user(storage, "alice")->score == 1);
-        CHECK(read_json(paths.conquister).at("raid_shields").at("alice") == 1);
-    }
-
-    SUBCASE("large potential loot does not overflow the multiplication") {
-        const TestPaths paths{"raid-shield-large-test"};
-        {
-            std::ofstream file{paths.conquister, std::ios::binary};
-            file << R"({"current":null,"scores":{"alice":1000000000000,"bob":0},"quotes_added":{},)"
-                 << R"("ids":{"alice":0,"bob":50000}})";
-        }
-        Storage storage{paths.conquister, paths.quotes};
-        CHECK(raid_shield_buy(storage, "alice", 0).status == RaidShieldStatus::bought);
-        RaidRules rules = shield_rides();
-        rules.loot_share = 0;
-        CHECK(raid_start(storage, 0, "bob", "alice", 0, rules).status == RaidStatus::started);
-        const std::vector<RaidEvent> arrival = raid_due(storage, 5, rules);
-        REQUIRE(arrival.size() == 1);
-        const std::int64_t potential = arrival[0].distance * arrival[0].raider_percent /
-            arrival[0].target_percent;
-        CHECK(potential > 1000);
-        CHECK(arrival[0].loot == potential * potential / (potential + 1000));
-        CHECK(arrival[0].shield_absorbed == potential - arrival[0].loot);
-        CHECK(conquister_user(storage, "alice")->score == 1000000000000 - arrival[0].loot);
-    }
 }
 
 TEST_CASE("raid resistance follows the victim across attackers, persists, and recovers") {
@@ -603,7 +478,7 @@ TEST_CASE("raid resistance follows the victim across attackers, persists, and re
         file << R"({"current":null,"scores":{"alice":1000000,"bob":0,"carol":0},)"
              << R"("ids":{"alice":0,"bob":5000,"carol":4000}})";
     }
-    RaidRules rules = shield_rides();
+    RaidRules rules = full_rides();
     rules.loot_share = 0;
     const auto potential = [](const RaidEvent &event) {
         return event.distance * event.raider_percent / event.target_percent;

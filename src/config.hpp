@@ -14,7 +14,6 @@ namespace norelecbot {
 
 struct AppConfig {
     static constexpr int default_quote_cost = 1000;
-    static constexpr int default_raid_shield_cost = 1000;
     static constexpr int default_furniture_cost = 10000;
     /* What share of the middle player's wealth a thing costs, and how many times the list price
        it may never pass. Zero per cent leaves the prices fixed. */
@@ -48,7 +47,6 @@ struct AppConfig {
     int quote_cost = default_quote_cost;
     /* Pieces of word a quote may not contain, whatever the spelling. */
     std::vector<std::string> quote_banned;
-    int raid_shield_cost = default_raid_shield_cost;
     /* What a shelf of emoji costs, and how many of them a name can carry. */
     int furniture_cost = default_furniture_cost;
     int furniture_limit = default_furniture_limit;

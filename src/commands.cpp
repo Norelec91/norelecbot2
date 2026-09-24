@@ -652,28 +652,9 @@ std::string handle_buy_boost(const CommandContext &context, std::string_view) {
     );
 }
 
-std::string handle_buy_shield(const CommandContext &context, std::string_view) {
-    if (context.username.empty()) {
-        return missing_username_reply();
-    }
-    const std::string username{context.username};
-    const int cost = price(context, context.config.raid_shield_cost);
-    const RaidShieldResult result = raid_shield_buy(context.storage, std::string{context.player_key}, cost);
-    if (result.status == RaidShieldStatus::already_owned) {
-        return std::format("{} hai già uno scudo pronto.", username);
-    }
-    if (result.status == RaidShieldStatus::has_boost) {
-        return std::format("{} hai un boost attivo: lo scudo puoi comprarlo dopo.", username);
-    }
-    if (result.status == RaidShieldStatus::insufficient_score) {
-        return std::format("{} ti servono {} palle per uno scudo (ne hai {}).", username, cost,
-                           result.available_score);
-    }
-    return std::format(
-        "🛡️ {} hai comprato uno scudo spendendo {} palle! Ridurrà i furti mentre sei a casa, "
-        "finché non compri un boost.",
-        username, cost
-    );
+std::string handle_buy_shield(const CommandContext &, std::string_view) {
+    return "🛡️ /buyshield è deprecato: lo scudo non esiste più. "
+           "Contro le razzie resta la resistenza, che dimezza il bottino dopo ogni furto subito.";
 }
 
 std::string handle_link(const CommandContext &context, std::string_view argument) {

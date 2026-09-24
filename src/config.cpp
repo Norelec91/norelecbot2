@@ -89,9 +89,6 @@ constexpr std::array settings{
         config.quote_banned = split_names(value);
         return true;
     }},
-    Setting{"NORELECBOT_RAID_SHIELD_COST", [](AppConfig &config, std::string_view value) {
-        return set_number(config.raid_shield_cost, value, AppConfig::default_raid_shield_cost, 0);
-    }},
     Setting{"NORELECBOT_FURNITURE_COST", [](AppConfig &config, std::string_view value) {
         return set_number(config.furniture_cost, value, AppConfig::default_furniture_cost, 0);
     }},

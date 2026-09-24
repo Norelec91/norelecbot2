@@ -86,16 +86,6 @@ std::int64_t charge_attacker(ConquisterState &state, const std::string &username
     return charged;
 }
 
-/* Apply x/(x+1000) to the potential loot x, without overflowing x*x for large scores. */
-std::int64_t shielded_loot(std::int64_t loot) {
-    constexpr std::int64_t k = 1000;
-    if (loot <= 0) {
-        return loot;
-    }
-    /* For x > k*(k-1), floor(x*x/(x+k)) is exactly x-k. */
-    return loot > k * (k - 1) ? loot - k : loot * loot / (loot + k);
-}
-
 std::int64_t resistance_adjusted_loot(ConquisterState &state, const std::string &target,
                                       std::int64_t loot, std::int64_t now) {
     if (loot <= 0) {
@@ -283,8 +273,7 @@ std::optional<std::string> legacy_owner(const ConquisterState &state, std::int64
 std::optional<std::string> known_player(const ConquisterState &state, std::string_view name) {
     for (const Counters *counters : {&state.scores, &state.quotes_added, &state.ids,
                                      &state.balloons, &state.cooldowns,
-                                     &state.boosts, &state.raid_shields,
-                                     &state.raid_resistance_levels}) {
+                                     &state.boosts, &state.raid_resistance_levels}) {
         if (const Counters::value_type *found = find_ignore_case(*counters, name); found != nullptr) {
             return found->first;
         }
@@ -443,8 +432,7 @@ LinkStatus player_link(Storage &storage, std::int64_t user_id, const std::string
         }
         const auto has_assets = [&state](const std::string &key) {
             const std::array items{&state.scores, &state.quotes_added, &state.balloons,
-                                   &state.cooldowns, &state.boosts,
-                                   &state.raid_shields, &state.raid_resistance_levels,
+                                   &state.cooldowns, &state.boosts, &state.raid_resistance_levels,
                                    &state.raid_resistance_since, &state.ids, &state.debugging};
             return std::ranges::any_of(items, [&key](const Counters *entries) {
                 return entries->find(key) != entries->end();
@@ -776,29 +764,6 @@ BurnResult palle_burn(Storage &storage, const std::string &player, std::int64_t 
     return result;
 }
 
-RaidShieldResult raid_shield_buy(Storage &storage, const std::string &username, int cost) {
-    const RaidShieldResult result = storage.transaction([&](StorageSession &session) {
-        ConquisterState &state = session.state();
-        const std::int64_t score = counter(state.scores, username);
-        if (find_entry(state.raid_shields, username) != state.raid_shields.end()) {
-            return RaidShieldResult{RaidShieldStatus::already_owned, score};
-        }
-        if (find_entry(state.boosts, username) != state.boosts.end()) {
-            return RaidShieldResult{RaidShieldStatus::has_boost, score};
-        }
-        if (score < cost) {
-            return RaidShieldResult{RaidShieldStatus::insufficient_score, score};
-        }
-        state.scores[username] = score - cost;
-        state.raid_shields[username] = 1;
-        return RaidShieldResult{RaidShieldStatus::bought, score - cost};
-    });
-    if (result.status == RaidShieldStatus::bought) {
-        log_info("raid shield bought user={} cost={} left={}", username, cost, result.available_score);
-    }
-    return result;
-}
-
 InvestmentResult investment_deposit(Storage &storage, const std::string &player,
                                     std::string_view target, RaidTargetKind platform,
                                     std::int64_t amount, std::int64_t now, zodiac::Overrides signs) {
@@ -1020,8 +985,7 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                     state.scores[raid.target] = counter(state.scores, raid.target) + raid.gift;
                     raid.gift = 0;
                 } else {
-                    const bool target_at_home = at_home(state, raid.target);
-                    event.undefended = !target_at_home;
+                    event.undefended = !at_home(state, raid.target);
                     const std::int64_t theirs = counter(state.scores, raid.target);
                     /* A palla for every unit of road walked to get there: neighbours take
                        little, whoever comes from far away pays for the journey. */
@@ -1039,13 +1003,6 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                         rules.loot_share > 0 ? theirs / rules.loot_share : theirs;
                     event.loot = std::min({theirs, carried, most});
                     if (event.loot > 0) {
-                        if (target_at_home) {
-                            if (find_entry(state.raid_shields, raid.target) != state.raid_shields.end()) {
-                                const std::int64_t potential = event.loot;
-                                event.loot = shielded_loot(potential);
-                                event.shield_absorbed = potential - event.loot;
-                            }
-                        }
                         const std::int64_t exposed = event.loot;
                         event.loot = resistance_adjusted_loot(state, raid.target, exposed, now);
                         event.resistance_absorbed = exposed - event.loot;
@@ -1123,7 +1080,6 @@ BoostResult boost_buy(
             return BoostResult{BoostStatus::insufficient_score, score};
         }
         state.scores[username] = score - cost;
-        state.raid_shields.erase(username);
         state.boosts[username] = multiplier;
         return BoostResult{BoostStatus::bought, score - cost, multiplier};
     });

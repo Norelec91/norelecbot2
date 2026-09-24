@@ -74,8 +74,6 @@ struct ConquisterState {
     Counters cooldowns;
     /* Users mapped to the multiplier their next hold earns, until someone takes the place from them. */
     Counters boosts;
-    /* Persistent protection that reduces raid loot at home until replaced by a boost. */
-    Counters raid_shields;
     /* Successful raids build resistance for the target, shared by every attacker. */
     Counters raid_resistance_levels;
     /* Start of the current resistance recovery interval. */
