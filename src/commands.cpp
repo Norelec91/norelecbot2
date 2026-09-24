@@ -348,6 +348,11 @@ std::string handle_burn(const CommandContext &context, std::int64_t amount) {
     );
 }
 
+/* His own name as he writes it after "We": with the mention on Telegram, bare on IRC. */
+std::string own_name(const CommandContext &context) {
+    return std::format("{}{}", context.user_id != 0 ? "@" : "", context.username);
+}
+
 /* "We @TheConquister37 emoji": the first copy on his name goes back to the place, out of the game. */
 std::string handle_emoji_burn(const CommandContext &context, std::string_view emoji) {
     if (context.username.empty()) {
@@ -355,6 +360,10 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
     }
     if (!furniture_burn(context.storage, std::string{context.player_key}, std::string{emoji})) {
         return std::format("🔥 {} non hai {} appesa al nome.", context.username, emoji);
+    }
+    if (emoji == "💩") {
+        return std::format("{}, tiri una palla di cacca a {}, bravo hai fatto centro, l'hai completamente smerdato!",
+                           own_name(context), conquister_place);
     }
     return std::format("🔥 {} hai riportato {} in {}: è uscita dal gioco.", context.username, emoji, conquister_place);
 }
@@ -573,11 +582,6 @@ std::string handle_add_quote(const CommandContext &context, std::string_view arg
         cost,
         quote
     );
-}
-
-/* His own name as he writes it after "We": with the mention on Telegram, bare on IRC. */
-std::string own_name(const CommandContext &context) {
-    return std::format("{}{}", context.user_id != 0 ? "@" : "", context.username);
 }
 
 std::string handle_buy_furniture(const CommandContext &context, std::string_view) {

@@ -708,6 +708,15 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     CHECK(command_dispatch(alice, "We @TheConquister37 🐟") ==
           "🔥 Alice hai riportato 🐟 in @TheConquister37: è uscita dal gioco.");
     CHECK(command_dispatch(alice, "We @TheConquister37 🐟") == "🔥 Alice non hai 🐟 appesa al nome.");
+    /* A pile of poo is not just burnt: it is thrown. */
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["tg:1"] = "🍕🎈💩";
+        return 0;
+    });
+    CHECK(command_dispatch(alice, "We @TheConquister37 💩") ==
+          "@Alice, tiri una palla di cacca a @TheConquister37, bravo hai fatto centro, l'hai completamente smerdato!");
+    CHECK(furniture_all(storage).at("tg:1") == "🍕🎈");
+    CHECK(command_dispatch(alice, "We @TheConquister37 💩") == "🔥 Alice non hai 💩 appesa al nome.");
 
     const std::string leaving = command_dispatch(alice, "We @Bob 🍕").value_or("");
     CHECK(leaving.starts_with("🎁 Alice parti per Bob con 🍕 da consegnare: arrivi tra "));
