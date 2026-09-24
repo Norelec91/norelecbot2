@@ -27,13 +27,12 @@ a fresh one. Entering the place or going home does not renew it: he carries the
 same balloon, as worn as it is.
 
 `conquister.json` keeps, under `balloons`, how many attempts each balloon has
-survived; a fresh balloon has no entry. The old `/buyballoon` command remains as
-an informational deprecation reply; it no longer buys anything.
+survived; a fresh balloon has no entry. The old `/buyballoon` command is gone.
 
 ## Retired raid shield
 
-The raid shield bought with `/buyshield` no longer exists. `/buyshield`
-remains as an informational deprecation reply and buys nothing. Shields saved
+The raid shield bought with `/buyshield` no longer exists, and neither does
+the command. Shields saved
 by older versions are removed from `conquister.json` when this version first
 loads the game state, without refunding the palle they cost.
 
@@ -71,17 +70,16 @@ home, not on the road nor from @TheConquister37. The price is
 doubled for every copy of that emoji already hanging from anybody's name.
 `We @yourname 1 2` moves the emoji in slot 1 to slot 2, swapping it with
 whatever hangs there; it is free, works only at home and only on the sender's
-own name. `/buyfurniture` remains as a deprecation reply that shows the new line
-with the sender's own name.
+own name. The old `/buyfurniture` command is gone.
 
 ## Lightning
 
 A ⚡ hanging on a player's name as he enters @TheConquister37 multiplies that
-hold by `NORELECBOT_BOOST_MULTIPLIER` (3 by default). The multiplier is fixed on
+hold by `NORELECBOT_LIGHTNING_MULTIPLIER` (3 by default). The multiplier is fixed on
 the way in and saved with the holder, so a ⚡ hung, received or burnt during the
 hold changes nothing until the next entry; several ⚡ are worth one, and the
-balloon stays. `/buyboost` remains as a deprecation reply pointing to
-`We @yourname ⚡`. Boosts bought with older versions are removed from
+balloon stays. The old `/buyboost` command is gone, and boosts bought with
+older versions are removed from
 `conquister.json` on the first load, without a refund.
 
 ## Emoji carried to another player

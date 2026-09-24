@@ -129,8 +129,8 @@ constexpr std::array settings{
         config.zodiac_signs = std::move(chosen);
         return true;
     }},
-    Setting{"NORELECBOT_BOOST_MULTIPLIER", [](AppConfig &config, std::string_view value) {
-        return set_number(config.boost_multiplier, value, AppConfig::default_boost_multiplier, 1, 100);
+    Setting{"NORELECBOT_LIGHTNING_MULTIPLIER", [](AppConfig &config, std::string_view value) {
+        return set_number(config.lightning_multiplier, value, AppConfig::default_lightning_multiplier, 1, 100);
     }},
     Setting{"NORELECBOT_CONQUISTER_CHAT_ID", [](AppConfig &config, std::string_view value) {
         return set_number(config.conquister_chat_id, value, std::int64_t{0});

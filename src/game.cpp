@@ -96,7 +96,7 @@ int balloon_pop_chance(const ConquisterState &state, const std::string &player) 
 /* What a hold was worth: the seconds it lasted, times the ⚡ he came in with, times the house of the day. */
 struct Settlement {
     std::int64_t earned = 0;
-    std::int64_t boost_multiplier = 0;
+    std::int64_t lightning = 0;
     int zodiac_percent = 100;
 };
 
@@ -105,12 +105,12 @@ Settlement settle_hold(ConquisterState &state, const Holder &hold, std::int64_t 
     Settlement settled;
     settled.earned = now > hold.since ? now - hold.since : 0;
     if (hold.multiplier > 1) {
-        settled.boost_multiplier = hold.multiplier;
-        if (settled.earned > std::numeric_limits<std::int64_t>::max() / settled.boost_multiplier) {
+        settled.lightning = hold.multiplier;
+        if (settled.earned > std::numeric_limits<std::int64_t>::max() / settled.lightning) {
             log_error("Could not multiply the Conquister score");
             throw StorageError("Conquister score overflow");
         }
-        settled.earned *= settled.boost_multiplier;
+        settled.earned *= settled.lightning;
     }
     settled.zodiac_percent = zodiac::percent_for(display_name(state, holder), now, signs);
     settled.earned = settled.earned / 100 * settled.zodiac_percent +
@@ -142,7 +142,7 @@ Departure go_home(ConquisterState &state, const std::string &player, std::int64_
     }
     const Settlement settled = leave_place(state, now, signs);
     log_info("left the place user={} earned={}", player, settled.earned);
-    return {.left = true, .earned = settled.earned, .boost_multiplier = settled.boost_multiplier,
+    return {.left = true, .earned = settled.earned, .lightning = settled.lightning,
             .zodiac_percent = settled.zodiac_percent};
 }
 
@@ -486,6 +486,16 @@ LinkStatus player_link(Storage &storage, std::int64_t user_id, const std::string
     });
 }
 
+std::optional<std::int64_t> returning_in(Storage &storage, const std::string &player, std::int64_t now) {
+    return storage.transaction([&](StorageSession &session) -> std::optional<std::int64_t> {
+        const Raid *trip = raid_of(session.state(), player);
+        if (trip == nullptr || !trip->arrived) {
+            return std::nullopt;
+        }
+        return std::max<std::int64_t>(trip->back - now, 0);
+    });
+}
+
 bool names_player(Storage &storage, const std::string &player, std::string_view name, RaidTargetKind platform) {
     return storage.transaction([&](StorageSession &session) {
         return player_by_name(session.state(), name, platform) == player;
@@ -545,7 +555,7 @@ ClaimResult conquister_claim(
             outcome.previous_key = holder;
             const Settlement settled = settle_hold(state, *state.current, now, rules.signs);
             outcome.earned = settled.earned;
-            outcome.boost_multiplier = settled.boost_multiplier;
+            outcome.lightning = settled.lightning;
             outcome.zodiac_percent = settled.zodiac_percent;
         }
         /* The ⚡ on his name as he comes in fixes what this hold is worth: nothing hung or burnt later
@@ -554,9 +564,9 @@ ClaimResult conquister_claim(
                                                    [](const std::string &slot) {
                                                        return slot == "⚡" || slot == "⚡\xEF\xB8\x8F";
                                                    });
-        outcome.multiplier = lightning && rules.lightning > 1 ? rules.lightning : 0;
+        outcome.entered_lightning = lightning && rules.lightning > 1 ? rules.lightning : 0;
         state.current = Holder{.user_id = user_id, .username = username, .since = now,
-                               .multiplier = outcome.multiplier};
+                               .multiplier = outcome.entered_lightning};
         return outcome;
     });
 
@@ -568,7 +578,7 @@ ClaimResult conquister_claim(
             result.previous_username,
             result.earned,
             result.balloon_popped ? 1 : 0,
-            result.boost_multiplier
+            result.lightning
         );
         break;
     case ClaimStatus::defended:
@@ -1209,10 +1219,6 @@ RaidResult raid_start(
             outcome.status = RaidStatus::unknown_target;
             return outcome;
         }
-        if (!gift_emoji.empty() && homewards) {
-            outcome.status = RaidStatus::not_to_yourself;
-            return outcome;
-        }
         const bool holds_place = state.current && text::equals_ignore_case(state.current->username, username);
         Raid *travelling = raid_of(state, username);
         /* Naming yourself is the way home. */
@@ -1236,7 +1242,7 @@ RaidResult raid_start(
                 const Settlement settled = leave_place(state, now, rules.signs);
                 outcome.status = RaidStatus::left_place;
                 outcome.earned = settled.earned;
-                outcome.boost_multiplier = settled.boost_multiplier;
+                outcome.lightning = settled.lightning;
                 outcome.zodiac_percent = settled.zodiac_percent;
                 return outcome;
             }

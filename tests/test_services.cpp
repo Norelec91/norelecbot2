@@ -141,7 +141,7 @@ TEST_CASE("a balloon defends the holder until it pops") {
 
     const ClaimResult entered = conquister_claim(storage, 1, "alice", 0);
     CHECK(entered.status == ClaimStatus::taken);
-    CHECK(entered.multiplier == 0);
+    CHECK(entered.entered_lightning == 0);
     /* Everybody has a balloon: a fresh one leaves no trace on file until something hits it. */
     CHECK_FALSE(read_json(paths.conquister).at("balloons").contains("alice"));
 
@@ -292,14 +292,14 @@ TEST_CASE("a ⚡ on the name as a player comes in multiplies that hold") {
     };
 
     const ClaimResult entered = conquister_claim(storage, 1, "alice", 0, rules);
-    CHECK(entered.multiplier == 3);
+    CHECK(entered.entered_lightning == 3);
     /* Burning the ⚡ halfway changes nothing: what the hold is worth was fixed on the way in. */
     CHECK(furniture_burn(storage, "alice", "⚡").status == FurnitureBurnStatus::burned);
     const ClaimResult kicked = conquister_claim(storage, 2, "bob", 1000, rules);
     CHECK(kicked.previous_username == "alice");
-    CHECK(kicked.boost_multiplier == 3);
+    CHECK(kicked.lightning == 3);
     CHECK(kicked.earned == earnings("alice", 1000, 1000, 3));
-    CHECK(kicked.multiplier == 0);
+    CHECK(kicked.entered_lightning == 0);
 
     /* Coming in without one, a ⚡ that arrives later does not count either. */
     storage.transaction([](StorageSession &session) {
@@ -308,9 +308,9 @@ TEST_CASE("a ⚡ on the name as a player comes in multiplies that hold") {
     });
     worn_out();
     const ClaimResult plain = conquister_claim(storage, 1, "alice", 1500, rules);
-    CHECK(plain.boost_multiplier == 0);
+    CHECK(plain.lightning == 0);
     CHECK(plain.earned == earnings("bob", 500, 1500));
-    CHECK(plain.multiplier == 0);
+    CHECK(plain.entered_lightning == 0);
 
     /* Several ⚡ are worth one, and the balloon stays: the ⚡ only multiplies. */
     storage.transaction([](StorageSession &session) {
@@ -319,10 +319,10 @@ TEST_CASE("a ⚡ on the name as a player comes in multiplies that hold") {
     });
     worn_out();
     const ClaimResult bolt = conquister_claim(storage, 2, "bob", 2000, rules);
-    CHECK(bolt.multiplier == 3);
+    CHECK(bolt.entered_lightning == 3);
     const RaidResult left = raid_start(storage, 2, "bob", "bob", 2100, RaidRules{});
     CHECK(left.status == RaidStatus::left_place);
-    CHECK(left.boost_multiplier == 3);
+    CHECK(left.lightning == 3);
     CHECK(left.earned == earnings("bob", 100, 2100, 3));
 }
 
@@ -963,11 +963,9 @@ TEST_CASE("an emoji is carried to another player, or burnt at the place") {
         return found == all.end() ? std::string{} : found->second;
     };
 
-    /* Only an emoji he has, only to somebody else. */
+    /* Only an emoji he has. */
     CHECK(raid_start(storage, 0, "alice", "bob", 0, quick_rides(), RaidTargetKind::any, 0, "🐟").status ==
           RaidStatus::no_such_emoji);
-    CHECK(raid_start(storage, 0, "alice", "alice", 0, quick_rides(), RaidTargetKind::any, 0, "🍕").status ==
-          RaidStatus::not_to_yourself);
 
     /* It leaves her name as she sets off, a hole where it hung. */
     REQUIRE(raid_start(storage, 0, "alice", "bob", 0, quick_rides(), RaidTargetKind::any, 0, "🍕").status ==

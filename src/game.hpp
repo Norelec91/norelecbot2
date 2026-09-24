@@ -26,14 +26,14 @@ struct ClaimResult {
     /* taken: getting in popped a balloon. defended: the percentage the next attempt will have. */
     bool balloon_popped = false;
     /* taken: what the new hold is multiplied by, fixed by the ⚡ on his name; 0 without one. */
-    std::int64_t multiplier = 0;
+    std::int64_t entered_lightning = 0;
     int next_chance = 0;
     /* cooldown: seconds still to wait. defended: the penalty just handed out. */
     std::int64_t penalty_seconds = 0;
     /* travelling: how long before the claimer is home again. */
     std::int64_t travel_seconds = 0;
     /* taken: what the kicked holder's ⚡ multiplied the hold by, zero when there was none. */
-    std::int64_t boost_multiplier = 0;
+    std::int64_t lightning = 0;
     /* taken: what the house of the day was worth to the kicked holder, 100 when it was indifferent. */
     int zodiac_percent = 100;
 };
@@ -43,7 +43,7 @@ struct ClaimResult {
 struct Departure {
     bool left = false;
     std::int64_t earned = 0;
-    std::int64_t boost_multiplier = 0;
+    std::int64_t lightning = 0;
     int zodiac_percent = 100;
 };
 
@@ -85,11 +85,9 @@ enum class RaidStatus {
     /* Only when palle are taken along: not enough of them, or a number that makes no sense. */
     insufficient_score,
     invalid_amount,
-    /* Only when an emoji is taken along: he has none like it, the target has no empty slot, or the
-       target is himself. */
+    /* Only when an emoji is taken along: he has none like it, or the target has no empty slot. */
     no_such_emoji,
-    no_room,
-    not_to_yourself
+    no_room
 };
 
 enum class RaidTargetKind { any, telegram, irc };
@@ -136,7 +134,7 @@ struct RaidResult {
     std::int64_t seconds = 0;
     /* left_place: what the hold he just gave up was worth, and what made it worth that. */
     std::int64_t earned = 0;
-    std::int64_t boost_multiplier = 0;
+    std::int64_t lightning = 0;
     int zodiac_percent = 100;
     /* What is left after the palle taken along were picked up, or what there was when they were too few. */
     std::int64_t score = 0;
@@ -268,6 +266,8 @@ struct Profile {
 /* Case-insensitive lookup; rank is 0 when the user has no score yet. */
 [[nodiscard]] std::optional<ConquisterUser> conquister_user(Storage &storage, std::string_view username,
                                                            RaidTargetKind platform = RaidTargetKind::any);
+/* Seconds until a traveller already on his way back is home; nothing when he is not coming back yet. */
+[[nodiscard]] std::optional<std::int64_t> returning_in(Storage &storage, const std::string &player, std::int64_t now);
 /* Whether a name, as written on that platform, is this very player. */
 [[nodiscard]] bool names_player(Storage &storage, const std::string &player, std::string_view name,
                                 RaidTargetKind platform);

@@ -171,13 +171,13 @@ std::string dressed(const Authors &furniture, std::string_view key, std::string_
 std::string hold_note(
     const CommandContext &context,
     const std::string &holder,
-    std::int64_t boost_multiplier,
+    std::int64_t lightning,
     int zodiac_percent,
     std::int64_t now
 ) {
     std::string note;
-    if (boost_multiplier > 0) {
-        note += std::format(" col ⚡ x{}", boost_multiplier);
+    if (lightning > 0) {
+        note += std::format(" col ⚡ x{}", lightning);
     }
     if (zodiac_percent != 100) {
         const zodiac::Sign sign = zodiac::sign_of(holder, context.config.zodiac_signs);
@@ -198,6 +198,11 @@ std::int64_t seconds_now() {
     return std::chrono::duration_cast<std::chrono::seconds>(
                std::chrono::system_clock::now().time_since_epoch()
     ).count();
+}
+
+/* A count of palle, in the singular when there is just one. */
+std::string palle(std::int64_t count) {
+    return std::format("{} {}", count, count == 1 || count == -1 ? "palla" : "palle");
 }
 
 std::string format_wait(std::int64_t seconds) {
@@ -280,12 +285,12 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
         return std::format("🚀 {} non conosco nessun giocatore di nome {}.", username, target);
     case RaidStatus::left_place:
         return std::format(
-            "🪐 {} torni da {} in {} con {} palle{}.",
+            "🪐 {} torni da {} in {} con {}{}.",
             username,
             conquister_place,
             home,
-            result.earned,
-            hold_note(context, username, result.boost_multiplier, result.zodiac_percent, seconds_now())
+            palle(result.earned),
+            hold_note(context, username, result.lightning, result.zodiac_percent, seconds_now())
         );
     case RaidStatus::coming_home:
         return std::format(
@@ -297,15 +302,13 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
     case RaidStatus::home_already:
         return std::format("🪐 {} sei già in {}!", username, home);
     case RaidStatus::insufficient_score:
-        return std::format("🎁 {} hai solo {} palle disponibili.", username, result.score);
+        return std::format("🎁 {} hai solo {} a disposizione.", username, palle(result.score));
     case RaidStatus::invalid_amount:
         return std::format("🎁 {} indica un numero di palle maggiore di zero.", username);
     case RaidStatus::no_such_emoji:
         return std::format("🎁 {} non hai {} appesa al nome.", username, gift_emoji);
     case RaidStatus::no_room:
         return std::format("🎁 {} {} non ha posti liberi per {}.", username, target, gift_emoji);
-    case RaidStatus::not_to_yourself:
-        return std::format("🎁 {} le emoji si portano agli altri giocatori.", username);
     case RaidStatus::started:
         break;
     }
@@ -320,10 +323,10 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
     }
     if (gift > 0) {
         return std::format(
-            "🚀 {} parti per {} con {} palle da consegnare: arrivi tra {}. Il tuo pianeta resta scoperto.",
+            "🚀 {} parti per {} con {} da consegnare: arrivi tra {}. Il tuo pianeta resta scoperto.",
             username,
             result.target,
-            gift,
+            palle(gift),
             format_wait(result.seconds)
         );
     }
@@ -346,17 +349,22 @@ std::string departure_line(const CommandContext &context, const Departure &depar
         return {};
     }
     return std::format(
-        "🪐 {} torni da {} in {} con {} palle{}.\n",
+        "🪐 {} torni da {} in {} con {}{}.\n",
         context.username,
         conquister_place,
         own_name(context),
-        departure.earned,
-        hold_note(context, std::string{context.username}, departure.boost_multiplier, departure.zodiac_percent, now)
+        palle(departure.earned),
+        hold_note(context, std::string{context.username}, departure.lightning, departure.zodiac_percent, now)
     );
 }
 
-/* On the road only the way back is open: says so, and how to take it. */
+/* On the road only the way back is open: says so, and how to take it, or when it ends for whoever is on it. */
 std::string on_the_road(const CommandContext &context, std::string_view emoji, std::string_view what) {
+    if (const std::optional<std::int64_t> left = returning_in(context.storage, std::string{context.player_key},
+                                                               seconds_now())) {
+        return std::format("{} {} sei sulla via del ritorno: {} Rientri tra {}.",
+                           emoji, context.username, what, format_wait(*left));
+    }
     return std::format("{} {} sei in viaggio: {} Per tornare indietro scrivi We {}.",
                        emoji, context.username, what, own_name(context));
 }
@@ -377,17 +385,19 @@ std::string handle_burn(const CommandContext &context, std::int64_t amount) {
     case BurnStatus::invalid_amount:
         return std::format("🔥 {} indica un numero di palle maggiore di zero.", context.username);
     case BurnStatus::insufficient_score:
-        return std::format("🔥 {} hai solo {} palle disponibili.", context.username, result.score);
+        return std::format("🔥 {} hai solo {} a disposizione.", context.username, palle(result.score));
     case BurnStatus::travelling:
         return on_the_road(context, "🔥", "si brucia dal tuo pianeta o da @TheConquister37.");
     case BurnStatus::burned:
         break;
     }
     return std::format(
-        "🔥 {} hai riportato {} palle in {}: sono uscite dal gioco. Te ne restano {}.",
+        "🔥 {} hai riportato {} in {}: {} dal gioco. Te ne {} {}.",
         context.username,
-        result.amount,
+        palle(result.amount),
         conquister_place,
+        result.amount == 1 ? "è uscita" : "sono uscite",
+        result.score == 1 ? "resta" : "restano",
         result.score
     );
 }
@@ -478,11 +488,11 @@ std::optional<std::string> handle_investment(const CommandContext &context, cons
     case InvestmentStatus::deposited: {
         const std::string_view horoscope = result.zodiac_percent == 125 ? "favorevole" :
             result.zodiac_percent == 75 ? "sfavorevole" : "neutro";
-        return departure + std::format("🏦 {} hai investito {} palle. "
+        return departure + std::format("🏦 {} hai investito {}. "
                                        "Rendimento di oggi: {}% (oroscopo {}). "
-                                       "Saldo disponibile: {} palle.",
-                                       context.username, result.amount, signed_amount(result.daily_rate),
-                                       horoscope, result.score);
+                                       "Saldo disponibile: {}.",
+                                       context.username, palle(result.amount), signed_amount(result.daily_rate),
+                                       horoscope, palle(result.score));
     }
     case InvestmentStatus::not_self:
         return std::nullopt;
@@ -491,7 +501,7 @@ std::optional<std::string> handle_investment(const CommandContext &context, cons
     case InvestmentStatus::invalid_amount:
         return std::format("🏦 {} indica un numero di palle maggiore di zero.", context.username);
     case InvestmentStatus::insufficient_score:
-        return departure + std::format("🏦 {} hai solo {} palle disponibili.", context.username, result.score);
+        return departure + std::format("🏦 {} hai solo {} a disposizione.", context.username, palle(result.score));
     default:
         return std::string{internal_error_reply};
     }
@@ -512,7 +522,7 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
             ClaimRules{
                 .cooldown_seconds = context.config.cooldown_seconds,
                 .signs = context.config.zodiac_signs,
-                .lightning = context.config.boost_multiplier,
+                .lightning = context.config.lightning_multiplier,
             }
         );
     /* A name that came from IRC must not be written as a mention: on Telegram it would tag a stranger. */
@@ -556,13 +566,13 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
     }
     if (!result.previous_username.empty()) {
         reply += std::format(
-            "{0} hai cacciato {4}{1} da {2}.\n{1} hai guadagnato {3} palle{5}!\n",
+            "{0} hai cacciato {4}{1} da {2}.\n{1} hai guadagnato {3}{5}!\n",
             dressed(furniture, context.player_key, username),
             dressed(furniture, result.previous_key, result.previous_username),
             conquister_place,
-            result.earned,
+            palle(result.earned),
             mention,
-            hold_note(context, result.previous_username, result.boost_multiplier, result.zodiac_percent, now)
+            hold_note(context, result.previous_username, result.lightning, result.zodiac_percent, now)
         );
     }
     reply += std::format("🪐 {} sei in {}!", dressed(furniture, context.player_key, username), conquister_place);
@@ -589,11 +599,11 @@ std::string handle_leaderboard(const CommandContext &context, std::string_view) 
     );
     for (std::size_t position = 1; const LeaderboardEntry &entry : leaderboard.entries) {
         reply += std::format(
-            "\n{}) {} {} — {} palle",
+            "\n{}) {} {} — {}",
             position++,
             zodiac::sign_of(entry.username, context.config.zodiac_signs).symbol,
             dressed(furniture, entry.player_key, entry.username),
-            entry.score
+            palle(entry.score)
         );
         if (entry.quotes_added > 0) {
             reply += std::format(
@@ -619,7 +629,7 @@ std::string handle_add_quote(const CommandContext &context, std::string_view arg
     }
     const int cost = price(context, context.config.quote_cost);
     if (argument.empty()) {
-        return std::format("Uso: {}addquote <testo>. Costa {} palle.", command_prefix(context), cost);
+        return std::format("Uso: {}addquote <testo>. Costa {}.", command_prefix(context), palle(cost));
     }
     const std::string username{context.username};
     /* Nobody gets tagged by a quote read out months later. */
@@ -633,9 +643,9 @@ std::string handle_add_quote(const CommandContext &context, std::string_view arg
     const QuoteAddResult result = quote_add(context.storage, std::string{context.player_key}, quote, cost);
     if (result.status == QuoteAddStatus::insufficient_score) {
         return std::format(
-            "{} ti servono {} palle per aggiungere una citazione (ne hai {}).",
+            "{} ti servono {} per aggiungere una citazione (ne hai {}).",
             username,
-            cost,
+            palle(cost),
             result.available_score
         );
     }
@@ -643,23 +653,10 @@ std::string handle_add_quote(const CommandContext &context, std::string_view arg
         return "Citazione già presente o non salvabile: nessun addebito.";
     }
     return std::format(
-        "{} hai aggiunto la citazione spendendo {} palle!\n\n{}",
+        "{} hai aggiunto la citazione spendendo {}!\n\n{}",
         username,
-        cost,
+        palle(cost),
         quote
-    );
-}
-
-std::string handle_buy_furniture(const CommandContext &context, std::string_view) {
-    if (context.username.empty()) {
-        return missing_username_reply();
-    }
-    return std::format(
-        "🛋️ {}buyfurniture è deprecato: le emoji ora si comprano dal tuo pianeta con We {} 🍕, "
-        "oppure We {} 🍕 3 per sceglierne il posto.",
-        command_prefix(context),
-        own_name(context),
-        own_name(context)
     );
 }
 
@@ -698,19 +695,19 @@ std::string handle_furniture(const CommandContext &context, std::string_view wan
         return departure + std::format("🛋️ {} nel posto {} c'è già {}: nessun addebito.", username, result.position, result.replaced);
     case FurnitureStatus::insufficient_score:
         if (result.copies > 0) {
-            return departure + std::format("🛋️ {} ti servono {} palle per {} (ce ne sono già {} in giro, ne hai {}).",
-                               username, result.charged, emoji, result.copies, result.available_score);
+            return departure + std::format("🛋️ {} ti servono {} per {} (ce ne sono già {} in giro, ne hai {}).",
+                               username, palle(result.charged), emoji, result.copies, result.available_score);
         }
-        return departure + std::format("🛋️ {} ti servono {} palle per {} (ne hai {}).",
-                           username, result.charged, emoji, result.available_score);
+        return departure + std::format("🛋️ {} ti servono {} per {} (ne hai {}).",
+                           username, palle(result.charged), emoji, result.available_score);
     case FurnitureStatus::bought:
         break;
     }
     std::string reply = std::format(
-        "🛋️ {} ({}) hai speso {} palle: {} nel posto {}",
+        "🛋️ {} ({}) hai speso {}: {} nel posto {}",
         username,
         result.shown,
-        result.charged,
+        palle(result.charged),
         emoji,
         result.position
     );
@@ -781,7 +778,7 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
     std::string card = profile.furniture.empty() ? std::format("👤 {}\n", profile.name)
                                                  : std::format("👤 {} ({})\n", profile.name, profile.furniture);
     card += profile.rank == 0 ? std::string{"💰 nessuna palla ancora\n"}
-                              : std::format("💰 {} palle, {}° su {} in classifica\n", profile.score, profile.rank,
+                              : std::format("💰 {}, {}° su {} in classifica\n", palle(profile.score), profile.rank,
                                             profile.players);
     const zodiac::Sign sign = zodiac::sign_of(profile.name, context.config.zodiac_signs);
     const int percent = zodiac::percent_for(profile.name, now, context.config.zodiac_signs);
@@ -802,20 +799,15 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
         break;
     }
     if (profile.invested > 0) {
-        card += std::format("🏦 investite {} palle, ora ne valgono {}\n", profile.invested, profile.investment_value);
+        card += std::format("🏦 {} investit{}, ora ne {} {}\n", palle(profile.invested),
+                            profile.invested == 1 ? "a" : "e", profile.investment_value == 1 ? "vale" : "valgono",
+                            profile.investment_value);
     }
     if (profile.quotes_added > 0) {
         card += std::format("📜 {} citazion{}\n", profile.quotes_added, profile.quotes_added == 1 ? "e" : "i");
     }
     card.pop_back();
     return card;
-}
-
-std::string handle_buy_balloon(const CommandContext &context, std::string_view) {
-    return std::format("🎈 {}buyballoon è deprecato: non serve più comprare il palloncino. "
-                       "Ce l'hai sempre e protegge il posto dove sei: "
-                       "@TheConquister37 o il tuo pianeta. Quando scoppia, se ne forma subito uno nuovo.",
-                       command_prefix(context));
 }
 
 /* The owner is an admin with more powers, so he never has to be listed twice. */
@@ -893,22 +885,6 @@ std::string handle_delete_quote(const CommandContext &context, std::string_view 
     return removed ? std::format("Citazione eliminata: {}", *removed) : "Citazione non trovata.";
 }
 
-std::string handle_buy_boost(const CommandContext &context, std::string_view) {
-    if (context.username.empty()) {
-        return missing_username_reply();
-    }
-    return std::format("⚡ {}buyboost è deprecato: appendi ⚡ al nome con We {} ⚡ e ogni possesso di {} "
-                       "in cui entri con il fulmine vale x{}.",
-                       command_prefix(context), own_name(context), conquister_place,
-                       context.config.boost_multiplier);
-}
-
-std::string handle_buy_shield(const CommandContext &context, std::string_view) {
-    return std::format("🛡️ {}buyshield è deprecato: lo scudo non esiste più. "
-                       "Contro le razzie resta il palloncino, che ti protegge quando sei sul tuo pianeta.",
-                       command_prefix(context));
-}
-
 std::string handle_link(const CommandContext &context, std::string_view argument) {
     if (context.username.empty()) {
         return missing_username_reply();
@@ -944,10 +920,6 @@ constexpr std::array commands{
     CommandDefinition{"/help", handle_help},
     CommandDefinition{"/profile", handle_profile},
     CommandDefinition{"/addquote", handle_add_quote},
-    CommandDefinition{"/buyballoon", handle_buy_balloon},
-    CommandDefinition{"/buyboost", handle_buy_boost},
-    CommandDefinition{"/buyshield", handle_buy_shield},
-    CommandDefinition{"/buyfurniture", handle_buy_furniture},
     CommandDefinition{"/link", handle_link},
     CommandDefinition{"/quotes", handle_quotes},
     CommandDefinition{"/delquote", handle_delete_quote},
@@ -984,11 +956,11 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
             return std::format("🎁 {} torni in {} con {} ancora in tasca.", raider, home, event.gift_emoji);
         }
         if (event.gift > 0) {
-            return std::format("🎁 {} torni in {} con le tue {} palle ancora in tasca.",
-                               raider, home, event.gift);
+            return std::format("🎁 {} torni in {} con {} ancora in tasca.", raider, home,
+                               event.gift == 1 ? std::string{"la tua palla"} : std::format("le tue {} palle", event.gift));
         }
         if (event.loot > 0) {
-            return std::format("🪐 {} torni in {} con {} palle.", raider, home, event.loot);
+            return std::format("🪐 {} torni in {} con {}.", raider, home, palle(event.loot));
         }
         /* Coming home with nothing is not news. */
         return std::nullopt;
@@ -1003,9 +975,9 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
     }
     if (event.kind == RaidEvent::Kind::delivered) {
         return std::format(
-            "🎁 {} hai consegnato {} palle a {}{}! Torni in {} tra {}.",
+            "🎁 {} hai consegnato {} a {}{}! Torni in {} tra {}.",
             raider,
-            event.gift,
+            palle(event.gift),
             mention,
             target,
             home,
@@ -1025,8 +997,8 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
         );
     }
     std::string reply = event.balloon_popped
-        ? std::format("💰 {} hai bucato il palloncino di {}{} e rubato {} palle", raider, mention, target, event.loot)
-        : std::format("💰 {} hai rubato {} palle a {}{}", raider, event.loot, mention, target);
+        ? std::format("💰 {} hai bucato il palloncino di {}{} e rubato {}", raider, mention, target, palle(event.loot))
+        : std::format("💰 {} hai rubato {} a {}{}", raider, palle(event.loot), mention, target);
     if (event.undefended) {
         reply += ", che non era sul suo pianeta";
     }
@@ -1119,9 +1091,11 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
                     context.config.zodiac_signs);
                 const std::string departure = departure_line(bound, investment.departure, seconds_now());
                 if (investment.status == InvestmentStatus::withdrawn) {
-                    return departure + std::format("🏦 {} hai ritirato {} palle (rendimento: {} palle). Saldo: {} palle.",
-                                                   context.username, investment.amount, signed_amount(investment.interest),
-                                                   investment.score);
+                    return departure + std::format("🏦 {} hai ritirato {} (rendimento: {} {}). Saldo: {}.",
+                                                   context.username, palle(investment.amount),
+                                                   signed_amount(investment.interest),
+                                                   investment.interest == 1 || investment.interest == -1 ? "palla" : "palle",
+                                                   palle(investment.score));
                 }
                 if (investment.status == InvestmentStatus::balance_limit) {
                     return departure + std::format("🏦 {} il saldo è troppo alto per ritirare l'investimento: contatta il proprietario del bot.",

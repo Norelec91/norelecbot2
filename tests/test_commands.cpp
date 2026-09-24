@@ -104,33 +104,12 @@ TEST_CASE("the bot answers the commands it knows and ignores the rest") {
         context.owner = true;
         CHECK(reply("/delquote 1") == "Citazione eliminata: citazione di prova");
 
+        /* The retired purchases are gone: the bot does not answer them any more. */
         context.owner = false;
-        context.user_id = 4;
-        context.username = "dave";
-        const std::string deprecated_balloon =
-            "🎈 /buyballoon è deprecato: non serve più comprare il palloncino. "
-            "Ce l'hai sempre e protegge il posto dove sei: "
-            "@TheConquister37 o il tuo pianeta. Quando scoppia, se ne forma subito uno nuovo.";
-        CHECK(command_is_for_bot("/buyballoon"));
-        CHECK(reply("/buyballoon") == deprecated_balloon);
-        context.user_id = 5;
-        context.username = "erin";
-        CHECK(reply("/buyballoon") == deprecated_balloon);
-
-        context.owner = false;
-        context.user_id = 6;
-        context.username = "frank";
-        CHECK(command_is_for_bot("/buyboost"));
-        CHECK(reply("/buyboost") ==
-              "⚡ /buyboost è deprecato: appendi ⚡ al nome con We @frank ⚡ e ogni possesso di "
-              "@TheConquister37 in cui entri con il fulmine vale x3.");
-
-        context.user_id = 8;
-        context.username = "heidi";
-        CHECK(command_is_for_bot("/buyshield"));
-        CHECK(reply("/buyshield") ==
-              "🛡️ /buyshield è deprecato: lo scudo non esiste più. "
-              "Contro le razzie resta il palloncino, che ti protegge quando sei sul tuo pianeta.");
+        for (const std::string_view retired : {"/buyballoon", "/buyboost", "/buyshield", "/buyfurniture"}) {
+            CHECK_FALSE(command_is_for_bot(retired));
+            CHECK_FALSE(command_dispatch(context, retired));
+        }
 
         config.quote_cost = 0;
         context.user_id = 3;
@@ -689,7 +668,7 @@ TEST_CASE("the profile shows where a player stands") {
     CHECK(mine.contains("\n🪐 in @Alice\n"));
     /* The balloon stays out of it, worn or not. */
     CHECK_FALSE(mine.contains("🎈"));
-    CHECK(mine.contains("\n🏦 investite 1000 palle, ora ne valgono "));
+    CHECK(mine.contains("\n🏦 1000 palle investite, ora ne valgono "));
     CHECK(mine.ends_with("\n📜 3 citazioni"));
 
     /* The same card, seen by somebody else, with the name as it is written on that platform. */
@@ -738,11 +717,6 @@ TEST_CASE("the help lists every We line with the asker's own name") {
     /* Every reply that names a command names it the way it is typed there. */
     CHECK(command_dispatch(irc, "/addquote")->starts_with("Uso: !addquote <testo>."));
     CHECK(command_dispatch(telegram, "/addquote")->starts_with("Uso: /addquote <testo>."));
-    CHECK(command_dispatch(irc, "/buyshield")->starts_with("🛡️ !buyshield è deprecato"));
-    CHECK(command_dispatch(irc, "/buyballoon")->starts_with("🎈 !buyballoon è deprecato"));
-    CHECK(command_dispatch(irc, "/buyfurniture") ==
-          "🛋️ !buyfurniture è deprecato: le emoji ora si comprano dal tuo pianeta con We Bob 🍕, "
-          "oppure We Bob 🍕 3 per sceglierne il posto.");
     CommandContext owner = irc;
     owner.owner = true;
     CHECK(command_dispatch(owner, "/delquote") == "Uso: !delquote <numero da !quotes | testo esatto>.");
@@ -815,9 +789,13 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
           "🔥 Alice sei in viaggio: si brucia dal tuo pianeta o da @TheConquister37. Per tornare indietro scrivi We @Alice.");
     CHECK(command_dispatch(alice, "We @Alice 1") ==
           "🏦 Alice sei in viaggio: si investe dal tuo pianeta. Per tornare indietro scrivi We @Alice.");
-    CHECK(command_dispatch(alice, "/buyfurniture 🚀") ==
-          "🛋️ /buyfurniture è deprecato: le emoji ora si comprano dal tuo pianeta con We @Alice 🍕, "
-          "oppure We @Alice 🍕 3 per sceglierne il posto.");
+
+    /* Once the pizza is handed over she is on her way back: nothing to turn around, just when she is home. */
+    const std::int64_t later = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count() + 6;
+    REQUIRE(raid_due(storage, later, RaidRules{}).size() == 1);
+    const std::string back = command_dispatch(alice, "We @Alice 1").value_or("");
+    CHECK(back.starts_with("🏦 Alice sei sulla via del ritorno: si investe dal tuo pianeta. Rientri tra "));
 
     RaidEvent given;
     given.kind = RaidEvent::Kind::delivered;
@@ -918,7 +896,7 @@ TEST_CASE("We with a number for the place destroys the palle") {
 
     CHECK(command_is_for_bot("We @TheConquister37 400"));
     CHECK(command_dispatch(alice, "We @TheConquister37 0")->contains("maggiore di zero"));
-    CHECK(command_dispatch(alice, "We @TheConquister37 1001")->contains("hai solo 1000 palle disponibili"));
+    CHECK(command_dispatch(alice, "We @TheConquister37 1001")->contains("hai solo 1000 palle a disposizione"));
     CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 1000);
 
     CHECK(command_dispatch(alice, "We @TheConquister37 400") ==
@@ -948,7 +926,7 @@ TEST_CASE("We with a number for somebody else sends the palle to them") {
     });
 
     CHECK(command_dispatch(alice, "We @Bob 0")->contains("maggiore di zero"));
-    CHECK(command_dispatch(alice, "We @Bob 1001")->contains("hai solo 1000 palle disponibili"));
+    CHECK(command_dispatch(alice, "We @Bob 1001")->contains("hai solo 1000 palle a disposizione"));
     CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 1000);
 
     const std::string leaving = command_dispatch(alice, "We @Bob 400").value_or("");
