@@ -160,6 +160,7 @@ ConquisterState parse_state(const Json &json) {
             .user_id = integer(current->at("user_id")),
             .username = current->at("username").get<std::string>(),
             .since = integer(current->at("since")),
+            .multiplier = current->contains("multiplier") ? integer(current->at("multiplier")) : 0,
         };
     }
     return ConquisterState{
@@ -168,7 +169,6 @@ ConquisterState parse_state(const Json &json) {
         parse_counters(json, "quotes_added"),
         parse_balloons(json),
         parse_counters(json, "cooldowns"),
-        parse_counters(json, "boosts"),
         parse_counters(json, "ids"),
         parse_counters(json, "telegram_ids"),
         parse_counters(json, "irc_names"),
@@ -211,6 +211,7 @@ Json state_to_json(const ConquisterState &state) {
             {"user_id", state.current->user_id},
             {"username", state.current->username},
             {"since", state.current->since},
+            {"multiplier", state.current->multiplier},
         };
     }
     return Json{
@@ -219,7 +220,6 @@ Json state_to_json(const ConquisterState &state) {
         {"quotes_added", state.quotes_added},
         {"balloons", state.balloons},
         {"cooldowns", state.cooldowns},
-        {"boosts", state.boosts},
         {"ids", state.ids},
         {"telegram_ids", state.telegram_ids},
         {"irc_names", state.irc_names},
@@ -246,9 +246,11 @@ std::optional<ConquisterState> load_state(const std::string &path, bool *has_leg
         try {
             ConquisterState state = parse_state(*json);
             if (has_legacy_shields != nullptr) {
-                /* Timed balloons, bought raid shields and raid resistance are gone: rewrite without them. */
+                /* Timed balloons, bought raid shields, raid resistance and bought boosts are gone: rewrite
+                   without them. */
                 *has_legacy_shields = json->contains("shields") || json->contains("raid_shields") ||
-                    json->contains("raid_resistance_levels") || json->contains("raid_resistance_since");
+                    json->contains("raid_resistance_levels") || json->contains("raid_resistance_since") ||
+                    json->contains("boosts");
             }
             return state;
         } catch (const std::exception &failure) {

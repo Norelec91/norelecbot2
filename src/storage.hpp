@@ -28,6 +28,8 @@ struct Holder {
     std::int64_t user_id = 0;
     std::string username;
     std::int64_t since = 0;
+    /* What this hold is multiplied by, fixed on the way in by the ⚡ he had on his name; 0 for nothing. */
+    std::int64_t multiplier = 0;
 
     bool operator==(const Holder &) const = default;
 };
@@ -75,8 +77,6 @@ struct ConquisterState {
     Counters balloons;
     /* Users mapped to the instant their claim penalty expires. */
     Counters cooldowns;
-    /* Users mapped to the multiplier their next hold earns, until someone takes the place from them. */
-    Counters boosts;
     /* Where each player lives: an id of ours, drawn once, which spells out a point on the map. */
     Counters ids;
     /* Players known to be on Telegram, mapped to their id there, so a message can reach them. */

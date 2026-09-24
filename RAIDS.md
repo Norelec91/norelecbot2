@@ -12,8 +12,7 @@ one is refused with a reminder of that line.
 
 ## Balloon
 
-Every player always has a balloon, unless he owns a boost, which rules it out
-until the boost is spent. It guards wherever he is: @TheConquister37 while he
+Every player always has a balloon. It guards wherever he is: @TheConquister37 while he
 holds it, his home while he is there. On the road it guards nothing, neither
 the place nor the house he left.
 
@@ -74,6 +73,16 @@ doubled for every copy of that emoji already hanging from anybody's name.
 whatever hangs there; it is free, works only at home and only on the sender's
 own name. `/buyfurniture` remains as a deprecation reply that shows the new line
 with the sender's own name.
+
+## Lightning
+
+A ⚡ hanging on a player's name as he enters @TheConquister37 multiplies that
+hold by `NORELECBOT_BOOST_MULTIPLIER` (3 by default). The multiplier is fixed on
+the way in and saved with the holder, so a ⚡ hung, received or burnt during the
+hold changes nothing until the next entry; several ⚡ are worth one, and the
+balloon stays. `/buyboost` remains as a deprecation reply pointing to
+`We @yourname ⚡`. Boosts bought with older versions are removed from
+`conquister.json` on the first load, without a refund.
 
 ## Emoji carried to another player
 

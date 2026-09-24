@@ -15,9 +15,9 @@ using namespace norelecbot;
 
 namespace {
 
-/* Seconds held, times the boost, times what the house of the day was worth to the holder. */
-std::int64_t earnings(std::string_view holder, std::int64_t seconds, std::int64_t now, std::int64_t boost = 1) {
-    return seconds * boost * zodiac::percent_for(holder, now) / 100;
+/* Seconds held, times the ⚡, times what the house of the day was worth to the holder. */
+std::int64_t earnings(std::string_view holder, std::int64_t seconds, std::int64_t now, std::int64_t lightning = 1) {
+    return seconds * lightning * zodiac::percent_for(holder, now) / 100;
 }
 
 int bank_rate(std::string_view holder, std::int64_t now, int magnitude, zodiac::Overrides signs = {}) {
@@ -141,7 +141,7 @@ TEST_CASE("a balloon defends the holder until it pops") {
 
     const ClaimResult entered = conquister_claim(storage, 1, "alice", 0);
     CHECK(entered.status == ClaimStatus::taken);
-    CHECK(entered.balloon_active);
+    CHECK(entered.multiplier == 0);
     /* Everybody has a balloon: a fresh one leaves no trace on file until something hits it. */
     CHECK_FALSE(read_json(paths.conquister).at("balloons").contains("alice"));
 
@@ -175,7 +175,6 @@ TEST_CASE("a balloon defends the holder until it pops") {
     CHECK(read_json(paths.conquister).at("balloons").at("bob") == 2);
     const ClaimResult again = conquister_claim(storage, 1, "alice", 9001);
     CHECK(again.status == ClaimStatus::taken);
-    CHECK(again.balloon_active);
 }
 
 TEST_CASE("a penalty blocks the next attempts") {
@@ -204,7 +203,7 @@ TEST_CASE("a failed balloon attempt hands out the penalty") {
     const TestPaths paths{"cooldown-balloon-test"};
     Storage storage{paths.conquister, paths.quotes};
 
-    CHECK(conquister_claim(storage, 1, "alice", 0).balloon_active);
+    CHECK(conquister_claim(storage, 1, "alice", 0).status == ClaimStatus::taken);
 
     const ClaimResult attack = conquister_claim(storage, 2, "bob", 3000, ClaimRules{.cooldown_seconds = 300, .attack_cost = 0, .signs = {}});
     if (attack.status == ClaimStatus::defended) {
@@ -274,91 +273,69 @@ TEST_CASE("active legacy timed balloons become ordinary balloons") {
     CHECK(attack.balloon_popped);
 }
 
-TEST_CASE("a boost multiplies what the hold earns, once") {
-    const TestPaths paths{"boost-test"};
+TEST_CASE("a ⚡ on the name as a player comes in multiplies that hold") {
+    const TestPaths paths{"lightning-test"};
+    {
+        /* Alice has ⚡; both balloons already took three attempts, so every claim gets in. */
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":0,"bob":0},"quotes_added":{},)"
+             << R"("furniture":{"alice":"🍕⚡"},"balloons":{"alice":3,"bob":3}})";
+    }
     Storage storage{paths.conquister, paths.quotes};
-
-    static_cast<void>(conquister_claim(storage, 1, "alice", 0));
-    CHECK(raid_start(storage, 1, "alice", "alice", 1000, RaidRules{}).status == RaidStatus::left_place);
-    static_cast<void>(conquister_claim(storage, 2, "bob", 1000));
-    const std::int64_t first_hold = earnings("alice", 1000, 1000);
-    CHECK(conquister_user(storage, "alice")->score == first_hold);
-
-    const BoostResult bought = boost_buy(storage, "alice", 1000, 3);
-    CHECK(bought.status == BoostStatus::bought);
-    CHECK(bought.available_score == first_hold - 1000);
-    CHECK(boost_buy(storage, "alice", 0, 3).status == BoostStatus::already_owned);
-
-    SUBCASE("it is cashed in when the place is taken away") {
-        CHECK(raid_start(storage, 2, "bob", "bob", 1999, RaidRules{}).status == RaidStatus::left_place);
-        static_cast<void>(conquister_claim(storage, 1, "alice", 2000));
-        CHECK_FALSE(read_json(paths.conquister).at("balloons").contains("alice"));
-        const ClaimResult kicked = conquister_claim(storage, 2, "bob", 2100);
-        CHECK(kicked.previous_username == "alice");
-        CHECK(kicked.boost_multiplier == 3);
-        CHECK(kicked.earned == earnings("alice", 100, 2100, 3));
-        CHECK(conquister_user(storage, "alice")->score == first_hold - 1000 + kicked.earned);
-
-        /* Spent: the next hold earns the usual. */
-        CHECK(raid_start(storage, 2, "bob", "bob", 2999, RaidRules{}).status == RaidStatus::left_place);
-        static_cast<void>(conquister_claim(storage, 1, "alice", 3000));
+    const ClaimRules rules{.cooldown_seconds = 0, .attack_cost = 0, .signs = {}, .lightning = 3};
+    const auto worn_out = [&storage] {
         storage.transaction([](StorageSession &session) {
             session.state().balloons["alice"] = 3;
+            session.state().balloons["bob"] = 3;
             return 0;
         });
-        const ClaimResult again = conquister_claim(storage, 2, "bob", 3100);
-        CHECK(again.boost_multiplier == 0);
-        CHECK(again.earned == earnings("alice", 100, 3100));
-    }
+    };
 
-    SUBCASE("it suppresses the automatic balloon on the next hold") {
-        CHECK(raid_start(storage, 2, "bob", "bob", 1999, RaidRules{}).status == RaidStatus::left_place);
-        const ClaimResult boosted = conquister_claim(storage, 1, "alice", 2000);
-        CHECK(boosted.status == ClaimStatus::taken);
-        CHECK_FALSE(boosted.balloon_active);
-        /* The boost rules out even the balloon she had brought home from her last hold. */
-        CHECK_FALSE(read_json(paths.conquister).at("balloons").contains("alice"));
-    }
+    const ClaimResult entered = conquister_claim(storage, 1, "alice", 0, rules);
+    CHECK(entered.multiplier == 3);
+    /* Burning the ⚡ halfway changes nothing: what the hold is worth was fixed on the way in. */
+    CHECK(furniture_burn(storage, "alice", "⚡").status == FurnitureBurnStatus::burned);
+    const ClaimResult kicked = conquister_claim(storage, 2, "bob", 1000, rules);
+    CHECK(kicked.previous_username == "alice");
+    CHECK(kicked.boost_multiplier == 3);
+    CHECK(kicked.earned == earnings("alice", 1000, 1000, 3));
+    CHECK(kicked.multiplier == 0);
+
+    /* Coming in without one, a ⚡ that arrives later does not count either. */
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["bob"] = "⚡";
+        return 0;
+    });
+    worn_out();
+    const ClaimResult plain = conquister_claim(storage, 1, "alice", 1500, rules);
+    CHECK(plain.boost_multiplier == 0);
+    CHECK(plain.earned == earnings("bob", 500, 1500));
+    CHECK(plain.multiplier == 0);
+
+    /* Several ⚡ are worth one, and the balloon stays: the ⚡ only multiplies. */
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["bob"] = "⚡⚡⚡";
+        return 0;
+    });
+    worn_out();
+    const ClaimResult bolt = conquister_claim(storage, 2, "bob", 2000, rules);
+    CHECK(bolt.multiplier == 3);
+    const RaidResult left = raid_start(storage, 2, "bob", "bob", 2100, RaidRules{});
+    CHECK(left.status == RaidStatus::left_place);
+    CHECK(left.boost_multiplier == 3);
+    CHECK(left.earned == earnings("bob", 100, 2100, 3));
 }
 
-TEST_CASE("a boost cannot be bought retroactively during the current hold") {
-    const TestPaths paths{"boost-current-hold-test"};
+TEST_CASE("bought boosts leave old saves without a refund") {
+    const TestPaths paths{"boost-retired-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":{"user_id":1,"username":"alice","since":0},)"
-             << R"("scores":{"alice":2000,"bob":0},"quotes_added":{}})";
+        file << R"({"current":null,"scores":{"alice":2000},"quotes_added":{},"boosts":{"alice":3}})";
     }
-    Storage storage{paths.conquister, paths.quotes};
-
-    const BoostResult refused = boost_buy(storage, "alice", 1500, 3);
-    CHECK(refused.status == BoostStatus::holding_place);
-    CHECK(refused.available_score == 2000);
-    CHECK(conquister_user(storage, "alice")->score == 2000);
+    const Storage storage{paths.conquister, paths.quotes};
     const Json saved = read_json(paths.conquister);
-    const bool has_boost = saved.contains("boosts") && !saved.at("boosts").empty();
-    CHECK_FALSE(has_boost);
-
-    const RaidResult left = raid_start(storage, 1, "alice", "alice", 3600, RaidRules{});
-    CHECK(left.status == RaidStatus::left_place);
-    CHECK(left.boost_multiplier == 0);
-    CHECK(left.earned == earnings("alice", 3600, 3600));
-
-    CHECK(boost_buy(storage, "alice", 1500, 3).status == BoostStatus::bought);
-    CHECK(conquister_claim(storage, 1, "alice", 4000).status == ClaimStatus::taken);
-    const ClaimResult next = conquister_claim(storage, 2, "bob", 4100);
-    CHECK(next.boost_multiplier == 3);
-    CHECK(next.earned == earnings("alice", 100, 4100, 3));
-}
-
-TEST_CASE("a boost replaces the automatic balloon on entry") {
-    const TestPaths paths{"boost-balloon-test"};
-    Storage storage{paths.conquister, paths.quotes};
-
-    CHECK(boost_buy(storage, "alice", 0, 3).status == BoostStatus::bought);
-    CHECK_FALSE(conquister_claim(storage, 1, "alice", 0).balloon_active);
-    CHECK(read_json(paths.conquister).at("balloons").empty());
-    CHECK(conquister_claim(storage, 2, "bob", 100).balloon_active);
-    CHECK(read_json(paths.conquister).at("balloons").empty());
+    CHECK_FALSE(saved.contains("boosts"));
+    CHECK(saved.at("scores").at("alice") == 2000);
 }
 
 TEST_CASE("bought raid shields leave old saves without a refund") {
@@ -489,11 +466,11 @@ TEST_CASE("the balloon guards only where its owner is, and follows him home") {
 TEST_CASE("every raid that gets through takes the whole road, however many came before") {
     const TestPaths paths{"raid-no-resistance-test"};
     {
-        /* Her boost keeps her balloon out of the way, so every raid gets through. The resistance an
-           older version saved is dropped on the first load and never softens a raid again. */
+        /* The resistance an older version saved is dropped on the first load and never softens a raid
+           again. */
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":null,"scores":{"alice":1000000,"bob":0,"carol":0},)"
-             << R"("ids":{"alice":0,"bob":5000,"carol":4000},"boosts":{"alice":3},)"
+             << R"("ids":{"alice":0,"bob":5000,"carol":4000},)"
              << R"("raid_resistance_levels":{"alice":3},"raid_resistance_since":{"alice":0}})";
     }
     RaidRules rules = full_rides();
@@ -505,6 +482,11 @@ TEST_CASE("every raid that gets through takes the whole road, however many came 
     CHECK_FALSE(read_json(paths.conquister).contains("raid_resistance_levels"));
     CHECK_FALSE(read_json(paths.conquister).contains("raid_resistance_since"));
     for (const auto &[raider, start] : {std::pair{"bob", 0}, std::pair{"carol", 11}, std::pair{"bob", 22}}) {
+        /* Her balloon already took three attempts each time, so every raid gets through. */
+        storage.transaction([](StorageSession &session) {
+            session.state().balloons["alice"] = 3;
+            return 0;
+        });
         REQUIRE(raid_start(storage, 0, raider, "alice", start, rules).status == RaidStatus::started);
         const auto arrival = raid_due(storage, start + 5, rules);
         REQUIRE(arrival.size() == 1);
@@ -517,9 +499,9 @@ TEST_CASE("a raid takes a quarter of what the target has, and carries it home") 
     const TestPaths paths{"raid-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
-        /* Her boost keeps her balloon out of the way, so the raid gets through. */
+        /* Her balloon already took three attempts, so the raid gets through. */
         file << R"({"current":null,"scores":{"alice":1000,"bob":40},"quotes_added":{},)"
-             << R"("boosts":{"alice":3}})";
+             << R"("balloons":{"alice":3}})";
     }
     Storage storage{paths.conquister, paths.quotes};
 

@@ -177,7 +177,7 @@ std::string hold_note(
 ) {
     std::string note;
     if (boost_multiplier > 0) {
-        note += std::format(" col boost x{}", boost_multiplier);
+        note += std::format(" col ⚡ x{}", boost_multiplier);
     }
     if (zodiac_percent != 100) {
         const zodiac::Sign sign = zodiac::sign_of(holder, context.config.zodiac_signs);
@@ -523,6 +523,7 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
                 .cooldown_seconds = context.config.cooldown_seconds,
                 .attack_cost = context.config.attack_cost,
                 .signs = context.config.zodiac_signs,
+                .lightning = context.config.boost_multiplier,
             }
         );
     /* A name that came from IRC must not be written as a mention: on Telegram it would tag a stranger. */
@@ -752,6 +753,8 @@ std::string handle_help(const CommandContext &context, std::string_view) {
     line(std::format("We {} 1000", me), "investi 1000 palle");
     line(std::format("We {} 🍕", me), "appendi 🍕 al nome nel primo posto libero, da casa");
     line(std::format("We {} 🍕 3", me), "appendi 🍕 nel posto 3");
+    line(std::format("We {} ⚡", me), std::format("con il fulmine al nome ogni possesso vale x{}",
+                                                  context.config.boost_multiplier));
     line(std::format("We {} 1 2", me), "sposti l'emoji dal posto 1 al posto 2");
     line(std::format("We {}", other), "parti per razziarlo");
     line(std::format("We {} 500", other), "gli porti 500 palle");
@@ -761,7 +764,6 @@ std::string handle_help(const CommandContext &context, std::string_view) {
     help += std::format("\nDa {} le righe col tuo nome ti riportano prima a casa. "
                         "In viaggio si può solo tornare indietro: We {}.\n", conquister_place, me);
     help += std::format("\n{0}leaderboard — classifica\n{0}addquote <testo> — aggiungi una citazione\n"
-                        "{0}buyboost — moltiplicatore per il prossimo possesso\n"
                         "{0}link <nome> — collega account Telegram e nick IRC",
                         slash);
     return help;
@@ -769,7 +771,7 @@ std::string handle_help(const CommandContext &context, std::string_view) {
 
 std::string handle_buy_balloon(const CommandContext &context, std::string_view) {
     return std::format("🎈 {}buyballoon è deprecato: non serve più comprare il palloncino. "
-                       "Ce l'hai sempre, se non hai un boost, e protegge il posto dove sei: "
+                       "Ce l'hai sempre e protegge il posto dove sei: "
                        "@TheConquister37 o casa tua. Quando scoppia, se ne forma subito uno nuovo.",
                        command_prefix(context));
 }
@@ -853,36 +855,10 @@ std::string handle_buy_boost(const CommandContext &context, std::string_view) {
     if (context.username.empty()) {
         return missing_username_reply();
     }
-    const std::string username{context.username};
-    const int cost = price(context, context.config.boost_cost);
-    const BoostResult result =
-        boost_buy(context.storage, std::string{context.player_key}, cost, context.config.boost_multiplier);
-    if (result.status == BoostStatus::already_owned) {
-        return std::format("{} hai già un boost x{} pronto.", username, result.multiplier);
-    }
-    if (result.status == BoostStatus::holding_place) {
-        return std::format(
-            "{} sei già in {}: torna a casa prima di comprare il boost per il prossimo possesso.",
-            username,
-            conquister_place
-        );
-    }
-    if (result.status == BoostStatus::insufficient_score) {
-        return std::format(
-            "{} ti servono {} palle per un boost (ne hai {}).",
-            username,
-            cost,
-            result.available_score
-        );
-    }
-    return std::format(
-        "⚡ {} hai comprato un boost spendendo {} palle! Il tuo prossimo possesso di {} vale x{}, "
-        "fino a quando ti spodestano.",
-        username,
-        cost,
-        conquister_place,
-        result.multiplier
-    );
+    return std::format("⚡ {}buyboost è deprecato: appendi ⚡ al nome con We {} ⚡ e ogni possesso di {} "
+                       "in cui entri con il fulmine vale x{}.",
+                       command_prefix(context), own_name(context), conquister_place,
+                       context.config.boost_multiplier);
 }
 
 std::string handle_buy_shield(const CommandContext &context, std::string_view) {

@@ -85,12 +85,9 @@ std::int64_t charge_attacker(ConquisterState &state, const std::string &username
 
 enum class BalloonRoll : std::uint8_t { none, held, popped };
 
-/* Everybody always has a balloon, unless a boost rules it out. The file keeps how many attempts it
-   has survived; one that pops is replaced by a fresh one at once, and a fresh one has no entry. */
+/* Everybody always has a balloon. The file keeps how many attempts it has survived; one that pops is
+   replaced by a fresh one at once, and a fresh one has no entry. */
 BalloonRoll balloon_attempt(StorageSession &session, ConquisterState &state, const std::string &player) {
-    if (find_entry(state.boosts, player) != state.boosts.end()) {
-        return BalloonRoll::none;
-    }
     const std::int64_t attempt = counter(state.balloons, player) + 1;
     if (static_cast<std::int64_t>(session.random_index(balloon_attempts)) < attempt) {
         state.balloons.erase(player);
@@ -106,31 +103,24 @@ int balloon_pop_chance(const ConquisterState &state, const std::string &player) 
                             static_cast<std::int64_t>(balloon_attempts));
 }
 
-/* What a hold was worth: the seconds it lasted, times the boost he had bought, times the house of the
-   day. Both the boost and the hold are spent by this. */
+/* What a hold was worth: the seconds it lasted, times the ⚡ he came in with, times the house of the day. */
 struct Settlement {
     std::int64_t earned = 0;
     std::int64_t boost_multiplier = 0;
     int zodiac_percent = 100;
 };
 
-Settlement settle_hold(
-    ConquisterState &state,
-    const std::string &holder,
-    std::int64_t since,
-    std::int64_t now,
-    zodiac::Overrides signs
-) {
+Settlement settle_hold(ConquisterState &state, const Holder &hold, std::int64_t now, zodiac::Overrides signs) {
+    const std::string &holder = hold.username;
     Settlement settled;
-    settled.earned = now > since ? now - since : 0;
-    if (const auto boost = find_entry(state.boosts, holder); boost != state.boosts.end()) {
-        settled.boost_multiplier = boost->second;
+    settled.earned = now > hold.since ? now - hold.since : 0;
+    if (hold.multiplier > 1) {
+        settled.boost_multiplier = hold.multiplier;
         if (settled.earned > std::numeric_limits<std::int64_t>::max() / settled.boost_multiplier) {
             log_error("Could not multiply the Conquister score");
             throw StorageError("Conquister score overflow");
         }
         settled.earned *= settled.boost_multiplier;
-        state.boosts.erase(holder);
     }
     settled.zodiac_percent = zodiac::percent_for(display_name(state, holder), now, signs);
     settled.earned = settled.earned / 100 * settled.zodiac_percent +
@@ -152,7 +142,7 @@ Settlement leave_place(ConquisterState &state, std::int64_t now, zodiac::Overrid
     }
     const Holder holder = *state.current;
     state.current.reset();
-    return settle_hold(state, holder.username, holder.since, now, signs);
+    return settle_hold(state, holder, now, signs);
 }
 
 /* From @TheConquister37 a line meant for home takes him there first; anywhere else nothing happens. */
@@ -287,8 +277,7 @@ std::optional<std::string> legacy_owner(const ConquisterState &state, std::int64
 /* The name as it is written on file, whatever spelling the message used. */
 std::optional<std::string> known_player(const ConquisterState &state, std::string_view name) {
     for (const Counters *counters : {&state.scores, &state.quotes_added, &state.ids,
-                                     &state.balloons, &state.cooldowns,
-                                     &state.boosts}) {
+                                     &state.balloons, &state.cooldowns}) {
         if (const Counters::value_type *found = find_ignore_case(*counters, name); found != nullptr) {
             return found->first;
         }
@@ -447,7 +436,7 @@ LinkStatus player_link(Storage &storage, std::int64_t user_id, const std::string
         }
         const auto has_assets = [&state](const std::string &key) {
             const std::array items{&state.scores, &state.quotes_added, &state.balloons,
-                                   &state.cooldowns, &state.boosts, &state.ids, &state.debugging};
+                                   &state.cooldowns, &state.ids, &state.debugging};
             return std::ranges::any_of(items, [&key](const Counters *entries) {
                 return entries->find(key) != entries->end();
             }) || (state.current && state.current->username == key) ||
@@ -561,25 +550,31 @@ ClaimResult conquister_claim(
                 return outcome;
             }
             outcome.balloon_popped = balloon == BalloonRoll::popped;
-            /* Kicked out, he gets a fresh balloon, even one a boost had kept out of the way. */
+            /* Kicked out, he gets a fresh balloon. */
             state.balloons.erase(holder);
             outcome.previous_username = display_name(state, holder);
             outcome.previous_key = holder;
-            const Settlement settled = settle_hold(state, holder, state.current->since, now, rules.signs);
+            const Settlement settled = settle_hold(state, *state.current, now, rules.signs);
             outcome.earned = settled.earned;
             outcome.boost_multiplier = settled.boost_multiplier;
             outcome.zodiac_percent = settled.zodiac_percent;
         }
-        state.current = Holder{user_id, username, now};
-        /* He brings his own balloon, as worn as it is, unless a boost rules it out for this hold. */
-        outcome.balloon_active = find_entry(state.boosts, username) == state.boosts.end();
+        /* The ⚡ on his name as he comes in fixes what this hold is worth: nothing hung or burnt later
+           can change it. He brings his own balloon, as worn as it is. */
+        const bool lightning = std::ranges::any_of(furniture_slots(furniture_of(state, username)),
+                                                   [](const std::string &slot) {
+                                                       return slot == "⚡" || slot == "⚡\xEF\xB8\x8F";
+                                                   });
+        outcome.multiplier = lightning && rules.lightning > 1 ? rules.lightning : 0;
+        state.current = Holder{.user_id = user_id, .username = username, .since = now,
+                               .multiplier = outcome.multiplier};
         return outcome;
     });
 
     switch (result.status) {
     case ClaimStatus::taken:
         log_info(
-            "claim taken user={} previous={} earned={} balloon_popped={} boost={}",
+            "claim taken user={} previous={} earned={} balloon_popped={} multiplier={}",
             username,
             result.previous_username,
             result.earned,
@@ -1409,42 +1404,6 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
         }
     }
     return events;
-}
-
-BoostResult boost_buy(
-    Storage &storage,
-    const std::string &username,
-    int cost,
-    std::int64_t multiplier
-) {
-    const BoostResult result = storage.transaction([&](StorageSession &session) {
-        ConquisterState &state = session.state();
-        const std::int64_t score = counter(state.scores, username);
-        if (const auto boost = find_entry(state.boosts, username); boost != state.boosts.end()) {
-            return BoostResult{BoostStatus::already_owned, score, boost->second};
-        }
-        /* A boost bought during a hold would multiply even the time before its purchase. */
-        if (state.current && text::equals_ignore_case(state.current->username, username)) {
-            return BoostResult{BoostStatus::holding_place, score};
-        }
-        if (score < cost) {
-            return BoostResult{BoostStatus::insufficient_score, score};
-        }
-        state.scores[username] = score - cost;
-        state.boosts[username] = multiplier;
-        return BoostResult{BoostStatus::bought, score - cost, multiplier};
-    });
-
-    if (result.status == BoostStatus::bought) {
-        log_info(
-            "boost bought user={} cost={} left={} multiplier={}",
-            username,
-            cost,
-            result.available_score,
-            result.multiplier
-        );
-    }
-    return result;
 }
 
 QuoteAddResult quote_add(

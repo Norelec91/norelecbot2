@@ -25,8 +25,8 @@ struct ClaimResult {
     std::int64_t earned = 0;
     /* taken: getting in popped a balloon. defended: the percentage the next attempt will have. */
     bool balloon_popped = false;
-    /* A successful claim grants a temporary balloon unless a boost is active. */
-    bool balloon_active = false;
+    /* taken: what the new hold is multiplied by, fixed by the ⚡ on his name; 0 without one. */
+    std::int64_t multiplier = 0;
     int next_chance = 0;
     /* cooldown: seconds still to wait. defended: the penalty just handed out. */
     std::int64_t penalty_seconds = 0;
@@ -34,7 +34,7 @@ struct ClaimResult {
     std::int64_t attack_cost = 0;
     /* travelling: how long before the claimer is home again. */
     std::int64_t travel_seconds = 0;
-    /* taken: the multiplier the kicked holder had bought, zero when there was none. */
+    /* taken: what the kicked holder's ⚡ multiplied the hold by, zero when there was none. */
     std::int64_t boost_multiplier = 0;
     /* taken: what the house of the day was worth to the kicked holder, 100 when it was indifferent. */
     int zodiac_percent = 100;
@@ -48,8 +48,6 @@ struct Departure {
     std::int64_t boost_multiplier = 0;
     int zodiac_percent = 100;
 };
-
-enum class BoostStatus { bought, already_owned, holding_place, insufficient_score };
 
 enum class FurnitureStatus { bought, full, invalid_position, already_there, insufficient_score, not_home };
 
@@ -76,12 +74,6 @@ struct FurnitureMoveResult {
     std::string moved;
     std::string swapped;
     Departure departure;
-};
-
-struct BoostResult {
-    BoostStatus status = BoostStatus::bought;
-    std::int64_t available_score = 0;
-    std::int64_t multiplier = 0;
 };
 
 enum class RaidStatus {
@@ -231,6 +223,8 @@ struct ClaimRules {
     /* What an attempt against a balloon that holds costs the attacker. */
     int attack_cost = 0;
     zodiac::Overrides signs;
+    /* What a hold is multiplied by when the claimer has ⚡ on his name. */
+    std::int64_t lightning = 0;
 };
 
 [[nodiscard]] ClaimResult conquister_claim(
@@ -339,14 +333,6 @@ struct FurnitureBurnResult {
 
 /* Settles the raids that have reached the target or come home by now. */
 [[nodiscard]] std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRules &rules);
-
-/* The multiplier is kept until the place is taken from the buyer, and rules out a balloon meanwhile. */
-[[nodiscard]] BoostResult boost_buy(
-    Storage &storage,
-    const std::string &username,
-    int cost,
-    std::int64_t multiplier
-);
 
 [[nodiscard]] QuoteAddResult quote_add(
     Storage &storage,
