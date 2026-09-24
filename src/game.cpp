@@ -496,6 +496,12 @@ LinkStatus player_link(Storage &storage, std::int64_t user_id, const std::string
     });
 }
 
+bool names_player(Storage &storage, const std::string &player, std::string_view name, RaidTargetKind platform) {
+    return storage.transaction([&](StorageSession &session) {
+        return player_by_name(session.state(), name, platform) == player;
+    });
+}
+
 ClaimResult conquister_claim(
     Storage &storage,
     std::int64_t user_id,
@@ -876,6 +882,10 @@ FurnitureResult furniture_buy(
         ConquisterState &state = session.state();
         FurnitureResult outcome;
         outcome.available_score = counter(state.scores, username);
+        if (!at_home(state, username)) {
+            outcome.status = FurnitureStatus::not_home;
+            return outcome;
+        }
         const auto mine = find_entry(state.furniture, username);
         std::vector<std::string> slots =
             furniture_slots(mine == state.furniture.end() ? std::string_view{} : std::string_view{mine->second});
@@ -895,14 +905,6 @@ FurnitureResult furniture_buy(
             index = static_cast<std::size_t>(position - 1);
         }
         outcome.position = index + 1;
-        /* With an emoji of his on the road, one empty slot stays free for it: he can fill any other,
-           or overwrite, but not the last one left. */
-        outcome.travelling = emoji_travelling(state, username);
-        const bool fills_empty = index >= slots.size() || slots[index].empty();
-        if (!outcome.travelling.empty() && fills_empty && empty_slots(slots, limit) < 2) {
-            outcome.status = FurnitureStatus::in_transit;
-            return outcome;
-        }
         const std::string wanted = without_variation(emoji);
         if (index < slots.size() && without_variation(slots[index]) == wanted) {
             outcome.status = FurnitureStatus::already_there;

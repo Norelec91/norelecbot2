@@ -1031,8 +1031,8 @@ TEST_CASE("an emoji is carried to another player, or burnt at the place") {
     CHECK(back[0].gift_emoji == "🎈");
     CHECK(hung("alice") == "🎈");
 
-    /* While it travels, one empty slot stays kept for it: she can buy into any other or overwrite,
-       but neither she nor a gift can take the last one. Turning around, it finds its way back home. */
+    /* While it travels, her last empty slot stays kept for it: no gift can take it. Turning around,
+       it finds its way back home. */
     storage.transaction([](StorageSession &session) {
         session.state().furniture["bob"] = "🍕";
         session.state().furniture["carol"] = "🧀";
@@ -1040,17 +1040,12 @@ TEST_CASE("an emoji is carried to another player, or burnt at the place") {
     });
     REQUIRE(raid_start(storage, 0, "alice", "bob", 40, quick_rides(), RaidTargetKind::any, 0, "🎈").status ==
             RaidStatus::started);
-    /* Plenty of room: buying goes on as usual. */
-    REQUIRE(furniture_buy(storage, "alice", "🐝", 0, 0, 10).status == FurnitureStatus::bought);
+    /* Away from home she cannot hang anything on her name. */
+    CHECK(furniture_buy(storage, "alice", "🐝", 0, 0, 10).status == FurnitureStatus::not_home);
     storage.transaction([](StorageSession &session) {
         session.state().furniture["alice"] = "🐝🐝🐝🐝🐝🐝🐝🐝🐝";
         return 0;
     });
-    const FurnitureResult waiting = furniture_buy(storage, "alice", "🚀", 0, 0, 10);
-    CHECK(waiting.status == FurnitureStatus::in_transit);
-    CHECK(waiting.travelling == "🎈");
-    CHECK(furniture_buy(storage, "alice", "🚀", 10, 0, 10).status == FurnitureStatus::in_transit);
-    CHECK(furniture_buy(storage, "alice", "🚀", 3, 0, 10).status == FurnitureStatus::bought);
     CHECK(raid_start(storage, 0, "carol", "alice", 41, quick_rides(), RaidTargetKind::any, 0, "🧀").status ==
           RaidStatus::no_room);
     const RaidResult turned = raid_start(storage, 0, "alice", "alice", 42, quick_rides());
@@ -1058,11 +1053,11 @@ TEST_CASE("an emoji is carried to another player, or burnt at the place") {
     const std::vector<RaidEvent> returned = raid_due(storage, 42 + turned.seconds, quick_rides());
     REQUIRE(returned.size() == 1);
     CHECK(returned[0].gift_emoji == "🎈");
-    CHECK(hung("alice") == "🐝🐝🚀🐝🐝🐝🐝🐝🐝🎈");
+    CHECK(hung("alice") == "🐝🐝🐝🐝🐝🐝🐝🐝🐝🎈");
     CHECK(furniture_buy(storage, "alice", "🚀", 0, 0, 10).status == FurnitureStatus::full);
 
     /* Brought to the place, an emoji is gone: the first copy, leaving a hole. */
-    CHECK(furniture_burn(storage, "alice", "🐝") == std::optional<std::string>{"[]🐝🚀🐝🐝🐝🐝🐝🐝🎈"});
+    CHECK(furniture_burn(storage, "alice", "🐝") == std::optional<std::string>{"[]🐝🐝🐝🐝🐝🐝🐝🐝🎈"});
     CHECK_FALSE(furniture_burn(storage, "alice", "🎺"));
     CHECK(furniture_burn(storage, "bob", "🍕") == std::optional<std::string>{""});
     CHECK(hung("bob").empty());

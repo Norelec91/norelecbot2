@@ -70,9 +70,12 @@ std::optional<ParsedInvestment> investment_target(std::string_view message) {
 struct ParsedEmoji {
     std::string_view target;
     std::string_view emoji;
+    /* A slot, written after the emoji: only for his own name. */
+    std::optional<std::int64_t> position;
 };
 
-/* "We name emoji": one emoji of his own, carried to a player or back to @TheConquister37. */
+/* "We name emoji [position]": one emoji hung on his own name, carried to a player, or brought back to
+   @TheConquister37. */
 std::optional<ParsedEmoji> emoji_target(std::string_view message) {
     if (!message.starts_with(raid_trigger)) {
         return std::nullopt;
@@ -82,11 +85,18 @@ std::optional<ParsedEmoji> emoji_target(std::string_view message) {
     if (separator == std::string_view::npos || !valid_raid_target(rest.substr(0, separator))) {
         return std::nullopt;
     }
-    const std::string_view emoji = text::trim(rest.substr(separator));
-    if (text::parse_int64(emoji) || text::emoji_count(emoji) != std::optional<std::size_t>{1}) {
+    std::string_view emoji = text::trim(rest.substr(separator));
+    std::optional<std::int64_t> position;
+    if (const std::size_t space = emoji.find_last_of(" \t"); space != std::string_view::npos) {
+        position = text::parse_int64(emoji.substr(space + 1));
+        if (position) {
+            emoji = text::trim(emoji.substr(0, space));
+        }
+    }
+    if (text::parse_int64(emoji) || !text::emoji_count(emoji)) {
         return std::nullopt;
     }
-    return ParsedEmoji{rest.substr(0, separator), emoji};
+    return ParsedEmoji{rest.substr(0, separator), emoji, position};
 }
 
 ParsedCommand parse_command(std::string_view message) {
@@ -565,57 +575,52 @@ std::string handle_add_quote(const CommandContext &context, std::string_view arg
     );
 }
 
-/* "/buyfurniture emoji [position]": one emoji into one slot, the first empty one when no slot is named. */
-std::string handle_buy_furniture(const CommandContext &context, std::string_view argument) {
+/* His own name as he writes it after "We": with the mention on Telegram, bare on IRC. */
+std::string own_name(const CommandContext &context) {
+    return std::format("{}{}", context.user_id != 0 ? "@" : "", context.username);
+}
+
+std::string handle_buy_furniture(const CommandContext &context, std::string_view) {
+    if (context.username.empty()) {
+        return missing_username_reply();
+    }
+    return std::format(
+        "🛋️ /buyfurniture è deprecato: le emoji ora si comprano da casa con We {} 🍕, "
+        "oppure We {} 🍕 3 per sceglierne il posto.",
+        own_name(context),
+        own_name(context)
+    );
+}
+
+/* "We yourname emoji [position]" at home: one emoji in one slot, the first empty one when no slot is named. */
+std::string handle_furniture(const CommandContext &context, std::string_view wanted,
+                             std::optional<std::int64_t> slot) {
     if (context.username.empty()) {
         return missing_username_reply();
     }
     const std::string username{context.username};
     const int cost = price(context, context.config.furniture_cost);
     const auto limit = static_cast<std::size_t>(context.config.furniture_limit);
-    std::string_view wanted = text::trim(argument);
-    std::int64_t position = 0;
-    if (const std::size_t space = wanted.find_last_of(" \t"); space != std::string_view::npos) {
-        if (const std::optional<std::int64_t> slot = text::parse_int64(wanted.substr(space + 1))) {
-            if (*slot < 1 || static_cast<std::uint64_t>(*slot) > limit) {
-                return std::format("{} i posti vanno da 1 a {}: nessun addebito.", username, limit);
-            }
-            position = *slot;
-            wanted = text::trim(wanted.substr(0, space));
-        }
+    if (slot && (*slot < 1 || static_cast<std::uint64_t>(*slot) > limit)) {
+        return std::format("{} i posti vanno da 1 a {}: nessun addebito.", username, limit);
     }
-    if (wanted.empty()) {
-        return std::format(
-            "Uso: /buyfurniture <emoji> [posizione 1-{}]. Costa {} palle, il doppio per ogni copia di "
-            "quell'emoji già appesa.",
-            limit,
-            cost
-        );
-    }
-    const std::optional<std::size_t> howmany = text::emoji_count(wanted);
-    if (!howmany) {
-        return std::format("{} al nome si attaccano solo emoji: nessun addebito.", username);
-    }
-    if (*howmany != 1) {
-        return std::format("{} una emoji per volta: nessun addebito.", username);
-    }
+    const std::int64_t position = slot.value_or(0);
     const std::string emoji{wanted};
     const FurnitureResult result =
         furniture_buy(context.storage, std::string{context.player_key}, emoji, position, cost, limit);
     switch (result.status) {
+    case FurnitureStatus::not_home:
+        return std::format("🛋️ {} le emoji si appendono al nome solo da casa.", username);
     case FurnitureStatus::full:
         return std::format(
-            "{} hai già tutti i {} posti pieni: scegli quale sostituire con /buyfurniture <emoji> <posizione>. "
+            "{} hai già tutti i {} posti pieni: scegli quale sostituire con We {} <emoji> <posizione>. "
             "Nessun addebito.",
             username,
-            limit
+            limit,
+            own_name(context)
         );
     case FurnitureStatus::invalid_position:
         return std::format("{} i posti vanno da 1 a {}: nessun addebito.", username, limit);
-    case FurnitureStatus::in_transit:
-        return std::format("{} l'ultimo posto libero è tenuto per {}, che è in viaggio: sostituisci un'emoji "
-                           "con /buyfurniture <emoji> <posizione> o aspetta che lo scambio sia concluso. "
-                           "Nessun addebito.", username, result.travelling);
     case FurnitureStatus::already_there:
         return std::format("{} nel posto {} c'è già {}: nessun addebito.", username, result.position, result.replaced);
     case FurnitureStatus::insufficient_score:
@@ -929,6 +934,20 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
                 return std::nullopt;
             }
             remember_sender();
+            if (text::emoji_count(carried->emoji) != std::optional<std::size_t>{1}) {
+                return std::format("{} una emoji per volta: nessun addebito.", context.username);
+            }
+            const bool telegram = carried->target.starts_with('@');
+            const std::string_view name = telegram ? carried->target.substr(1) : carried->target;
+            if (!bound.player_key.empty() && names_player(context.storage, bound_key, name,
+                    telegram ? RaidTargetKind::telegram : RaidTargetKind::irc)) {
+                return handle_furniture(bound, carried->emoji, carried->position);
+            }
+            /* The slot is his choice only on his own name: elsewhere the emoji takes the first free one. */
+            if (carried->position) {
+                return std::format("{} la posizione si sceglie solo sul tuo nome: scrivi We {} {}.",
+                                   context.username, carried->target, carried->emoji);
+            }
             if (names_the_place(carried->target)) {
                 return handle_emoji_burn(bound, carried->emoji);
             }

@@ -697,9 +697,12 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
 
     CHECK(command_is_for_bot("We @Bob 🍕"));
     CHECK(command_is_for_bot("We @TheConquister37 🍕"));
-    CHECK_FALSE(command_is_for_bot("We @Bob 🍕🎈"));
+    CHECK(command_dispatch(alice, "We @Bob 🍕🎈") == "Alice una emoji per volta: nessun addebito.");
+    CHECK(command_dispatch(alice, "We @Bob 🍕 2") ==
+          "Alice la posizione si sceglie solo sul tuo nome: scrivi We @Bob 🍕.");
     CHECK(command_dispatch(alice, "We @Bob 🚀") == "🎁 Alice non hai 🚀 appesa al nome.");
-    CHECK(command_dispatch(alice, "We @Alice 🍕") == "🎁 Alice le emoji si portano agli altri giocatori.");
+    /* On her own name it is a purchase: one copy already hangs there, so the price doubles. */
+    CHECK(command_dispatch(alice, "We @Alice 🍕")->contains("ce ne sono già 1 in giro"));
     CHECK(command_dispatch(alice, "We @Nessuno 🍕") == "🚀 Alice non conosco nessun giocatore di nome @Nessuno.");
 
     CHECK(command_dispatch(alice, "We @TheConquister37 🐟") ==
@@ -709,16 +712,11 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     const std::string leaving = command_dispatch(alice, "We @Bob 🍕").value_or("");
     CHECK(leaving.starts_with("🎁 Alice parti per Bob con 🍕 da consegnare: arrivi tra "));
     CHECK(furniture_all(storage).at("tg:1") == "[]🎈");
-    /* The only empty slot left is kept for the pizza on the road; overwriting is still fine. */
-    storage.transaction([](StorageSession &session) {
-        session.state().furniture["tg:1"] = "[]🎈🎈🎈🎈🎈🎈🎈🎈🎈";
-        session.state().scores["tg:1"] = 100000;
-        return 0;
-    });
+    /* On the road she cannot buy, and the old command only points to the new way. */
+    CHECK(command_dispatch(alice, "We @Alice 🚀") == "🛋️ Alice le emoji si appendono al nome solo da casa.");
     CHECK(command_dispatch(alice, "/buyfurniture 🚀") ==
-          "Alice l'ultimo posto libero è tenuto per 🍕, che è in viaggio: sostituisci un'emoji con "
-          "/buyfurniture <emoji> <posizione> o aspetta che lo scambio sia concluso. Nessun addebito.");
-    CHECK(command_dispatch(alice, "/buyfurniture 🚀 2")->ends_with(": 🚀 nel posto 2, al posto di 🎈."));
+          "🛋️ /buyfurniture è deprecato: le emoji ora si comprano da casa con We @Alice 🍕, "
+          "oppure We @Alice 🍕 3 per sceglierne il posto.");
 
     RaidEvent given;
     given.kind = RaidEvent::Kind::delivered;
@@ -912,21 +910,20 @@ TEST_CASE("a bought emoji follows the name everywhere") {
     const auto reply = [&](std::string_view text) { return command_dispatch(context, text).value_or(""); };
 
     /* No slot named: the first one, and the reply already shows the name dressed. */
-    CHECK(reply("/buyfurniture 🎈").starts_with("🛋️ alice (🎈) hai speso "));
+    CHECK(reply("We @alice 🎈").starts_with("🛋️ alice (🎈) hai speso "));
     /* The emoji first, then the slot: the one in between stays a hole. */
-    const std::string third = reply("/buyfurniture 🍕 3");
+    const std::string third = reply("We @alice 🍕 3");
     CHECK(third.contains("alice (🎈[]🍕) hai speso "));
     CHECK(third.ends_with(": 🍕 nel posto 3."));
-    CHECK(reply("/buyfurniture 🐟 3").ends_with(": 🐟 nel posto 3, al posto di 🍕."));
+    CHECK(reply("We @alice 🐟 3").ends_with(": 🐟 nel posto 3, al posto di 🍕."));
 
     /* Anything else is turned away without a charge. */
     const std::int64_t before = conquister_user(storage, "alice")->score;
-    CHECK(reply("/buyfurniture ciao").contains("solo emoji"));
-    CHECK(reply("/buyfurniture 🍕🎈 3") == "alice una emoji per volta: nessun addebito.");
-    CHECK(reply("/buyfurniture 🍕 11") == "alice i posti vanno da 1 a 10: nessun addebito.");
-    CHECK(reply("/buyfurniture 🍕 0") == "alice i posti vanno da 1 a 10: nessun addebito.");
-    CHECK(reply("/buyfurniture 🐟 3") == "alice nel posto 3 c'è già 🐟: nessun addebito.");
-    CHECK(reply("/buyfurniture").starts_with("Uso: /buyfurniture <emoji> [posizione 1-10]."));
+    CHECK_FALSE(command_is_for_bot("We @alice ciao"));
+    CHECK(reply("We @alice 🍕🎈 3") == "alice una emoji per volta: nessun addebito.");
+    CHECK(reply("We @alice 🍕 11") == "alice i posti vanno da 1 a 10: nessun addebito.");
+    CHECK(reply("We @alice 🍕 0") == "alice i posti vanno da 1 a 10: nessun addebito.");
+    CHECK(reply("We @alice 🐟 3") == "alice nel posto 3 c'è già 🐟: nessun addebito.");
     CHECK(conquister_user(storage, "alice")->score == before);
 
     /* The leaderboard shows the dressed name, and whoever bought nothing stays bare. */
@@ -940,8 +937,10 @@ TEST_CASE("a bought emoji follows the name everywhere") {
     REQUIRE(claimed);
     CHECK(claimed->contains("alice (🎈[]🐟) sei in"));
 
-    /* A keycap is an emoji like any other, and fills the hole. */
-    CHECK(reply("/buyfurniture 3️⃣").contains("alice (🎈3️⃣🐟)"));
+    /* In the place she is not at home; back home, a keycap is an emoji like any other and fills the hole. */
+    CHECK(reply("We @alice 3️⃣") == "🛋️ alice le emoji si appendono al nome solo da casa.");
+    CHECK(reply("We @alice").contains("sei tornato da @TheConquister37"));
+    CHECK(reply("We @alice 3️⃣").contains("alice (🎈3️⃣🐟)"));
 }
 
 TEST_CASE("the owner turns the prices off for himself, not for everyone") {

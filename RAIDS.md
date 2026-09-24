@@ -51,6 +51,18 @@ Naming himself during the ride turns him around, and the undelivered palle come
 back to him when he reaches home. Palle in transit are kept in the `gift` field
 of the `raids` section of `conquister.json`.
 
+## Furniture
+
+`We @yourname 🍕` (or `We yournick 🍕` on IRC) hangs one emoji on the
+sender's own name, in the first empty slot; `We @yourname 🍕 3` puts it in slot
+3, overwriting what hung there. Names have `NORELECBOT_FURNITURE_LIMIT` slots
+(10 by default), and empty slots between emoji show as `[]`. It works only at
+home, not on the road nor from @TheConquister37. The price is
+`NORELECBOT_FURNITURE_COST`, following the group's wealth like every price,
+doubled for every copy of that emoji already hanging from anybody's name.
+`/buyfurniture` remains as a deprecation reply that shows the new line with
+the sender's own name.
+
 ## Emoji carried to another player
 
 `We @someone 🍕` (or `We ircnick 🍕` on IRC) makes the same journey with one
@@ -60,10 +72,9 @@ must be somebody else, and the target's name must have an empty slot; all three
 are checked before he leaves. On arrival the emoji goes into the target's first
 empty slot. If the target's name filled up on the way, the emoji rides home
 with the traveller, as it does when he turns around, and goes back into his own
-first empty slot. It always finds one: while it travels, the last empty slot on
-the traveller's name is kept for it. He can still buy into any other empty slot
-or overwrite one that is taken, but not fill the last empty one, and a gift
-brought to him needs two empty slots on his name. Carrying
+first empty slot. It always finds one: furniture is bought only at home, so the
+traveller cannot fill the slot it left, and a gift brought to him while it
+travels needs two empty slots on his name, so that one is always left for it. Carrying
 an emoji does not change how many copies of it hang in the game, so it does not
 change its price. An emoji in transit is kept in the `gift_emoji` field of the
 `raids` section.

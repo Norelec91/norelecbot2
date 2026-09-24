@@ -42,7 +42,7 @@ struct ClaimResult {
 
 enum class BoostStatus { bought, already_owned, holding_place, insufficient_score };
 
-enum class FurnitureStatus { bought, full, invalid_position, already_there, insufficient_score, in_transit };
+enum class FurnitureStatus { bought, full, invalid_position, already_there, insufficient_score, not_home };
 
 struct FurnitureResult {
     FurnitureStatus status = FurnitureStatus::bought;
@@ -55,8 +55,6 @@ struct FurnitureResult {
     /* How many of that emoji already hung from anybody's name, and what it cost for that. */
     std::size_t copies = 0;
     std::int64_t charged = 0;
-    /* in_transit: the emoji of his that is on the road; the last empty slot is kept for it. */
-    std::string travelling;
 };
 
 struct BoostResult {
@@ -231,6 +229,9 @@ struct ClaimRules {
 /* Case-insensitive lookup; rank is 0 when the user has no score yet. */
 [[nodiscard]] std::optional<ConquisterUser> conquister_user(Storage &storage, std::string_view username,
                                                            RaidTargetKind platform = RaidTargetKind::any);
+/* Whether a name, as written on that platform, is this very player. */
+[[nodiscard]] bool names_player(Storage &storage, const std::string &player, std::string_view name,
+                                RaidTargetKind platform);
 /* Bind a verified platform account to its player, recording its current public name. */
 [[nodiscard]] std::string player_seen(Storage &storage, std::int64_t user_id, const std::string &username,
                                       std::string_view account_name = {});
@@ -258,7 +259,8 @@ void debug_set(Storage &storage, const std::string &username, bool wanted);
 [[nodiscard]] std::string furniture_stored(std::vector<std::string> slots);
 
 /* Hangs one emoji in a slot, from 1, overwriting what was there; position 0 takes the first empty
-   one. The price is the base cost doubled for every copy of that emoji already hanging anywhere. */
+   one. Only at home. The price is the base cost doubled for every copy of that emoji already hanging
+   anywhere. */
 [[nodiscard]] FurnitureResult furniture_buy(
     Storage &storage,
     const std::string &username,
