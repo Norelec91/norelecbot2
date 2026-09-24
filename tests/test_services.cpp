@@ -15,9 +15,9 @@ using namespace norelecbot;
 
 namespace {
 
-/* Seconds held, times the ⚡, times what the house of the day was worth to the holder. */
-std::int64_t earnings(std::string_view holder, std::int64_t seconds, std::int64_t now, std::int64_t lightning = 1) {
-    return seconds * lightning * zodiac::percent_for(holder, now) / 100;
+/* Seconds held, times the ⚡ in percent, times what the house of the day was worth to the holder. */
+std::int64_t earnings(std::string_view holder, std::int64_t seconds, std::int64_t now, std::int64_t lightning = 100) {
+    return seconds * lightning / 100 * zodiac::percent_for(holder, now) / 100;
 }
 
 int bank_rate(std::string_view holder, std::int64_t now, int magnitude, zodiac::Overrides signs = {}) {
@@ -273,7 +273,7 @@ TEST_CASE("active legacy timed balloons become ordinary balloons") {
     CHECK(attack.balloon_popped);
 }
 
-TEST_CASE("a ⚡ on the name as a player comes in multiplies that hold") {
+TEST_CASE("every ⚡ on the name as a player comes in adds its share to that hold") {
     const TestPaths paths{"lightning-test"};
     {
         /* Alice has ⚡; both balloons already took three attempts, so every claim gets in. */
@@ -282,7 +282,7 @@ TEST_CASE("a ⚡ on the name as a player comes in multiplies that hold") {
              << R"("furniture":{"alice":"🍕⚡"},"balloons":{"alice":3,"bob":3}})";
     }
     Storage storage{paths.conquister, paths.quotes};
-    const ClaimRules rules{.cooldown_seconds = 0, .signs = {}, .lightning = 3};
+    const ClaimRules rules{.cooldown_seconds = 0, .signs = {}, .lightning = 50};
     const auto worn_out = [&storage] {
         storage.transaction([](StorageSession &session) {
             session.state().balloons["alice"] = 3;
@@ -292,13 +292,13 @@ TEST_CASE("a ⚡ on the name as a player comes in multiplies that hold") {
     };
 
     const ClaimResult entered = conquister_claim(storage, 1, "alice", 0, rules);
-    CHECK(entered.entered_lightning == 3);
+    CHECK(entered.entered_lightning == 150);
     /* Burning the ⚡ halfway changes nothing: what the hold is worth was fixed on the way in. */
     CHECK(furniture_burn(storage, "alice", "⚡").status == FurnitureBurnStatus::burned);
     const ClaimResult kicked = conquister_claim(storage, 2, "bob", 1000, rules);
     CHECK(kicked.previous_username == "alice");
-    CHECK(kicked.lightning == 3);
-    CHECK(kicked.earned == earnings("alice", 1000, 1000, 3));
+    CHECK(kicked.lightning == 150);
+    CHECK(kicked.earned == earnings("alice", 1000, 1000, 150));
     CHECK(kicked.entered_lightning == 0);
 
     /* Coming in without one, a ⚡ that arrives later does not count either. */
@@ -312,18 +312,18 @@ TEST_CASE("a ⚡ on the name as a player comes in multiplies that hold") {
     CHECK(plain.earned == earnings("bob", 500, 1500));
     CHECK(plain.entered_lightning == 0);
 
-    /* Several ⚡ are worth one, and the balloon stays: the ⚡ only multiplies. */
+    /* Three ⚡ add up to x2.5, and the balloon stays: the ⚡ only multiplies. */
     storage.transaction([](StorageSession &session) {
         session.state().furniture["bob"] = "⚡⚡⚡";
         return 0;
     });
     worn_out();
     const ClaimResult bolt = conquister_claim(storage, 2, "bob", 2000, rules);
-    CHECK(bolt.entered_lightning == 3);
+    CHECK(bolt.entered_lightning == 250);
     const RaidResult left = raid_start(storage, 2, "bob", "bob", 2100, RaidRules{});
     CHECK(left.status == RaidStatus::left_place);
-    CHECK(left.lightning == 3);
-    CHECK(left.earned == earnings("bob", 100, 2100, 3));
+    CHECK(left.lightning == 250);
+    CHECK(left.earned == earnings("bob", 100, 2100, 250));
 }
 
 TEST_CASE("bought boosts leave old saves without a refund") {
@@ -1374,4 +1374,17 @@ TEST_CASE("raids can steal only the non-invested balance") {
     CHECK(payout.status == InvestmentStatus::withdrawn);
     CHECK(payout.amount > 0);
     CHECK(payout.score == 1000 - arrival[0].loot + payout.amount);
+}
+
+TEST_CASE("a hold saved with a whole multiplier keeps it as a percent") {
+    const TestPaths paths{"lightning-legacy-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":1,"username":"alice","since":0,"multiplier":3},"scores":{},)"
+             << R"("quotes_added":{},"balloons":{"alice":3}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    const ClaimResult kicked = conquister_claim(storage, 2, "bob", 1000);
+    CHECK(kicked.lightning == 300);
+    CHECK(kicked.earned == earnings("alice", 1000, 1000, 300));
 }

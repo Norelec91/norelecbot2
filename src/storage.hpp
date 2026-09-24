@@ -28,8 +28,8 @@ struct Holder {
     std::int64_t user_id = 0;
     std::string username;
     std::int64_t since = 0;
-    /* What this hold is multiplied by, fixed on the way in by the ⚡ he had on his name; 0 for nothing. */
-    std::int64_t multiplier = 0;
+    /* What this hold is worth in percent, fixed on the way in by the ⚡ he had on his name; 0 for nothing. */
+    std::int64_t lightning_percent = 0;
 
     bool operator==(const Holder &) const = default;
 };

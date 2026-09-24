@@ -168,6 +168,15 @@ std::string dressed(const Authors &furniture, std::string_view key, std::string_
     return std::format("{} ({})", username, mine->second);
 }
 
+/* A percentage as a multiplier: 150 is x1.5, 200 is x2, 75 is x0.75. */
+std::string multiplier_text(std::int64_t percent) {
+    std::string decimals = std::format("{:02}", percent % 100);
+    while (!decimals.empty() && decimals.back() == '0') {
+        decimals.pop_back();
+    }
+    return decimals.empty() ? std::format("x{}", percent / 100) : std::format("x{}.{}", percent / 100, decimals);
+}
+
 std::string hold_note(
     const CommandContext &context,
     const std::string &holder,
@@ -176,19 +185,18 @@ std::string hold_note(
     std::int64_t now
 ) {
     std::string note;
-    if (lightning > 0) {
-        note += std::format(" col ⚡ x{}", lightning);
+    if (lightning > 100) {
+        note += std::format(" col ⚡ {}", multiplier_text(lightning));
     }
     if (zodiac_percent != 100) {
         const zodiac::Sign sign = zodiac::sign_of(holder, context.config.zodiac_signs);
         note += std::format(
-            "{} {} {} nel giorno di {} (x{}.{:02})",
+            "{} {} {} nel giorno di {} ({})",
             note.empty() ? "" : " e",
             sign.symbol,
             sign.name,
             zodiac::element_name(zodiac::element_of_day(now)),
-            zodiac_percent / 100,
-            zodiac_percent % 100
+            multiplier_text(zodiac_percent)
         );
     }
     return note;
@@ -524,7 +532,7 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
             ClaimRules{
                 .cooldown_seconds = context.config.cooldown_seconds,
                 .signs = context.config.zodiac_signs,
-                .lightning = context.config.lightning_multiplier,
+                .lightning = context.config.lightning_percent,
             }
         );
     /* A name that came from IRC must not be written as a mention: on Telegram it would tag a stranger. */
@@ -787,14 +795,15 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
     const int percent = zodiac::percent_for(profile.name, now, context.config.zodiac_signs);
     card += std::format("{} {}: oggi è giorno di {}, {}\n", sign.symbol, sign.name,
                         zodiac::element_name(zodiac::element_of_day(now)),
-                        percent == 100 ? std::string{"x1"} : std::format("x{}.{:02}", percent / 100, percent % 100));
+                        multiplier_text(percent));
     switch (profile.place) {
     case ProfilePlace::home:
         card += std::format("🪐 in {}{}\n", profile.on_telegram ? "@" : "", profile.name);
         break;
     case ProfilePlace::conquister:
         card += std::format("🪐 in {} da {}{}\n", conquister_place, format_wait(std::max<std::int64_t>(now - profile.since, 0)),
-                            profile.multiplier > 1 ? std::format(" col ⚡ x{}", profile.multiplier) : std::string{});
+                            profile.lightning_percent > 100 ? std::format(" col ⚡ {}", multiplier_text(profile.lightning_percent))
+                                                            : std::string{});
         break;
     case ProfilePlace::road:
         card += std::format("🚀 {} {}: rientra tra {}\n", profile.returning ? "sulla via del ritorno da" : "in viaggio verso",

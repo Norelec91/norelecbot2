@@ -104,13 +104,13 @@ Settlement settle_hold(ConquisterState &state, const Holder &hold, std::int64_t 
     const std::string &holder = hold.username;
     Settlement settled;
     settled.earned = now > hold.since ? now - hold.since : 0;
-    if (hold.multiplier > 1) {
-        settled.lightning = hold.multiplier;
+    if (hold.lightning_percent > 100) {
+        settled.lightning = hold.lightning_percent;
         if (settled.earned > std::numeric_limits<std::int64_t>::max() / settled.lightning) {
             log_error("Could not multiply the Conquister score");
             throw StorageError("Conquister score overflow");
         }
-        settled.earned *= settled.lightning;
+        settled.earned = settled.earned * settled.lightning / 100;
     }
     settled.zodiac_percent = zodiac::percent_for(display_name(state, holder), now, signs);
     settled.earned = settled.earned / 100 * settled.zodiac_percent +
@@ -558,22 +558,22 @@ ClaimResult conquister_claim(
             outcome.lightning = settled.lightning;
             outcome.zodiac_percent = settled.zodiac_percent;
         }
-        /* The ⚡ on his name as he comes in fixes what this hold is worth: nothing hung or burnt later
-           can change it. He brings his own balloon, as worn as it is. */
-        const bool lightning = std::ranges::any_of(furniture_slots(furniture_of(state, username)),
-                                                   [](const std::string &slot) {
-                                                       return slot == "⚡" || slot == "⚡\xEF\xB8\x8F";
-                                                   });
-        outcome.entered_lightning = lightning && rules.lightning > 1 ? rules.lightning : 0;
+        /* The ⚡ on his name as he comes in fix what this hold is worth, each one adding its share:
+           nothing hung or burnt later can change it. He brings his own balloon, as worn as it is. */
+        const auto bolts = std::ranges::count_if(furniture_slots(furniture_of(state, username)),
+                                                 [](const std::string &slot) {
+                                                     return slot == "⚡" || slot == "⚡\xEF\xB8\x8F";
+                                                 });
+        outcome.entered_lightning = bolts > 0 && rules.lightning > 0 ? 100 + bolts * rules.lightning : 0;
         state.current = Holder{.user_id = user_id, .username = username, .since = now,
-                               .multiplier = outcome.entered_lightning};
+                               .lightning_percent = outcome.entered_lightning};
         return outcome;
     });
 
     switch (result.status) {
     case ClaimStatus::taken:
         log_info(
-            "claim taken user={} previous={} earned={} balloon_popped={} multiplier={}",
+            "claim taken user={} previous={} earned={} balloon_popped={} lightning_percent={}",
             username,
             result.previous_username,
             result.earned,
@@ -642,7 +642,7 @@ Profile profile_from(StorageSession &session, ConquisterState &state, const std:
     if (state.current && state.current->username == key) {
         profile.place = ProfilePlace::conquister;
         profile.since = state.current->since;
-        profile.multiplier = state.current->multiplier;
+        profile.lightning_percent = state.current->lightning_percent;
     } else if (const Raid *trip = raid_of(state, key); trip != nullptr) {
         profile.place = ProfilePlace::road;
         profile.heading = display_name(state, trip->target);

@@ -25,14 +25,14 @@ struct ClaimResult {
     std::int64_t earned = 0;
     /* taken: getting in popped a balloon. defended: the percentage the next attempt will have. */
     bool balloon_popped = false;
-    /* taken: what the new hold is multiplied by, fixed by the ⚡ on his name; 0 without one. */
+    /* taken: what the new hold is worth in percent, fixed by the ⚡ on his name; 0 without one. */
     std::int64_t entered_lightning = 0;
     int next_chance = 0;
     /* cooldown: seconds still to wait. defended: the penalty just handed out. */
     std::int64_t penalty_seconds = 0;
     /* travelling: how long before the claimer is home again. */
     std::int64_t travel_seconds = 0;
-    /* taken: what the kicked holder's ⚡ multiplied the hold by, zero when there was none. */
+    /* taken: what the kicked holder's ⚡ made the hold worth in percent, zero when there was none. */
     std::int64_t lightning = 0;
     /* taken: what the house of the day was worth to the kicked holder, 100 when it was indifferent. */
     int zodiac_percent = 100;
@@ -219,7 +219,7 @@ struct ClaimRules {
     /* The penalty a failed attempt leaves behind. */
     int cooldown_seconds = 0;
     zodiac::Overrides signs;
-    /* What a hold is multiplied by when the claimer has ⚡ on his name. */
+    /* What every ⚡ on the claimer's name adds to the hold, in percent: they add up. */
     std::int64_t lightning = 0;
 };
 
@@ -245,9 +245,9 @@ struct Profile {
     std::size_t players = 0;
     std::int64_t quotes_added = 0;
     ProfilePlace place = ProfilePlace::home;
-    /* conquister: since when, and what the hold is multiplied by. */
+    /* conquister: since when, and what the hold is worth in percent (0 without ⚡). */
     std::int64_t since = 0;
-    std::int64_t multiplier = 0;
+    std::int64_t lightning_percent = 0;
     /* road: the player he rides to or back from, whether he is already coming back, and when he is home. */
     std::string heading;
     bool returning = false;

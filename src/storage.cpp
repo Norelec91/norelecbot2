@@ -160,7 +160,10 @@ ConquisterState parse_state(const Json &json) {
             .user_id = integer(current->at("user_id")),
             .username = current->at("username").get<std::string>(),
             .since = integer(current->at("since")),
-            .multiplier = current->contains("multiplier") ? integer(current->at("multiplier")) : 0,
+            /* Older saves kept a whole multiplier: x3 is 300%. */
+            .lightning_percent = current->contains("lightning_percent") ? integer(current->at("lightning_percent"))
+                : current->contains("multiplier") && integer(current->at("multiplier")) > 1
+                    ? integer(current->at("multiplier")) * 100 : 0,
         };
     }
     return ConquisterState{
@@ -211,7 +214,7 @@ Json state_to_json(const ConquisterState &state) {
             {"user_id", state.current->user_id},
             {"username", state.current->username},
             {"since", state.current->since},
-            {"multiplier", state.current->multiplier},
+            {"lightning_percent", state.current->lightning_percent},
         };
     }
     return Json{

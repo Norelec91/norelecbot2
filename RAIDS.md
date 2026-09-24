@@ -74,12 +74,15 @@ own name. The old `/buyfurniture` command is gone.
 
 ## Lightning
 
-A ⚡ hanging on a player's name as he enters @TheConquister37 multiplies that
-hold by `NORELECBOT_LIGHTNING_MULTIPLIER` (3 by default). The multiplier is fixed on
-the way in and saved with the holder, so a ⚡ hung, received or burnt during the
-hold changes nothing until the next entry; several ⚡ are worth one, and the
-balloon stays. The old `/buyboost` command is gone, and boosts bought with
-older versions are removed from
+Every ⚡ hanging on a player's name as he enters @TheConquister37 adds
+`NORELECBOT_LIGHTNING_PERCENT` (50 by default) to that hold: one makes it worth
+x1.5, two x2, three x2.5, ten x6. The bonus is fixed on the way in and saved with
+the holder as `lightning_percent`, so a ⚡ hung, received or burnt during the hold
+changes nothing until the next entry, and the balloon stays. Every ⚡ adds the
+same, while its price doubles with every copy in the game, so the first ones pay
+back quickly and the later ones hardly ever. A hold saved by an older version
+with a whole `multiplier` keeps it: x3 becomes 300%. The old `/buyboost` command
+is gone, and boosts bought with older versions are removed from
 `conquister.json` on the first load, without a refund.
 
 ## Emoji carried to another player
