@@ -440,7 +440,8 @@ TEST_CASE("We @someone sends the player out to rob them") {
     static_cast<void>(conquister_claim(storage, 9, "erin", seconds_now_for_test()));
     context.username = "erin";
     context.user_id = 9;
-    CHECK(reply("We @alice") == "🚀 erin sei in @TheConquister37 e da lì non si parte.");
+    CHECK(reply("We @alice") ==
+          "🚀 erin razzie e consegne partono dal tuo pianeta: esci prima da @TheConquister37 con We @erin.");
     context.username = "bob";
     context.user_id = 2;
 
@@ -712,6 +713,7 @@ TEST_CASE("the help lists every We line with the asker's own name") {
     CHECK(help.contains("\nWe @TheConquister37 🍕 — bruci una 🍕\n"));
     CHECK(help.contains("\n/leaderboard — classifica\n"));
     CHECK(help.contains("\n/profile [nome] — il tuo profilo o quello di un altro\n"));
+    CHECK(help.contains("Razzie e consegne partono solo dal tuo pianeta: da @TheConquister37 esci prima con We @Alice. "));
 
     /* On IRC: bare nicks and the bang instead of the slash; the place keeps its @. */
     const std::string on_irc = command_dispatch(irc, "/help").value_or("");

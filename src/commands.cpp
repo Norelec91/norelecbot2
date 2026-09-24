@@ -280,7 +280,9 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
     case RaidStatus::already_travelling:
         return std::format("🚀 {} sei già in viaggio, torni tra {}.", username, format_wait(result.seconds));
     case RaidStatus::holding_place:
-        return std::format("🚀 {} sei in {} e da lì non si parte.", username, conquister_place);
+        /* Journeys are measured between planets, and the place is not on the map. */
+        return std::format("🚀 {} razzie e consegne partono dal tuo pianeta: esci prima da {} con We {}.",
+                           username, conquister_place, home);
     case RaidStatus::unknown_target:
         return std::format("🚀 {} non conosco nessun giocatore di nome {}.", username, target);
     case RaidStatus::left_place:
@@ -745,8 +747,9 @@ std::string handle_help(const CommandContext &context, std::string_view) {
     line(std::format("We {} 🍕", other), "gli porti una 🍕");
     line(std::format("We {} 500", conquister_place), "bruci 500 palle");
     line(std::format("We {} 🍕", conquister_place), "bruci una 🍕");
-    help += std::format("\nDa {} le righe col tuo nome ti riportano prima sul tuo pianeta. "
-                        "In viaggio si può solo tornare indietro: We {}.\n", conquister_place, me);
+    help += std::format("\nDa {0} le righe col tuo nome ti riportano prima sul tuo pianeta. "
+                        "Razzie e consegne partono solo dal tuo pianeta: da {0} esci prima con We {1}. "
+                        "In viaggio si può solo tornare indietro: We {1}.\n", conquister_place, me);
     help += std::format("\n{0}leaderboard — classifica\n{0}profile [nome] — il tuo profilo o quello di un altro\n"
                         "{0}addquote <testo> — aggiungi una citazione\n"
                         "{0}link <nome> — collega account Telegram e nick IRC Azzurra registrato",
