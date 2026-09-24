@@ -1,7 +1,7 @@
-# Planet investments
+# Investments
 
-`We @YourTelegramUsername N` deposits `N` palle when the sender is on their own
-planet. On IRC, the equivalent is `We YourIrcNick N`. The target must resolve to
+`We @YourTelegramUsername N` deposits `N` palle when the sender is home. On IRC,
+the equivalent is `We YourIrcNick N`. The target must resolve to
 the sender's own stable player key on the selected platform. The amount must be
 positive and cannot exceed the available score. Further deposits are allowed;
 each keeps its own start time.
@@ -9,7 +9,7 @@ each keeps its own start time.
 Deposited palle leave the score immediately. They cannot be stolen or spent on
 items or quotes while invested. Interest continues to accrue even when the
 player later travels or occupies @TheConquister37, but deposits and withdrawals
-are possible only while the player is back on their own planet.
+are possible only while the player is back home.
 
 `We @YourTelegramUsername` (or `We YourIrcNick` on IRC) withdraws the entire
 investment if the sender is home. Without an investment, the existing `We`

@@ -2,6 +2,7 @@
 
 #include "game.hpp"
 #include "commands.hpp"
+#include "zodiac.hpp"
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
@@ -9,6 +10,7 @@
 #include <filesystem>
 #include <chrono>
 #include <fstream>
+#include <format>
 
 using namespace norelecbot;
 
@@ -127,7 +129,7 @@ TEST_CASE("the bot answers the commands it knows and ignores the rest") {
         context.username = "heidi";
         CHECK(reply("/buyshield") ==
               "🛡️ heidi hai comprato uno scudo spendendo 0 palle! "
-              "Ridurrà i furti mentre sei sul tuo pianeta, finché non compri un palloncino o un boost.");
+              "Ridurrà i furti mentre sei a casa, finché non compri un palloncino o un boost.");
         CHECK(reply("/buyshield") == "heidi hai già uno scudo pronto.");
         config.balloon_cost = 0;
         CHECK(reply("/buyballoon").contains("heidi hai comprato un palloncino"));
@@ -343,7 +345,7 @@ TEST_CASE("buyboost refuses an existing hold without charging the player") {
     const CommandContext context{.storage = storage, .config = config, .user_id = 1, .username = "alice"};
 
     CHECK(command_dispatch(context, "/buyboost") ==
-          "alice sei già in @TheConquister37: torna sul tuo pianeta prima di comprare il boost per il prossimo possesso.");
+          "alice sei già in @TheConquister37: torna a casa prima di comprare il boost per il prossimo possesso.");
     CHECK(conquister_user(storage, "alice")->score == 2000);
 }
 
@@ -549,12 +551,12 @@ TEST_CASE("We invests and withdraws only with the owner's platform name") {
     });
     CHECK(command_is_for_bot("We @Alice 1000"));
     CHECK_FALSE(command_is_for_bot("We @Alice ora"));
-    CHECK(command_dispatch(alice, "We Alice 1000")->contains("solo sul tuo pianeta"));
-    CHECK(command_dispatch(alice, "We @Bob 1000")->contains("solo sul tuo pianeta"));
+    CHECK(command_dispatch(alice, "We Alice 1000")->contains("solo su te stesso"));
+    CHECK(command_dispatch(alice, "We @Bob 1000")->contains("solo su te stesso"));
     CHECK(command_dispatch(alice, "We @Alice 0")->contains("maggiore di zero"));
     CHECK(command_dispatch(alice, "We @Alice 3000")->contains("solo 2000"));
     const std::string deposited = command_dispatch(alice, "We @Alice 1000").value_or("");
-    CHECK(deposited.contains("hai investito 1000"));
+    CHECK(deposited.contains("hai investito 1000 palle."));
     CHECK(deposited.contains("oroscopo "));
     CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 1000);
     const std::string withdrawn = command_dispatch(alice, "We @Alice").value_or("");
@@ -571,6 +573,45 @@ TEST_CASE("We invests and withdraws only with the owner's platform name") {
     });
     CHECK(command_dispatch(irc, "We Bob 1000")->contains("hai investito 1000"));
     CHECK(command_dispatch(irc, "We Bob")->contains("hai ritirato"));
+}
+
+TEST_CASE("investment replies explain the zodiac sign without a percentage multiplier") {
+    const TestPaths paths{"investment-horoscope-reply-test"};
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    const std::int64_t today = seconds_now_for_test();
+    const zodiac::Element house = zodiac::element_of_day(today);
+    const std::string_view favorable = house == zodiac::Element::water ? "cancro" :
+        house == zodiac::Element::fire ? "leone" :
+        house == zodiac::Element::air ? "gemelli" : "toro";
+    const std::string_view unfavorable = house == zodiac::Element::water ? "leone" :
+        house == zodiac::Element::fire ? "cancro" :
+        house == zodiac::Element::air ? "toro" : "gemelli";
+    const std::string_view neutral = house == zodiac::Element::water || house == zodiac::Element::fire
+        ? "gemelli" : "cancro";
+    config.zodiac_signs = {{"Alice", std::string{favorable}}, {"Bob", std::string{neutral}},
+                           {"Carol", std::string{unfavorable}}};
+    Storage storage{paths.conquister, paths.quotes};
+    storage.transaction([&](StorageSession &session) {
+        session.state().investment_magnitudes[std::to_string(zodiac::day_start(today))] = 69;
+        return 0;
+    });
+    const auto check_reply = [&](std::int64_t user_id, std::string_view name,
+                                 std::string_view rate, std::string_view label) {
+        const CommandContext context{.storage = storage, .config = config, .user_id = user_id, .username = name};
+        REQUIRE(command_dispatch(context, "/leaderboard"));
+        storage.transaction([&](StorageSession &session) {
+            session.state().scores[std::format("tg:{}", user_id)] = 365;
+            return 0;
+        });
+        const std::string message = command_dispatch(context, std::format("We @{} 365", name)).value_or("");
+        CHECK(message.contains(std::format("Rendimento di oggi: {}% (oroscopo {}).", rate, label)));
+        CHECK_FALSE(message.contains("oroscopo 125%"));
+    };
+    check_reply(1, "Alice", "+69", "favorevole");
+    check_reply(2, "Bob", "+0", "neutro");
+    check_reply(3, "Carol", "-69", "sfavorevole");
 }
 
 TEST_CASE("an ambiguous old holder is not claimed by an IRC namesake") {
@@ -614,7 +655,7 @@ TEST_CASE("the raids tell what happened") {
     event.target_on_telegram = true;
     event.undefended = true;
     CHECK(raid_event_reply(event) ==
-          "💰 bob hai rubato 250 palle a @alice, che non era sul suo pianeta! Torni in bob tra 52 secondi.");
+          "💰 bob hai rubato 250 palle a @alice, che non era a casa! Torni in bob tra 52 secondi.");
 
     event.undefended = false;
     event.balloon_popped = true;
@@ -636,7 +677,7 @@ TEST_CASE("the raids tell what happened") {
     CHECK(raid_event_reply(defended) ==
           "🎈 bob il palloncino di alice ha resistito e ti costa 100 palle. Torni in bob a mani vuote tra 52 secondi.");
 
-    /* The raider's own planet does not mention them. */
+    /* The raider's home is shown without a mention. */
     defended.target_on_telegram = true;
     CHECK(raid_event_reply(defended) ==
           "🎈 bob il palloncino di alice ha resistito e ti costa 100 palle. "

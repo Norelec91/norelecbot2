@@ -1,10 +1,10 @@
-# Planet resistance
+# Raid resistance
 
-A successful raid increases resistance on the target planet, regardless of who
+A successful raid increases the target's resistance, regardless of who
 attacked. Each level halves the loot left after the existing defenses: a raid
 that would take 1,000 palle instead takes 1,000, then 500, then 250, then 125
 on closely spaced attacks. Resistance caps at three levels; it does not block
-attacks. One level recovers every two hours, even if the planet is raided again
+attacks. One level recovers every two hours, even if the target is raided again
 in the meantime.
 
 A balloon that turns a raid back does not increase resistance. Neither does a

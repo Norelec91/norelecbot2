@@ -96,8 +96,8 @@ std::int64_t shielded_loot(std::int64_t loot) {
     return loot > k * (k - 1) ? loot - k : loot * loot / (loot + k);
 }
 
-std::int64_t planet_resisted_loot(ConquisterState &state, const std::string &target,
-                                 std::int64_t loot, std::int64_t now) {
+std::int64_t resistance_adjusted_loot(ConquisterState &state, const std::string &target,
+                                      std::int64_t loot, std::int64_t now) {
     if (loot <= 0) {
         return loot;
     }
@@ -161,15 +161,15 @@ Settlement settle_hold(
     return settled;
 }
 
-/* A raid takes the player away from their own planet until the return trip ends. */
+/* A raid takes the player away from home until the return trip ends. */
 bool is_away(const ConquisterState &state, const std::string &username) {
     return std::ranges::any_of(state.raids, [&username](const Raid &raid) {
         return raid.raider == username;
     });
 }
 
-/* Occupying @TheConquister37 is not the same as being on one's own planet. */
-bool on_own_planet(const ConquisterState &state, const std::string &username) {
+/* Occupying @TheConquister37 is not the same as being home. */
+bool at_home(const ConquisterState &state, const std::string &username) {
     return !is_away(state, username) &&
         (!state.current || !text::equals_ignore_case(state.current->username, username));
 }
@@ -812,7 +812,7 @@ InvestmentResult investment_deposit(Storage &storage, const std::string &player,
         InvestmentResult result;
         if (player_by_name(state, target, platform) != player) {
             result.status = InvestmentStatus::not_self;
-        } else if (!on_own_planet(state, player)) {
+        } else if (!at_home(state, player)) {
             result.status = InvestmentStatus::not_home;
         } else if (amount <= 0) {
             result.status = InvestmentStatus::invalid_amount;
@@ -846,7 +846,7 @@ InvestmentResult investment_withdraw(Storage &storage, const std::string &player
             result.status = InvestmentStatus::not_self;
             return result;
         }
-        if (!on_own_planet(state, player)) {
+        if (!at_home(state, player)) {
             result.status = InvestmentStatus::not_home;
             return result;
         }
@@ -999,10 +999,10 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 event.target_on_telegram = counter(state.telegram_ids, raid.target) != 0;
                 event.raider_emoji = furniture_of(state, raid.raider);
                 event.target_emoji = furniture_of(state, raid.target);
-                const bool on_home_planet = on_own_planet(state, raid.target);
-                event.undefended = !on_home_planet;
+                const bool target_at_home = at_home(state, raid.target);
+                event.undefended = !target_at_home;
                 const auto balloon = find_entry(state.balloons, raid.target);
-                if (on_home_planet && balloon != state.balloons.end()) {
+                if (target_at_home && balloon != state.balloons.end()) {
                     const std::int64_t attempt = balloon->second + 1;
                     if (static_cast<std::int64_t>(session.random_index(balloon_attempts)) >= attempt) {
                         balloon->second = attempt;
@@ -1031,7 +1031,7 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                         rules.loot_share > 0 ? theirs / rules.loot_share : theirs;
                     event.loot = std::min({theirs, carried, most});
                     if (event.loot > 0) {
-                        if (on_home_planet) {
+                        if (target_at_home) {
                             if (find_entry(state.raid_shields, raid.target) != state.raid_shields.end()) {
                                 const std::int64_t potential = event.loot;
                                 event.loot = shielded_loot(potential);
@@ -1039,7 +1039,7 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                             }
                         }
                         const std::int64_t exposed = event.loot;
-                        event.loot = planet_resisted_loot(state, raid.target, exposed, now);
+                        event.loot = resistance_adjusted_loot(state, raid.target, exposed, now);
                         event.resistance_absorbed = exposed - event.loot;
                         state.scores[raid.target] = theirs - event.loot;
                     }

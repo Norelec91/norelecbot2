@@ -451,7 +451,7 @@ TEST_CASE("a raid shield reduces the potential loot by x/(x+1000) on every raid"
     CHECK(raid_start(storage, 0, "bob", "alice", 11, shield_rides()).status == RaidStatus::started);
     const std::vector<RaidEvent> second = raid_due(storage, 16, shield_rides());
     REQUIRE(second.size() == 1);
-    CHECK(second[0].loot == 231); /* raw 950, shield leaves 462, then planet resistance halves it. */
+    CHECK(second[0].loot == 231); /* raw 950, shield leaves 462, then raid resistance halves it. */
     CHECK(second[0].shield_absorbed == 488);
     CHECK(second[0].resistance_absorbed == 231);
     CHECK(conquister_user(storage, "alice")->score == 9269);
@@ -478,7 +478,7 @@ TEST_CASE("a raid shield stays ready while its owner is away") {
     CHECK(read_json(paths.conquister).at("raid_shields").at("alice") == 1);
 }
 
-TEST_CASE("holding the Conquister leaves the shield on the player's own planet unguarded") {
+TEST_CASE("holding the Conquister leaves the shield at home unguarded") {
     const TestPaths paths{"raid-shield-holder-away-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
@@ -506,7 +506,7 @@ TEST_CASE("holding the Conquister leaves the shield on the player's own planet u
     CHECK(read_json(paths.conquister).at("raid_shields").at("alice") == 1);
 }
 
-TEST_CASE("holding the Conquister also leaves the balloon on the player's own planet unguarded") {
+TEST_CASE("holding the Conquister also leaves the balloon at home unguarded") {
     const TestPaths paths{"raid-balloon-holder-away-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
@@ -577,8 +577,8 @@ TEST_CASE("a raid shield rounds down and safely handles large loot") {
     }
 }
 
-TEST_CASE("planet resistance follows the victim across attackers, persists, and recovers") {
-    const TestPaths paths{"raid-planet-resistance-test"};
+TEST_CASE("raid resistance follows the victim across attackers, persists, and recovers") {
+    const TestPaths paths{"raid-resistance-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":null,"scores":{"alice":1000000,"bob":0,"carol":0},)"
@@ -1184,6 +1184,7 @@ TEST_CASE("migrated investments switch to zodiac returns after the changeover") 
         std::ofstream file{paths.conquister, std::ios::binary};
         file << Json{{"current", nullptr}, {"scores", Json{{"tg:1", 0}}},
                      {"telegram_names", Json{{"alice", "tg:1"}}},
+                     {"display_names", Json{{"tg:1", "Alice"}}},
                      {"investments", Json::array({Json{{"player", "tg:1"}, {"amount", 1000000000},
                                                         {"since", before - 86400}}})}}.dump();
     }
@@ -1207,7 +1208,7 @@ TEST_CASE("migrated investments switch to zodiac returns after the changeover") 
         expected, std::numeric_limits<long double>::infinity()))));
 }
 
-TEST_CASE("investment withdrawal and deposit require the player's planet") {
+TEST_CASE("investment withdrawal and deposit require the player to be home") {
     const TestPaths paths{"investment-location-test"};
     Storage storage{paths.conquister, paths.quotes};
     const std::string alice = player_seen(storage, 1, "Alice");

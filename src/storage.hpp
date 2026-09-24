@@ -74,7 +74,7 @@ struct ConquisterState {
     Counters boosts;
     /* Persistent protection that reduces raid loot until replaced by a balloon or boost. */
     Counters raid_shields;
-    /* Successful raids build planet resistance, shared by every attacker. */
+    /* Successful raids build resistance for the target, shared by every attacker. */
     Counters raid_resistance_levels;
     /* Start of the current resistance recovery interval. */
     Counters raid_resistance_since;

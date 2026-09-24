@@ -265,16 +265,18 @@ std::string handle_investment(const CommandContext &context, const ParsedInvestm
         context.config.zodiac_signs);
     switch (result.status) {
     case InvestmentStatus::deposited: {
-        return std::format("🏦 {} hai investito {} palle sul tuo pianeta. "
-                           "Rendimento di oggi: {:+}% (oroscopo {}%). "
+        const std::string_view horoscope = result.zodiac_percent == 125 ? "favorevole" :
+            result.zodiac_percent == 75 ? "sfavorevole" : "neutro";
+        return std::format("🏦 {} hai investito {} palle. "
+                           "Rendimento di oggi: {:+}% (oroscopo {}). "
                            "Saldo disponibile: {} palle.",
                            context.username, result.amount, result.daily_rate,
-                           result.zodiac_percent, result.score);
+                           horoscope, result.score);
     }
     case InvestmentStatus::not_self:
-        return std::format("🏦 {} puoi investire solo sul tuo pianeta.", context.username);
+        return std::format("🏦 {} puoi investire solo su te stesso.", context.username);
     case InvestmentStatus::not_home:
-        return std::format("🏦 {} devi essere sul tuo pianeta per investire.", context.username);
+        return std::format("🏦 {} devi essere a casa per investire.", context.username);
     case InvestmentStatus::invalid_amount:
         return std::format("🏦 {} indica un numero di palle maggiore di zero.", context.username);
     case InvestmentStatus::insufficient_score:
@@ -590,7 +592,7 @@ std::string handle_buy_boost(const CommandContext &context, std::string_view) {
     }
     if (result.status == BoostStatus::holding_place) {
         return std::format(
-            "{} sei già in {}: torna sul tuo pianeta prima di comprare il boost per il prossimo possesso.",
+            "{} sei già in {}: torna a casa prima di comprare il boost per il prossimo possesso.",
             username,
             conquister_place
         );
@@ -637,7 +639,7 @@ std::string handle_buy_shield(const CommandContext &context, std::string_view) {
                            result.available_score);
     }
     return std::format(
-        "🛡️ {} hai comprato uno scudo spendendo {} palle! Ridurrà i furti mentre sei sul tuo pianeta, "
+        "🛡️ {} hai comprato uno scudo spendendo {} palle! Ridurrà i furti mentre sei a casa, "
         "finché non compri un palloncino o un boost.",
         username, cost
     );
@@ -734,7 +736,7 @@ std::string raid_event_reply(const RaidEvent &event) {
         target
     );
     if (event.undefended) {
-        reply += ", che non era sul suo pianeta";
+        reply += ", che non era a casa";
     } else if (event.balloon_popped) {
         reply += ", bucandogli il palloncino";
     }

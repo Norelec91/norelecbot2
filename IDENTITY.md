@@ -3,14 +3,14 @@
 Game commands no longer use a public name as the player's key. On Telegram, the
 account key is the numeric ID supplied by Telegram. On IRC, it is the NickServ
 account reported by WHOIS `330`, or the identified nick when the server provides
-only `307`. A change of display name does not move scores, planets, items, or
+only `307`. A change of display name does not move scores, home positions, items, or
 raids. Matching names on the two networks do **not** link accounts automatically.
 
 `/link <IRC nick>` on Telegram and `!link @TelegramUsername` on IRC link two
 accounts only after reciprocal requests from both authenticated accounts. Each
 account must first use a game command. Automatic linking is possible only when
 at most one profile already has assets or activity. If both do, the bot moves
-nothing: merging scores, mutually exclusive items, planets, and active trips
+nothing: merging scores, mutually exclusive items, home positions, and active trips
 requires a manual decision.
 
 ## Existing saves

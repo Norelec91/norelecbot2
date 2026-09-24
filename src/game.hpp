@@ -138,7 +138,7 @@ struct RaidEvent {
     bool balloon_popped = false;
     /* A purchased shield absorbed part of this raid's potential loot. */
     std::int64_t shield_absorbed = 0;
-    /* The target planet's resistance absorbed part of the remaining loot. */
+    /* The target's raid resistance absorbed part of the remaining loot. */
     std::int64_t resistance_absorbed = 0;
     /* The target was away, so there was nothing to get past. */
     bool undefended = false;
@@ -264,7 +264,7 @@ void debug_set(Storage &storage, const std::string &username, bool wanted);
     RaidTargetKind target_kind = RaidTargetKind::any
 );
 
-/* Funds leave the stealable score until withdrawn on the owner's planet. */
+/* Funds leave the stealable score until withdrawn while the owner is home. */
 [[nodiscard]] InvestmentResult investment_deposit(Storage &storage, const std::string &player,
     std::string_view target, RaidTargetKind platform, std::int64_t amount, std::int64_t now,
     zodiac::Overrides signs = {});
