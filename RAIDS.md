@@ -34,3 +34,18 @@ Resistance belongs to the stable internal player key and is saved under
 Older saves without these sections start with no resistance. The first raid
 after the recovery interval computes the current level from the saved recovery
 checkpoint.
+
+## Palle carried to another player
+
+`We @someone N` (or `We ircnick N` on IRC) sets off on the same journey as a
+raid, with `N` palle in the sack instead of empty hands. The amount must be
+positive and no larger than the available score, and it leaves the sender the
+moment he sets off, so nothing on the road can be taken from it. The traveller
+is away from home for the whole ride, exactly as in a raid.
+
+On arrival the palle are handed to the target, who receives them whether or not
+he is at home: nothing is stolen, no shield or resistance applies, and the
+target's resistance does not rise. The traveller then rides home empty-handed.
+Naming himself during the ride turns him around, and the undelivered palle come
+back to him when he reaches home. Palle in transit are kept in the `gift` field
+of the `raids` section of `conquister.json`.

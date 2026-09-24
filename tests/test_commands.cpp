@@ -555,7 +555,7 @@ TEST_CASE("We invests and withdraws only with the owner's platform name") {
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
     Storage storage{paths.conquister, paths.quotes};
-    CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
+    const CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
     REQUIRE(command_dispatch(alice, "/leaderboard"));
     storage.transaction([](StorageSession &session) {
         session.state().scores["tg:1"] = 2000;
@@ -563,8 +563,9 @@ TEST_CASE("We invests and withdraws only with the owner's platform name") {
     });
     CHECK(command_is_for_bot("We @Alice 1000"));
     CHECK_FALSE(command_is_for_bot("We @Alice ora"));
-    CHECK(command_dispatch(alice, "We Alice 1000")->contains("solo su te stesso"));
-    CHECK(command_dispatch(alice, "We @Bob 1000")->contains("solo su te stesso"));
+    /* Another name means a delivery, so the refusal is about the player, not about the deposit. */
+    CHECK(command_dispatch(alice, "We Alice 1000")->contains("non conosco nessun giocatore di nome Alice"));
+    CHECK(command_dispatch(alice, "We @Bob 1000")->contains("non conosco nessun giocatore di nome @Bob"));
     CHECK(command_dispatch(alice, "We @Alice 0")->contains("maggiore di zero"));
     CHECK(command_dispatch(alice, "We @Alice 3000")->contains("solo 2000"));
     const std::string deposited = command_dispatch(alice, "We @Alice 1000").value_or("");
@@ -577,7 +578,7 @@ TEST_CASE("We invests and withdraws only with the owner's platform name") {
     CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score >= 1999);
     CHECK(command_dispatch(alice, "We @Alice") == "🪐 Alice sei già in @Alice!");
 
-    CommandContext irc{.storage = storage, .config = config, .user_id = 0, .username = "Bob"};
+    const CommandContext irc{.storage = storage, .config = config, .user_id = 0, .username = "Bob"};
     REQUIRE(command_dispatch(irc, "/leaderboard"));
     storage.transaction([](StorageSession &session) {
         session.state().scores["irc:bob"] = 1000;
@@ -683,6 +684,49 @@ TEST_CASE("the raids tell what happened") {
     CHECK(raid_event_reply(home) == "🪐 bob sei tornato in bob con 250 palle.");
     home.loot = 0;
     CHECK(raid_event_reply(home) == "🪐 bob sei tornato in bob a mani vuote.");
+
+    RaidEvent given;
+    given.kind = RaidEvent::Kind::delivered;
+    given.raider = "bob";
+    given.target = "alice";
+    given.gift = 700;
+    given.seconds = 52;
+    CHECK(raid_event_reply(given) == "🎁 bob hai consegnato 700 palle a alice! Torni in bob tra 52 secondi.");
+    given.target_on_telegram = true;
+    CHECK(raid_event_reply(given) == "🎁 bob hai consegnato 700 palle a @alice! Torni in bob tra 52 secondi.");
+
+    /* He turned back, so the palle he was carrying are his again. */
+    home.gift = 700;
+    CHECK(raid_event_reply(home) == "🎁 bob sei tornato in bob con le tue 700 palle ancora in tasca.");
+}
+
+TEST_CASE("We with a number for somebody else sends the palle to them") {
+    const TestPaths paths{"gift-command-test"};
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    config.travel_divisor = 1000000;
+    Storage storage{paths.conquister, paths.quotes};
+    const CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
+    const CommandContext bob{.storage = storage, .config = config, .user_id = 2, .username = "Bob"};
+    REQUIRE(command_dispatch(alice, "/leaderboard"));
+    REQUIRE(command_dispatch(bob, "/leaderboard"));
+    storage.transaction([](StorageSession &session) {
+        session.state().scores["tg:1"] = 1000;
+        session.state().scores["tg:2"] = 50;
+        return 0;
+    });
+
+    CHECK(command_dispatch(alice, "We @Bob 0")->contains("maggiore di zero"));
+    CHECK(command_dispatch(alice, "We @Bob 1001")->contains("hai solo 1000 palle disponibili"));
+    CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 1000);
+
+    const std::string leaving = command_dispatch(alice, "We @Bob 400").value_or("");
+    CHECK(leaving.contains("🎁 Alice parti per Bob con 400 palle da consegnare"));
+    CHECK(leaving.contains("Alice resta scoperto"));
+    CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 600);
+    /* Handed over only when he gets there, not when he sets off. */
+    CHECK(conquister_user(storage, "Bob", RaidTargetKind::telegram)->score == 50);
 }
 
 TEST_CASE("a quote about what the owner has banned is turned away") {

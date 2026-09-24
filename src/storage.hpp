@@ -47,6 +47,8 @@ struct Raid {
     bool arrived = false;
     /* What he is carrying home, set when he arrives. */
     std::int64_t loot = 0;
+    /* Palle taken along for the target, handed over on arrival and carried back if he turns around. */
+    std::int64_t gift = 0;
 
     bool operator==(const Raid &) const = default;
 };

@@ -701,6 +701,54 @@ TEST_CASE("a raid takes a quarter of what the target has, and carries it home") 
     CHECK(raid_start(storage, 7, "bob", "alice", 11, quick_rides()).status == RaidStatus::started);
 }
 
+TEST_CASE("palle taken along change hands on arrival and come home on a turnaround") {
+    const TestPaths paths{"raid-gift-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":1000,"bob":500},"quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+
+    CHECK(raid_start(storage, 7, "bob", "alice", 0, quick_rides(), RaidTargetKind::any, 600).status ==
+          RaidStatus::insufficient_score);
+    CHECK(conquister_user(storage, "bob")->score == 500);
+
+    const RaidResult start = raid_start(storage, 7, "bob", "alice", 0, quick_rides(), RaidTargetKind::any, 200);
+    REQUIRE(start.status == RaidStatus::started);
+    /* The palle leave with him, so nothing on the road can be taken from them. */
+    CHECK(start.score == 300);
+    CHECK(conquister_user(storage, "bob")->score == 300);
+
+    const std::vector<RaidEvent> arrival = raid_due(storage, 5, quick_rides());
+    REQUIRE(arrival.size() == 1);
+    CHECK(arrival[0].kind == RaidEvent::Kind::delivered);
+    CHECK(arrival[0].gift == 200);
+    CHECK(arrival[0].loot == 0);
+    /* Whoever came to give takes nothing away. */
+    CHECK(conquister_user(storage, "alice")->score == 1200);
+
+    const std::vector<RaidEvent> home = raid_due(storage, 10, quick_rides());
+    REQUIRE(home.size() == 1);
+    CHECK(home[0].kind == RaidEvent::Kind::returned);
+    CHECK(home[0].gift == 0);
+    CHECK(home[0].loot == 0);
+    CHECK(conquister_user(storage, "bob")->score == 300);
+
+    /* Turning back halfway brings the palle home: nobody received them. */
+    REQUIRE(raid_start(storage, 7, "bob", "alice", 11, quick_rides(), RaidTargetKind::any, 100).status ==
+            RaidStatus::started);
+    CHECK(conquister_user(storage, "bob")->score == 200);
+    const RaidResult back = raid_start(storage, 7, "bob", "bob", 13, quick_rides());
+    REQUIRE(back.status == RaidStatus::coming_home);
+    CHECK(conquister_user(storage, "alice")->score == 1200);
+    const std::vector<RaidEvent> returned = raid_due(storage, 13 + back.seconds, quick_rides());
+    REQUIRE(returned.size() == 1);
+    CHECK(returned[0].kind == RaidEvent::Kind::returned);
+    CHECK(returned[0].gift == 100);
+    CHECK(conquister_user(storage, "bob")->score == 300);
+    CHECK(conquister_user(storage, "alice")->score == 1200);
+}
+
 TEST_CASE("old balloons held at home are removed before raids") {
     const TestPaths paths{"raid-balloon-test"};
     {
@@ -1214,7 +1262,7 @@ TEST_CASE("investment withdrawal and deposit require the player to be home") {
     const TestPaths paths{"investment-location-test"};
     Storage storage{paths.conquister, paths.quotes};
     const std::string alice = player_seen(storage, 1, "Alice");
-    const std::string bob = player_seen(storage, 2, "Bob");
+    CHECK_FALSE(player_seen(storage, 2, "Bob").empty());
     storage.transaction([&](StorageSession &session) {
         session.state().scores[alice] = 2000;
         return 0;

@@ -49,8 +49,8 @@ const Counters::value_type *find_ignore_case(const Counters &counters, std::stri
 constexpr std::size_t balloon_attempts = 4;
 /* A successful raid halves the next loot, up to three times; one level recovers every two hours. */
 constexpr std::int64_t max_raid_resistance = 3;
-constexpr std::int64_t raid_resistance_recovery_seconds = 2 * 60 * 60;
-constexpr std::int64_t investment_day_seconds = 24 * 60 * 60;
+constexpr std::int64_t raid_resistance_recovery_seconds = std::int64_t{2} * 60 * 60;
+constexpr std::int64_t investment_day_seconds = std::int64_t{24} * 60 * 60;
 
 Counters::iterator find_entry(Counters &counters, const std::string &username) {
     return std::ranges::find_if(counters, [&username](const Counters::value_type &entry) {
@@ -289,10 +289,11 @@ std::optional<std::string> known_player(const ConquisterState &state, std::strin
             return found->first;
         }
     }
-    for (const InvestmentDeposit &deposit : state.investments) {
-        if (text::equals_ignore_case(deposit.player, name)) {
-            return deposit.player;
-        }
+    const auto invested = std::ranges::find_if(state.investments, [name](const InvestmentDeposit &deposit) {
+        return text::equals_ignore_case(deposit.player, name);
+    });
+    if (invested != state.investments.end()) {
+        return invested->player;
     }
     if (state.current && text::equals_ignore_case(state.current->username, name)) {
         return state.current->username;
@@ -349,7 +350,7 @@ int investment_daily_rate(int zodiac_percent, int magnitude) {
 
 long double investment_value(StorageSession &session, ConquisterState &state, const InvestmentDeposit &deposit,
                              std::int64_t now, zodiac::Overrides signs) {
-    long double balance = static_cast<long double>(deposit.amount);
+    auto balance = static_cast<long double>(deposit.amount);
     const std::int64_t fixed_end = std::min(now, deposit.fixed_until);
     if (fixed_end > deposit.since) {
         const long double elapsed = static_cast<long double>(fixed_end) -
@@ -844,7 +845,7 @@ InvestmentResult investment_withdraw(Storage &storage, const std::string &player
             result.status = InvestmentStatus::balance_limit;
             return result;
         }
-        const std::int64_t payout = static_cast<std::int64_t>(std::floor(std::nextafter(
+        const auto payout = static_cast<std::int64_t>(std::floor(std::nextafter(
             total, std::numeric_limits<long double>::infinity())));
         state.scores[player] = score + payout;
         std::erase_if(state.investments, [&player](const InvestmentDeposit &deposit) {
@@ -865,7 +866,8 @@ RaidResult raid_start(
     std::string_view target,
     std::int64_t now,
     const RaidRules &rules,
-    RaidTargetKind target_kind
+    RaidTargetKind target_kind,
+    std::int64_t gift
 ) {
     const RaidResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
@@ -926,6 +928,21 @@ RaidResult raid_start(
             outcome.status = RaidStatus::holding_place;
             return outcome;
         }
+        /* Palle taken along leave home with him, so nothing can be robbed from them on the way. */
+        if (gift != 0) {
+            const std::int64_t score = counter(state.scores, username);
+            if (gift < 0) {
+                outcome.status = RaidStatus::invalid_amount;
+                return outcome;
+            }
+            if (gift > score) {
+                outcome.status = RaidStatus::insufficient_score;
+                outcome.score = score;
+                return outcome;
+            }
+            state.scores[username] = score - gift;
+            outcome.score = score - gift;
+        }
         outcome.target = display_name(state, *known);
         const position::Point home = position::coordinates_of(player_id(session, state, username));
         const position::Point theirs = position::coordinates_of(player_id(session, state, *known));
@@ -937,12 +954,14 @@ RaidResult raid_start(
             .back = now + (2 * outcome.seconds),
             .arrived = false,
             .loot = 0,
+            .gift = gift,
         });
         return outcome;
     });
 
     if (result.status == RaidStatus::started) {
-        log_info("raid started user={} target={} travel={}", username, result.target, result.seconds);
+        log_info("raid started user={} target={} travel={} gift={}", username, result.target, result.seconds,
+                 gift);
     }
     if (result.status == RaidStatus::left_place) {
         log_info("left the place user={} earned={}", username, result.earned);
@@ -968,50 +987,61 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 event.target_on_telegram = counter(state.telegram_ids, raid.target) != 0;
                 event.raider_emoji = furniture_of(state, raid.raider);
                 event.target_emoji = furniture_of(state, raid.target);
-                const bool target_at_home = at_home(state, raid.target);
-                event.undefended = !target_at_home;
-                const std::int64_t theirs = counter(state.scores, raid.target);
-                /* A palla for every unit of road walked to get there: neighbours take
-                   little, whoever comes from far away pays for the journey. */
-                const position::Point from = position::coordinates_of(player_id(session, state, raid.raider));
-                const position::Point to = position::coordinates_of(player_id(session, state, raid.target));
-                event.distance = position::distance(from, to);
-                event.raider_percent = zodiac::percent_for(event.raider, now, rules.signs);
-                event.target_percent = zodiac::percent_for(event.target, now, rules.signs);
-                const std::int64_t walked =
-                    rules.loot_divisor > 0 ? event.distance / rules.loot_divisor : event.distance;
-                const std::int64_t carried = walked * event.raider_percent / event.target_percent;
-                /* The road says what could be taken, the ceiling what may be: no single
-                   raid leaves anybody at nothing. */
-                const std::int64_t most =
-                    rules.loot_share > 0 ? theirs / rules.loot_share : theirs;
-                event.loot = std::min({theirs, carried, most});
-                if (event.loot > 0) {
-                    if (target_at_home) {
-                        if (find_entry(state.raid_shields, raid.target) != state.raid_shields.end()) {
-                            const std::int64_t potential = event.loot;
-                            event.loot = shielded_loot(potential);
-                            event.shield_absorbed = potential - event.loot;
+                /* Whoever came to give hands the palle over and robs nothing. */
+                if (raid.gift > 0) {
+                    event.kind = RaidEvent::Kind::delivered;
+                    event.gift = raid.gift;
+                    state.scores[raid.target] = counter(state.scores, raid.target) + raid.gift;
+                    raid.gift = 0;
+                } else {
+                    const bool target_at_home = at_home(state, raid.target);
+                    event.undefended = !target_at_home;
+                    const std::int64_t theirs = counter(state.scores, raid.target);
+                    /* A palla for every unit of road walked to get there: neighbours take
+                       little, whoever comes from far away pays for the journey. */
+                    const position::Point from = position::coordinates_of(player_id(session, state, raid.raider));
+                    const position::Point to = position::coordinates_of(player_id(session, state, raid.target));
+                    event.distance = position::distance(from, to);
+                    event.raider_percent = zodiac::percent_for(event.raider, now, rules.signs);
+                    event.target_percent = zodiac::percent_for(event.target, now, rules.signs);
+                    const std::int64_t walked =
+                        rules.loot_divisor > 0 ? event.distance / rules.loot_divisor : event.distance;
+                    const std::int64_t carried = walked * event.raider_percent / event.target_percent;
+                    /* The road says what could be taken, the ceiling what may be: no single
+                       raid leaves anybody at nothing. */
+                    const std::int64_t most =
+                        rules.loot_share > 0 ? theirs / rules.loot_share : theirs;
+                    event.loot = std::min({theirs, carried, most});
+                    if (event.loot > 0) {
+                        if (target_at_home) {
+                            if (find_entry(state.raid_shields, raid.target) != state.raid_shields.end()) {
+                                const std::int64_t potential = event.loot;
+                                event.loot = shielded_loot(potential);
+                                event.shield_absorbed = potential - event.loot;
+                            }
                         }
+                        const std::int64_t exposed = event.loot;
+                        event.loot = resistance_adjusted_loot(state, raid.target, exposed, now);
+                        event.resistance_absorbed = exposed - event.loot;
+                        state.scores[raid.target] = theirs - event.loot;
                     }
-                    const std::int64_t exposed = event.loot;
-                    event.loot = resistance_adjusted_loot(state, raid.target, exposed, now);
-                    event.resistance_absorbed = exposed - event.loot;
-                    state.scores[raid.target] = theirs - event.loot;
+                    raid.loot = event.loot;
                 }
-                raid.loot = event.loot;
                 settled.push_back(std::move(event));
             }
             if (raid.arrived && now >= raid.back) {
                 const std::int64_t carried = counter(state.scores, raid.raider);
-                if (raid.loot > 0) {
-                    state.scores[raid.raider] = carried + raid.loot;
+                /* The loot, plus the palle nobody received because he turned back. */
+                const std::int64_t brought = raid.loot + raid.gift;
+                if (brought > 0) {
+                    state.scores[raid.raider] = carried + brought;
                 }
                 settled.push_back(RaidEvent{
                     .kind = RaidEvent::Kind::returned,
                     .raider = display_name(state, raid.raider),
                     .target = display_name(state, raid.target),
                     .loot = raid.loot,
+                    .gift = raid.gift,
                     .raider_emoji = furniture_of(state, raid.raider),
                     .target_emoji = furniture_of(state, raid.target),
                 });
@@ -1035,8 +1065,12 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 event.target_percent
             );
             break;
+        case RaidEvent::Kind::delivered:
+            log_info("raid delivered user={} target={} gift={}", event.raider, event.target, event.gift);
+            break;
         case RaidEvent::Kind::returned:
-            log_info("raid returned user={} target={} loot={}", event.raider, event.target, event.loot);
+            log_info("raid returned user={} target={} loot={} gift={}", event.raider, event.target,
+                     event.loot, event.gift);
             break;
         }
     }

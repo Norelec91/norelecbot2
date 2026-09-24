@@ -72,7 +72,10 @@ enum class RaidStatus {
     unknown_target,
     left_place,
     coming_home,
-    home_already
+    home_already,
+    /* Only when palle are taken along: not enough of them, or a number that makes no sense. */
+    insufficient_score,
+    invalid_amount
 };
 
 enum class RaidTargetKind { any, telegram, irc };
@@ -109,16 +112,20 @@ struct RaidResult {
     std::int64_t earned = 0;
     std::int64_t boost_multiplier = 0;
     int zodiac_percent = 100;
+    /* What is left after the palle taken along were picked up, or what there was when they were too few. */
+    std::int64_t score = 0;
 };
 
 struct RaidEvent {
-    enum class Kind { stolen, returned };
+    enum class Kind { stolen, delivered, returned };
 
     Kind kind = Kind::stolen;
     std::string raider;
     std::string target;
     std::int64_t loot = 0;
-    /* I soprammobili appesi ai due nomi, da mostrare insieme a loro. */
+    /* The palle carried from home: handed to the target on delivery, brought back on a turnaround. */
+    std::int64_t gift = 0;
+    /* The furniture hung beside the two names, to be shown along with them. */
     std::string raider_emoji;
     std::string target_emoji;
     /* The road between the two, which is also what can be carried off. */
@@ -245,7 +252,9 @@ void debug_set(Storage &storage, const std::string &username, bool wanted);
     std::string_view target,
     std::int64_t now,
     const RaidRules &rules,
-    RaidTargetKind target_kind = RaidTargetKind::any
+    RaidTargetKind target_kind = RaidTargetKind::any,
+    /* Palle to hand over on arrival instead of robbing the target. */
+    std::int64_t gift = 0
 );
 
 /* Funds leave the stealable score until withdrawn while the owner is home. */

@@ -107,6 +107,7 @@ std::vector<Raid> parse_raids(const Json &state) {
             .back = integer(entry.at("back")),
             .arrived = entry.at("arrived").get<bool>(),
             .loot = integer(entry.at("loot")),
+            .gift = entry.contains("gift") ? integer(entry.at("gift")) : 0,
         });
     }
     return raids;
@@ -197,6 +198,7 @@ Json state_to_json(const ConquisterState &state) {
             {"back", raid.back},
             {"arrived", raid.arrived},
             {"loot", raid.loot},
+            {"gift", raid.gift},
         };
     });
     Json investments = Json::array();

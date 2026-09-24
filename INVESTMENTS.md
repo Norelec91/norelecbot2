@@ -2,7 +2,8 @@
 
 `We @YourTelegramUsername N` deposits `N` palle when the sender is home. On IRC,
 the equivalent is `We YourIrcNick N`. The target must resolve to
-the sender's own stable player key on the selected platform. The amount must be
+the sender's own stable player key on the selected platform; any other name
+makes the same line a delivery instead, described in `RAIDS.md`. The amount must be
 positive and cannot exceed the available score. Further deposits are allowed;
 each keeps its own start time.
 

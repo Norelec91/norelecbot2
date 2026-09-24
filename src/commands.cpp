@@ -197,7 +197,7 @@ RaidRules raid_rules(const CommandContext &context) {
     };
 }
 
-std::string handle_raid(const CommandContext &context, std::string_view target) {
+std::string handle_raid(const CommandContext &context, std::string_view target, std::int64_t gift = 0) {
     if (context.username.empty()) {
         return missing_username_reply();
     }
@@ -214,7 +214,8 @@ std::string handle_raid(const CommandContext &context, std::string_view target) 
         name,
         seconds_now(),
         raid_rules(context),
-        telegram_target ? RaidTargetKind::telegram : RaidTargetKind::irc
+        telegram_target ? RaidTargetKind::telegram : RaidTargetKind::irc,
+        gift
     );
     switch (result.status) {
     case RaidStatus::already_travelling:
@@ -241,8 +242,22 @@ std::string handle_raid(const CommandContext &context, std::string_view target) 
         );
     case RaidStatus::home_already:
         return std::format("🪐 {} sei già in {}!", username, home);
+    case RaidStatus::insufficient_score:
+        return std::format("🎁 {} hai solo {} palle disponibili.", username, result.score);
+    case RaidStatus::invalid_amount:
+        return std::format("🎁 {} indica un numero di palle maggiore di zero.", username);
     case RaidStatus::started:
         break;
+    }
+    if (gift > 0) {
+        return std::format(
+            "🎁 {} parti per {} con {} palle da consegnare: arrivi tra {}. {} resta scoperto.",
+            username,
+            result.target,
+            gift,
+            format_wait(result.seconds),
+            username
+        );
     }
     return std::format(
         "🚀 {} parti per {}: arrivi tra {}. {} resta scoperto.",
@@ -253,7 +268,19 @@ std::string handle_raid(const CommandContext &context, std::string_view target) 
     );
 }
 
-std::string handle_investment(const CommandContext &context, const ParsedInvestment &request) {
+/* "We nome numero" toward somebody else: the palle travel with him and change hands when he arrives. */
+std::string handle_gift(const CommandContext &context, const ParsedInvestment &request) {
+    if (context.username.empty()) {
+        return missing_username_reply();
+    }
+    if (request.amount <= 0) {
+        return std::format("🎁 {} indica un numero di palle maggiore di zero.", context.username);
+    }
+    return handle_raid(context, request.target, request.amount);
+}
+
+/* Nothing when the named player is somebody else: those palle are a delivery, not a deposit. */
+std::optional<std::string> handle_investment(const CommandContext &context, const ParsedInvestment &request) {
     if (context.username.empty()) {
         return missing_username_reply();
     }
@@ -273,7 +300,7 @@ std::string handle_investment(const CommandContext &context, const ParsedInvestm
                            horoscope, result.score);
     }
     case InvestmentStatus::not_self:
-        return std::format("🏦 {} puoi investire solo su te stesso.", context.username);
+        return std::nullopt;
     case InvestmentStatus::not_home:
         return std::format("🏦 {} devi essere a casa per investire.", context.username);
     case InvestmentStatus::invalid_amount:
@@ -683,10 +710,25 @@ std::string raid_event_reply(const RaidEvent &event) {
     const std::string raider = with_emoji(event.raider, event.raider_emoji);
     const std::string target = with_emoji(event.target, event.target_emoji);
     if (event.kind == RaidEvent::Kind::returned) {
+        if (event.gift > 0) {
+            return std::format("🎁 {} sei tornato in {} con le tue {} palle ancora in tasca.",
+                               raider, home, event.gift);
+        }
         if (event.loot > 0) {
             return std::format("🪐 {} sei tornato in {} con {} palle.", raider, home, event.loot);
         }
         return std::format("🪐 {} sei tornato in {} a mani vuote.", raider, home);
+    }
+    if (event.kind == RaidEvent::Kind::delivered) {
+        return std::format(
+            "🎁 {} hai consegnato {} palle a {}{}! Torni in {} tra {}.",
+            raider,
+            event.gift,
+            mention,
+            target,
+            home,
+            format_wait(event.seconds)
+        );
     }
     std::string reply = std::format(
         "💰 {} hai rubato {} palle a {}{}",
@@ -726,7 +768,10 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
                 return std::nullopt;
             }
             remember_sender();
-            return handle_investment(bound, *investment);
+            if (std::optional<std::string> reply = handle_investment(bound, *investment)) {
+                return reply;
+            }
+            return handle_gift(bound, *investment);
         }
         if (const std::string_view target = raid_target(message); !target.empty()) {
             if (!context.claims_allowed) {
