@@ -30,8 +30,6 @@ struct ClaimResult {
     int next_chance = 0;
     /* cooldown: seconds still to wait. defended: the penalty just handed out. */
     std::int64_t penalty_seconds = 0;
-    /* defended: the palle the failed attempt cost, never more than the attacker had. */
-    std::int64_t attack_cost = 0;
     /* travelling: how long before the claimer is home again. */
     std::int64_t travel_seconds = 0;
     /* taken: what the kicked holder's ⚡ multiplied the hold by, zero when there was none. */
@@ -220,8 +218,6 @@ struct QuotePage {
 struct ClaimRules {
     /* The penalty a failed attempt leaves behind. */
     int cooldown_seconds = 0;
-    /* What an attempt against a balloon that holds costs the attacker. */
-    int attack_cost = 0;
     zodiac::Overrides signs;
     /* What a hold is multiplied by when the claimer has ⚡ on his name. */
     std::int64_t lightning = 0;

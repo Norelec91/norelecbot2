@@ -73,16 +73,6 @@ Authors::iterator find_entry(Authors &authors, const std::string &username) {
 
 namespace {
 
-/* A balloon that holds costs the attacker, who cannot go below nothing. */
-std::int64_t charge_attacker(ConquisterState &state, const std::string &username, int attack_cost) {
-    const std::int64_t available = counter(state.scores, username);
-    const std::int64_t charged = std::min<std::int64_t>(attack_cost, available);
-    if (charged > 0) {
-        state.scores[username] = available - charged;
-    }
-    return charged;
-}
-
 enum class BalloonRoll : std::uint8_t { none, held, popped };
 
 /* Everybody always has a balloon. The file keeps how many attempts it has survived; one that pops is
@@ -542,7 +532,6 @@ ClaimResult conquister_claim(
                     state.cooldowns[username] = now + rules.cooldown_seconds;
                     outcome.penalty_seconds = rules.cooldown_seconds;
                 }
-                outcome.attack_cost = charge_attacker(state, username, rules.attack_cost);
                 outcome.status = ClaimStatus::defended;
                 outcome.previous_username = display_name(state, holder);
                 outcome.previous_key = holder;
@@ -584,12 +573,11 @@ ClaimResult conquister_claim(
         break;
     case ClaimStatus::defended:
         log_info(
-            "claim defended user={} holder={} next_chance={} penalty={} cost={}",
+            "claim defended user={} holder={} next_chance={} penalty={}",
             username,
             result.previous_username,
             result.next_chance,
-            result.penalty_seconds,
-            result.attack_cost
+            result.penalty_seconds
         );
         break;
     case ClaimStatus::cooldown:

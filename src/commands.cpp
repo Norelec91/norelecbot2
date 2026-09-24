@@ -233,16 +233,6 @@ std::optional<std::string> optional_random_quote(Storage &storage) {
 
 /* What a failed attempt cost the one who made it. */
 std::string failed_attempt_toll(const ClaimResult &result) {
-    if (result.attack_cost > 0 && result.penalty_seconds > 0) {
-        return std::format(
-            " e ti costa {} palle e {} di penalità",
-            result.attack_cost,
-            format_wait(result.penalty_seconds)
-        );
-    }
-    if (result.attack_cost > 0) {
-        return std::format(" e ti costa {} palle", result.attack_cost);
-    }
     if (result.penalty_seconds > 0) {
         return std::format(" e prendi {} di penalità", format_wait(result.penalty_seconds));
     }
@@ -521,7 +511,6 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
             now,
             ClaimRules{
                 .cooldown_seconds = context.config.cooldown_seconds,
-                .attack_cost = context.config.attack_cost,
                 .signs = context.config.zodiac_signs,
                 .lightning = context.config.boost_multiplier,
             }

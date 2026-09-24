@@ -110,9 +110,6 @@ constexpr std::array settings{
     Setting{"NORELECBOT_COOLDOWN_SECONDS", [](AppConfig &config, std::string_view value) {
         return set_number(config.cooldown_seconds, value, AppConfig::default_cooldown_seconds, 0);
     }},
-    Setting{"NORELECBOT_ATTACK_COST", [](AppConfig &config, std::string_view value) {
-        return set_number(config.attack_cost, value, AppConfig::default_attack_cost, 0);
-    }},
     Setting{"NORELECBOT_TRAVEL_DIVISOR", [](AppConfig &config, std::string_view value) {
         return set_number(config.travel_divisor, value, AppConfig::default_travel_divisor, 1);
     }},

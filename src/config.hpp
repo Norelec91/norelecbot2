@@ -27,7 +27,6 @@ struct AppConfig {
     static constexpr int default_price_ceiling = 50;
     static constexpr int default_furniture_limit = 10;
     static constexpr int default_cooldown_seconds = 300;
-    static constexpr int default_attack_cost = 100;
     static constexpr int default_travel_divisor = 350;
     static constexpr int default_boost_multiplier = 3;
     static constexpr int default_api_port = 8000;
@@ -54,7 +53,6 @@ struct AppConfig {
     int price_percent = default_price_percent;
     int price_ceiling = default_price_ceiling;
     int cooldown_seconds = default_cooldown_seconds;
-    int attack_cost = default_attack_cost;
     /* Seconds of travel per unit of distance, and the share of a raid's loot. */
     int travel_divisor = default_travel_divisor;
     int boost_multiplier = default_boost_multiplier;
