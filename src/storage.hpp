@@ -39,6 +39,17 @@ using Counters = nlohmann::ordered_map<std::string, std::int64_t>;
 /* Quotes mapped to whoever added them, in file order. */
 using Authors = nlohmann::ordered_map<std::string, std::string>;
 
+/* When a player's number of ⚡ changed, and how many he had from then on. */
+struct LightningChange {
+    std::int64_t since = 0;
+    std::int64_t bolts = 0;
+
+    bool operator==(const LightningChange &) const = default;
+};
+
+/* Player -> the changes of his ⚡, oldest first: the bank counts the ones he had as each day began. */
+using LightningHistory = nlohmann::ordered_map<std::string, std::vector<LightningChange>>;
+
 /* A player away from home, robbing another one. */
 struct Raid {
     std::string raider;
@@ -103,6 +114,7 @@ struct ConquisterState {
     Authors furniture;
     /* Players who turned the debug switch on for themselves: their purchases are free. */
     Counters debugging;
+    LightningHistory lightning_history;
 
     bool operator==(const ConquisterState &) const = default;
 };

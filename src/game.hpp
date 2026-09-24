@@ -259,10 +259,11 @@ struct Profile {
 
 /* A player named as on that platform; nothing for a name nobody plays under. */
 [[nodiscard]] std::optional<Profile> player_profile(Storage &storage, std::string_view name, RaidTargetKind platform,
-                                                   std::int64_t now, zodiac::Overrides signs = {});
+                                                   std::int64_t now, zodiac::Overrides signs = {},
+                                                   std::int64_t lightning = 0);
 /* The player behind an internal key, even one with nothing on file yet. */
 [[nodiscard]] Profile player_profile_of(Storage &storage, const std::string &key, std::int64_t now,
-                                        zodiac::Overrides signs = {});
+                                        zodiac::Overrides signs = {}, std::int64_t lightning = 0);
 /* limit 0 returns every entry. */
 [[nodiscard]] Leaderboard conquister_leaderboard(Storage &storage, std::size_t limit);
 /* Case-insensitive lookup; rank is 0 when the user has no score yet. */
@@ -333,7 +334,7 @@ struct FurnitureBurnResult {
 /* An emoji brought back to @TheConquister37 leaves the game too: the first slot that holds it is
    emptied. Not from the road. */
 [[nodiscard]] FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player,
-                                                 const std::string &emoji);
+                                                 const std::string &emoji, std::int64_t now);
 
 /* Sends a player to rob another one, if he is at home and the target is somebody the bot knows.
    Naming himself sends him home instead: at once from @TheConquister37, at the end of the ride if he
@@ -357,10 +358,10 @@ struct FurnitureBurnResult {
    withdraw. */
 [[nodiscard]] InvestmentResult investment_deposit(Storage &storage, const std::string &player,
     std::string_view target, RaidTargetKind platform, std::int64_t amount, std::int64_t now,
-    zodiac::Overrides signs = {});
+    zodiac::Overrides signs = {}, std::int64_t lightning = 0);
 [[nodiscard]] InvestmentResult investment_withdraw(Storage &storage, const std::string &player,
     std::string_view target, RaidTargetKind platform, std::int64_t now,
-    zodiac::Overrides signs = {});
+    zodiac::Overrides signs = {}, std::int64_t lightning = 0);
 
 /* Settles the raids that have reached the target or come home by now. */
 [[nodiscard]] std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRules &rules);

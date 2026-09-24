@@ -294,7 +294,7 @@ TEST_CASE("every ⚡ on the name as a player comes in adds its share to that hol
     const ClaimResult entered = conquister_claim(storage, 1, "alice", 0, rules);
     CHECK(entered.entered_lightning == 150);
     /* Burning the ⚡ halfway changes nothing: what the hold is worth was fixed on the way in. */
-    CHECK(furniture_burn(storage, "alice", "⚡").status == FurnitureBurnStatus::burned);
+    CHECK(furniture_burn(storage, "alice", "⚡", 0).status == FurnitureBurnStatus::burned);
     const ClaimResult kicked = conquister_claim(storage, 2, "bob", 1000, rules);
     CHECK(kicked.previous_username == "alice");
     CHECK(kicked.lightning == 150);
@@ -1038,11 +1038,11 @@ TEST_CASE("an emoji is carried to another player, or burnt at the place") {
     CHECK(furniture_buy(storage, "alice", "🚀", 0, 0, 10, 0).status == FurnitureStatus::full);
 
     /* Brought to the place, an emoji is gone: the first copy, leaving a hole. */
-    const FurnitureBurnResult burnt = furniture_burn(storage, "alice", "🐝");
+    const FurnitureBurnResult burnt = furniture_burn(storage, "alice", "🐝", 0);
     CHECK(burnt.status == FurnitureBurnStatus::burned);
     CHECK(burnt.shown == "[]🐝🐝🐝🐝🐝🐝🐝🐝🎈");
-    CHECK(furniture_burn(storage, "alice", "🎺").status == FurnitureBurnStatus::not_owned);
-    CHECK(furniture_burn(storage, "bob", "🍕").shown.empty());
+    CHECK(furniture_burn(storage, "alice", "🎺", 0).status == FurnitureBurnStatus::not_owned);
+    CHECK(furniture_burn(storage, "bob", "🍕", 0).shown.empty());
     CHECK(hung("bob").empty());
 }
 
@@ -1387,4 +1387,57 @@ TEST_CASE("a hold saved with a whole multiplier keeps it as a percent") {
     const ClaimResult kicked = conquister_claim(storage, 2, "bob", 1000);
     CHECK(kicked.lightning == 300);
     CHECK(kicked.earned == earnings("alice", 1000, 1000, 300));
+}
+
+TEST_CASE("every ⚡ makes a good day at the bank better and a bad one less bad") {
+    const TestPaths paths{"lightning-bank-test"};
+    const std::int64_t day = zodiac::day_start(1790200800);
+    const std::int64_t end = zodiac::next_day_start(day);
+    const zodiac::Element house = zodiac::element_of_day(day);
+    {
+        /* Alice and Carol have one ⚡ each, Bob none; the day moves the bank by 40%. */
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":1000,"bob":1000,"carol":1000},"quotes_added":{},)"
+             << R"("furniture":{"alice":"⚡","carol":"⚡"},"investment_magnitudes":{")" << day << R"(":40}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    const std::vector<zodiac::Override> signs{{"alice", std::string{matching_sign(house)}},
+                                               {"bob", std::string{matching_sign(house)}},
+                                               {"carol", std::string{opposing_sign(house)}}};
+    const InvestmentResult alice = investment_deposit(storage, "alice", "alice", RaidTargetKind::any, 1000, day, signs, 50);
+    CHECK(alice.daily_rate == 60);
+    CHECK(investment_deposit(storage, "bob", "bob", RaidTargetKind::any, 1000, day, signs, 50).daily_rate == 40);
+    /* A bad day gets the same share back: -40% is -20% with one ⚡, 0% with two, +20% with three. */
+    CHECK(investment_deposit(storage, "carol", "carol", RaidTargetKind::any, 1000, day, signs, 50).daily_rate == -20);
+
+    CHECK(investment_withdraw(storage, "alice", "alice", RaidTargetKind::any, end, signs, 50).amount == 1600);
+    CHECK(investment_withdraw(storage, "bob", "bob", RaidTargetKind::any, end, signs, 50).amount == 1400);
+    CHECK(investment_withdraw(storage, "carol", "carol", RaidTargetKind::any, end, signs, 50).amount == 800);
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["carol"] = "⚡⚡⚡";
+        session.state().lightning_history.erase("carol");
+        return 0;
+    });
+    CHECK(investment_deposit(storage, "carol", "carol", RaidTargetKind::any, 100, day, signs, 50).daily_rate == 20);
+}
+
+TEST_CASE("a ⚡ bought during the day helps the bank from the next one") {
+    const TestPaths paths{"lightning-bank-history-test"};
+    const std::int64_t day = zodiac::day_start(1790200800);
+    const std::int64_t end = zodiac::next_day_start(day);
+    const zodiac::Element house = zodiac::element_of_day(day);
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"bob":2000},"quotes_added":{},)"
+             << R"("investment_magnitudes":{")" << day << R"(":40}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    const std::vector<zodiac::Override> signs{{"bob", std::string{matching_sign(house)}}};
+    REQUIRE(investment_deposit(storage, "bob", "bob", RaidTargetKind::any, 1000, day, signs, 50).status ==
+            InvestmentStatus::deposited);
+    REQUIRE(furniture_buy(storage, "bob", "⚡", 0, 0, 10, day + 60).status == FurnitureStatus::bought);
+    const Json saved = read_json(paths.conquister);
+    CHECK(saved.at("lightning_history").at("bob") == Json::parse(std::format("[[0,0],[{},1]]", day + 60)));
+    /* The day began without it, so this one pays the plain 40%. */
+    CHECK(investment_withdraw(storage, "bob", "bob", RaidTargetKind::any, end, signs, 50).amount == 1400);
 }

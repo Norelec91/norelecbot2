@@ -450,7 +450,7 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
     if (context.username.empty()) {
         return missing_username_reply();
     }
-    switch (furniture_burn(context.storage, std::string{context.player_key}, std::string{emoji}).status) {
+    switch (furniture_burn(context.storage, std::string{context.player_key}, std::string{emoji}, seconds_now()).status) {
     case FurnitureBurnStatus::travelling:
         return on_the_road(context, "🔥", "si brucia dal tuo pianeta o da @TheConquister37.");
     case FurnitureBurnStatus::not_owned:
@@ -491,7 +491,7 @@ std::optional<std::string> handle_investment(const CommandContext &context, cons
     const std::int64_t now = seconds_now();
     const InvestmentResult result = investment_deposit(context.storage, std::string{context.player_key}, name,
         telegram ? RaidTargetKind::telegram : RaidTargetKind::irc, request.amount, now,
-        context.config.zodiac_signs);
+        context.config.zodiac_signs, context.config.lightning_percent);
     /* From @TheConquister37 the deposit is made on the way home: first what the hold was worth. */
     const std::string departure = departure_line(context, result.departure, now);
     switch (result.status) {
@@ -774,12 +774,13 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
         if (context.username.empty()) {
             return missing_username_reply();
         }
-        found = player_profile_of(context.storage, std::string{context.player_key}, now, context.config.zodiac_signs);
+        found = player_profile_of(context.storage, std::string{context.player_key}, now, context.config.zodiac_signs,
+                                  context.config.lightning_percent);
     } else {
         const bool telegram = wanted.starts_with('@');
         found = player_profile(context.storage, telegram ? wanted.substr(1) : wanted,
                                telegram ? RaidTargetKind::telegram : RaidTargetKind::irc, now,
-                               context.config.zodiac_signs);
+                               context.config.zodiac_signs, context.config.lightning_percent);
         if (!found) {
             return std::format("👤 {} non conosco nessun giocatore di nome {}.", context.username, wanted);
         }
@@ -1101,7 +1102,7 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
                 const InvestmentResult investment = investment_withdraw(context.storage, bound_key,
                     telegram ? target.substr(1) : target,
                     telegram ? RaidTargetKind::telegram : RaidTargetKind::irc, seconds_now(),
-                    context.config.zodiac_signs);
+                    context.config.zodiac_signs, context.config.lightning_percent);
                 const std::string departure = departure_line(bound, investment.departure, seconds_now());
                 if (investment.status == InvestmentStatus::withdrawn) {
                     return departure + std::format("🏦 {} hai ritirato {} (rendimento: {} {}). Saldo: {}.",

@@ -33,6 +33,13 @@ that deposit permanently; a full day at +100% doubles it. A complete local day
 always applies the full rate, including on daylight-saving days. The rate
 changes at local midnight and is saved when first needed, so a restart cannot
 reroll it.
+Every ⚡ the owner had on his name as a day began changes that day's rate by
+`NORELECBOT_LIGHTNING_PERCENT` (50): each one adds that share of the day's swing
+to the rate, good day or bad. +40% becomes +60% with one and +80% with two;
+-40% becomes -20% with one, 0% with two and +20% with three. The bank reads how many ⚡ a player had from
+`lightning_history` in `conquister.json`, which records every change as it
+happens; a ⚡ bought, received or burnt during a day counts from the next one.
+Players with no change on file count the ⚡ on their name.
 The sum is rounded down to whole palle only on withdrawal. A later deposit has
 its own start time and does not receive returns for time before it was made.
 

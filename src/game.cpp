@@ -331,8 +331,56 @@ int investment_daily_rate(int zodiac_percent, int magnitude) {
     return zodiac_percent == 125 ? magnitude : zodiac_percent == 75 ? -magnitude : 0;
 }
 
+/* How many ⚡ hang on a name, drawn in colour or not. */
+std::int64_t count_bolts(std::string_view stored) {
+    return std::ranges::count_if(furniture_slots(stored), [](const std::string &slot) {
+        return slot == "⚡" || slot == "⚡\xEF\xB8\x8F";
+    });
+}
+
+/* How many ⚡ a player had at a given moment, from the changes on file; the ones on his name now when
+   nothing changed since the bank started counting. */
+std::int64_t bolts_at(const ConquisterState &state, const std::string &player, std::int64_t when) {
+    const auto found = state.lightning_history.find(player);
+    if (found == state.lightning_history.end() || found->second.empty()) {
+        return count_bolts(furniture_of(state, player));
+    }
+    std::int64_t bolts = 0;
+    for (const LightningChange &change : found->second) {
+        if (change.since > when) {
+            break;
+        }
+        bolts = change.bolts;
+    }
+    return bolts;
+}
+
+/* Writes down a change in a player's ⚡, with what he had before for the first one on file. */
+void note_bolts(ConquisterState &state, const std::string &player, std::int64_t before, std::int64_t now) {
+    const std::int64_t after = count_bolts(furniture_of(state, player));
+    auto found = state.lightning_history.find(player);
+    if (found == state.lightning_history.end() || found->second.empty()) {
+        if (before == after) {
+            return;
+        }
+        state.lightning_history[player] = {LightningChange{.since = 0, .bolts = before}};
+        found = state.lightning_history.find(player);
+    }
+    if (found->second.back().bolts != after) {
+        found->second.push_back({.since = now, .bolts = after});
+    }
+}
+
+/* Every ⚡ he had as the day began adds its share of the day's swing to the rate, good day or bad. */
+int lightning_rate(const ConquisterState &state, const std::string &player, int rate, std::int64_t day,
+                   std::int64_t lightning_percent) {
+    const auto wide = static_cast<std::int64_t>(rate);
+    const std::int64_t share = bolts_at(state, player, day) * lightning_percent;
+    return static_cast<int>(wide + std::abs(wide) * share / 100);
+}
+
 long double investment_value(StorageSession &session, ConquisterState &state, const InvestmentDeposit &deposit,
-                             std::int64_t now, zodiac::Overrides signs) {
+                             std::int64_t now, zodiac::Overrides signs, std::int64_t lightning_percent) {
     auto balance = static_cast<long double>(deposit.amount);
     const std::int64_t fixed_end = std::min(now, deposit.fixed_until);
     if (fixed_end > deposit.since) {
@@ -346,7 +394,9 @@ long double investment_value(StorageSession &session, ConquisterState &state, co
         const std::int64_t day_seconds = day_end - zodiac::day_start(cursor);
         const std::int64_t elapsed = std::min(now, day_end) - cursor;
         const int percent = zodiac::percent_for(display_name(state, deposit.player), cursor, signs);
-        const int rate = investment_daily_rate(percent, investment_magnitude(session, state, cursor));
+        const int rate = lightning_rate(state, deposit.player,
+                                        investment_daily_rate(percent, investment_magnitude(session, state, cursor)),
+                                        zodiac::day_start(cursor), lightning_percent);
         balance *= 1.0L + static_cast<long double>(rate) / 100.0L *
                    static_cast<long double>(elapsed) / static_cast<long double>(day_seconds);
         if (balance <= 0) {
@@ -560,10 +610,7 @@ ClaimResult conquister_claim(
         }
         /* The ⚡ on his name as he comes in fix what this hold is worth, each one adding its share:
            nothing hung or burnt later can change it. He brings his own balloon, as worn as it is. */
-        const auto bolts = std::ranges::count_if(furniture_slots(furniture_of(state, username)),
-                                                 [](const std::string &slot) {
-                                                     return slot == "⚡" || slot == "⚡\xEF\xB8\x8F";
-                                                 });
+        const std::int64_t bolts = count_bolts(furniture_of(state, username));
         outcome.entered_lightning = bolts > 0 && rules.lightning > 0 ? 100 + bolts * rules.lightning : 0;
         state.current = Holder{.user_id = user_id, .username = username, .since = now,
                                .lightning_percent = outcome.entered_lightning};
@@ -627,7 +674,7 @@ Leaderboard conquister_leaderboard(Storage &storage, std::size_t limit) {
 namespace {
 
 Profile profile_from(StorageSession &session, ConquisterState &state, const std::string &key, std::int64_t now,
-                     zodiac::Overrides signs) {
+                     zodiac::Overrides signs, std::int64_t lightning) {
     Profile profile;
     profile.name = display_name(state, key);
     profile.furniture = furniture_of(state, key);
@@ -653,7 +700,7 @@ Profile profile_from(StorageSession &session, ConquisterState &state, const std:
     for (const InvestmentDeposit &deposit : state.investments) {
         if (deposit.player == key) {
             profile.invested += deposit.amount;
-            value += investment_value(session, state, deposit, now, signs);
+            value += investment_value(session, state, deposit, now, signs, lightning);
         }
     }
     constexpr auto most = static_cast<long double>(std::numeric_limits<std::int64_t>::max());
@@ -665,20 +712,21 @@ Profile profile_from(StorageSession &session, ConquisterState &state, const std:
 }
 
 std::optional<Profile> player_profile(Storage &storage, std::string_view name, RaidTargetKind platform,
-                                      std::int64_t now, zodiac::Overrides signs) {
+                                      std::int64_t now, zodiac::Overrides signs, std::int64_t lightning) {
     return storage.transaction([&](StorageSession &session) -> std::optional<Profile> {
         ConquisterState &state = session.state();
         const std::optional<std::string> key = player_by_name(state, name, platform);
         if (!key) {
             return std::nullopt;
         }
-        return profile_from(session, state, *key, now, signs);
+        return profile_from(session, state, *key, now, signs, lightning);
     });
 }
 
-Profile player_profile_of(Storage &storage, const std::string &key, std::int64_t now, zodiac::Overrides signs) {
+Profile player_profile_of(Storage &storage, const std::string &key, std::int64_t now, zodiac::Overrides signs,
+                          std::int64_t lightning) {
     return storage.transaction([&](StorageSession &session) {
-        return profile_from(session, session.state(), key, now, signs);
+        return profile_from(session, session.state(), key, now, signs, lightning);
     });
 }
 
@@ -852,7 +900,8 @@ std::vector<std::string> slots_of(const ConquisterState &state, const std::strin
 }
 
 /* Writes a name's slots back; a name left with nothing loses its entry. */
-void hang(ConquisterState &state, const std::string &player, std::vector<std::string> slots) {
+void hang(ConquisterState &state, const std::string &player, std::vector<std::string> slots, std::int64_t now) {
+    const std::int64_t before = count_bolts(furniture_of(state, player));
     std::string stored = furniture_stored(std::move(slots));
     const auto mine = find_entry(state.furniture, player);
     if (stored.empty()) {
@@ -865,6 +914,7 @@ void hang(ConquisterState &state, const std::string &player, std::vector<std::st
     } else {
         state.furniture[player] = std::move(stored);
     }
+    note_bolts(state, player, before, now);
 }
 
 /* The first empty slot on a name, or nothing when every one of them is taken. */
@@ -887,7 +937,7 @@ bool has_emoji(const ConquisterState &state, const std::string &player, std::str
 }
 
 /* Takes the first copy of an emoji off a name, leaving a hole where it hung. */
-bool take_emoji(ConquisterState &state, const std::string &player, std::string_view emoji) {
+bool take_emoji(ConquisterState &state, const std::string &player, std::string_view emoji, std::int64_t now) {
     std::vector<std::string> slots = slots_of(state, player);
     const auto found = std::ranges::find_if(slots, [emoji](const std::string &slot) {
         return !slot.empty() && same_emoji(slot, emoji);
@@ -896,12 +946,13 @@ bool take_emoji(ConquisterState &state, const std::string &player, std::string_v
         return false;
     }
     found->clear();
-    hang(state, player, std::move(slots));
+    hang(state, player, std::move(slots), now);
     return true;
 }
 
 /* Hangs an emoji in the first empty slot of a name; false when the name is full. */
-bool give_emoji(ConquisterState &state, const std::string &player, const std::string &emoji, std::size_t limit) {
+bool give_emoji(ConquisterState &state, const std::string &player, const std::string &emoji, std::size_t limit,
+                std::int64_t now) {
     std::vector<std::string> slots = slots_of(state, player);
     const std::optional<std::size_t> slot = free_slot(slots, limit);
     if (!slot) {
@@ -911,7 +962,7 @@ bool give_emoji(ConquisterState &state, const std::string &player, const std::st
         slots.resize(*slot + 1);
     }
     slots[*slot] = emoji;
-    hang(state, player, std::move(slots));
+    hang(state, player, std::move(slots), now);
     return true;
 }
 
@@ -952,7 +1003,7 @@ FurnitureMoveResult furniture_move(Storage &storage, const std::string &username
         outcome.swapped = slots[target];
         std::swap(slots[source], slots[target]);
         outcome.status = outcome.swapped.empty() ? FurnitureMoveStatus::moved : FurnitureMoveStatus::swapped;
-        hang(state, username, slots);
+        hang(state, username, slots, now);
         outcome.shown = furniture_stored(std::move(slots));
         return outcome;
     });
@@ -960,13 +1011,14 @@ FurnitureMoveResult furniture_move(Storage &storage, const std::string &username
     return result;
 }
 
-FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, const std::string &emoji) {
+FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, const std::string &emoji,
+                                   std::int64_t now) {
     const FurnitureBurnResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         if (is_away(state, player)) {
             return FurnitureBurnResult{.status = FurnitureBurnStatus::travelling, .shown = {}};
         }
-        if (!take_emoji(state, player, emoji)) {
+        if (!take_emoji(state, player, emoji, now)) {
             return FurnitureBurnResult{.status = FurnitureBurnStatus::not_owned, .shown = {}};
         }
         return FurnitureBurnResult{.status = FurnitureBurnStatus::burned, .shown = furniture_of(state, player)};
@@ -1037,14 +1089,10 @@ FurnitureResult furniture_buy(
         }
         outcome.replaced = slots[index];
         slots[index] = emoji;
-        outcome.shown = furniture_stored(std::move(slots));
+        outcome.shown = furniture_stored(slots);
         outcome.available_score -= outcome.charged;
         state.scores[username] = outcome.available_score;
-        if (mine != state.furniture.end()) {
-            mine->second = outcome.shown;
-        } else {
-            state.furniture[username] = outcome.shown;
-        }
+        hang(state, username, std::move(slots), now);
         outcome.status = FurnitureStatus::bought;
         return outcome;
     });
@@ -1096,7 +1144,7 @@ BurnResult palle_burn(Storage &storage, const std::string &player, std::int64_t 
 
 InvestmentResult investment_deposit(Storage &storage, const std::string &player,
                                     std::string_view target, RaidTargetKind platform,
-                                    std::int64_t amount, std::int64_t now, zodiac::Overrides signs) {
+                                    std::int64_t amount, std::int64_t now, zodiac::Overrides signs, std::int64_t lightning) {
     const InvestmentResult outcome = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         InvestmentResult result;
@@ -1123,8 +1171,9 @@ InvestmentResult investment_deposit(Storage &storage, const std::string &player,
                 result.amount = amount;
                 result.score = score - amount;
                 result.zodiac_percent = zodiac::percent_for(display_name(state, player), now, signs);
-                result.daily_rate = investment_daily_rate(result.zodiac_percent,
-                    investment_magnitude(session, state, now));
+                result.daily_rate = lightning_rate(state, player,
+                    investment_daily_rate(result.zodiac_percent, investment_magnitude(session, state, now)),
+                    zodiac::day_start(now), lightning);
             }
         }
         return result;
@@ -1134,7 +1183,7 @@ InvestmentResult investment_deposit(Storage &storage, const std::string &player,
 
 InvestmentResult investment_withdraw(Storage &storage, const std::string &player,
                                      std::string_view target, RaidTargetKind platform,
-                                     std::int64_t now, zodiac::Overrides signs) {
+                                     std::int64_t now, zodiac::Overrides signs, std::int64_t lightning) {
     return storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         InvestmentResult result;
@@ -1162,7 +1211,7 @@ InvestmentResult investment_withdraw(Storage &storage, const std::string &player
                 continue;
             }
             found = true;
-            total += investment_value(session, state, deposit, now, signs);
+            total += investment_value(session, state, deposit, now, signs, lightning);
             if (total >= static_cast<long double>(std::numeric_limits<std::int64_t>::max()) ||
                 !std::isfinite(total)) {
                 result.status = InvestmentStatus::balance_limit;
@@ -1285,7 +1334,7 @@ RaidResult raid_start(
                 outcome.status = RaidStatus::no_room;
                 return outcome;
             }
-            static_cast<void>(take_emoji(state, username, gift_emoji));
+            static_cast<void>(take_emoji(state, username, gift_emoji, now));
         }
         outcome.target = display_name(state, *known);
         const position::Point home = position::coordinates_of(player_id(session, state, username));
@@ -1369,7 +1418,7 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                         event.gift_emoji = raid.gift_emoji;
                         /* A name that filled up meanwhile sends it back the way it came. */
                         if (has_room(state, raid.target, rules.furniture_limit) &&
-                            give_emoji(state, raid.target, raid.gift_emoji, rules.furniture_limit)) {
+                            give_emoji(state, raid.target, raid.gift_emoji, rules.furniture_limit, now)) {
                             raid.gift_emoji.clear();
                             event.target_emoji = furniture_of(state, raid.target);
                         } else {
@@ -1413,7 +1462,7 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 /* An emoji nobody took goes back on his name: its slot was kept free while it travelled. */
                 if (!raid.gift_emoji.empty()) {
                     static_cast<void>(give_emoji(state, raid.raider, raid.gift_emoji,
-                                                 std::numeric_limits<std::size_t>::max()));
+                                                 std::numeric_limits<std::size_t>::max(), now));
                 }
                 settled.push_back(RaidEvent{
                     .kind = RaidEvent::Kind::returned,

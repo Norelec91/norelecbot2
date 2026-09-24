@@ -90,6 +90,22 @@ Authors parse_authors(const Json &state, const char *name) {
     return authors;
 }
 
+LightningHistory parse_lightning_history(const Json &state) {
+    LightningHistory history;
+    const auto section = state.find("lightning_history");
+    if (section == state.end() || !section->is_object()) {
+        return history;
+    }
+    for (const auto &[player, changes] : section->items()) {
+        std::vector<LightningChange> mine;
+        std::ranges::transform(changes, std::back_inserter(mine), [](const Json &change) {
+            return LightningChange{.since = integer(change.at(0)), .bolts = integer(change.at(1))};
+        });
+        history[player] = std::move(mine);
+    }
+    return history;
+}
+
 std::vector<Raid> parse_raids(const Json &state) {
     std::vector<Raid> raids;
     const auto section = state.find("raids");
@@ -186,10 +202,19 @@ ConquisterState parse_state(const Json &json) {
         parse_authors(json, "quote_authors"),
         parse_authors(json, "furniture"),
         parse_counters(json, "debugging"),
+        parse_lightning_history(json),
     };
 }
 
 Json state_to_json(const ConquisterState &state) {
+    Json lightning_history = Json::object();
+    for (const auto &[player, changes] : state.lightning_history) {
+        Json mine = Json::array();
+        std::ranges::transform(changes, std::back_inserter(mine), [](const LightningChange &change) {
+            return Json::array({change.since, change.bolts});
+        });
+        lightning_history[player] = std::move(mine);
+    }
     Json raids = Json::array();
     std::ranges::transform(state.raids, std::back_inserter(raids), [](const Raid &raid) {
         return Json{
@@ -237,6 +262,7 @@ Json state_to_json(const ConquisterState &state) {
         {"quote_authors", state.quote_authors},
         {"furniture", state.furniture},
         {"debugging", state.debugging},
+        {"lightning_history", std::move(lightning_history)},
     };
 }
 
