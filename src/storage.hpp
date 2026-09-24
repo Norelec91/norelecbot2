@@ -66,13 +66,13 @@ struct ConquisterState {
     std::optional<Holder> current;
     Counters scores;
     Counters quotes_added;
-    /* Balloon owners mapped to the attempts their balloon has already survived. */
+    /* Current holder's temporary balloon mapped to attempts already survived. */
     Counters balloons;
     /* Users mapped to the instant their claim penalty expires. */
     Counters cooldowns;
     /* Users mapped to the multiplier their next hold earns, until someone takes the place from them. */
     Counters boosts;
-    /* Persistent protection that reduces raid loot until replaced by a balloon or boost. */
+    /* Persistent protection that reduces raid loot at home until replaced by a boost. */
     Counters raid_shields;
     /* Successful raids build resistance for the target, shared by every attacker. */
     Counters raid_resistance_levels;

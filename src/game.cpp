@@ -564,7 +564,12 @@ ClaimResult conquister_claim(
             outcome.boost_multiplier = settled.boost_multiplier;
             outcome.zodiac_percent = settled.zodiac_percent;
         }
+        state.balloons.clear();
         state.current = Holder{user_id, username, now};
+        if (find_entry(state.boosts, username) == state.boosts.end()) {
+            state.balloons[username] = 0;
+            outcome.balloon_active = true;
+        }
         return outcome;
     });
 
@@ -744,49 +749,12 @@ Authors furniture_all(Storage &storage) {
     return storage.transaction([](StorageSession &session) { return session.state().furniture; });
 }
 
-BalloonResult balloon_buy(
-    Storage &storage,
-    const std::string &username,
-    int cost
-) {
-    const BalloonResult result = storage.transaction([&](StorageSession &session) {
-        ConquisterState &state = session.state();
-        const std::int64_t score = counter(state.scores, username);
-        if (find_entry(state.balloons, username) != state.balloons.end()) {
-            return BalloonResult{BalloonStatus::already_owned, score};
-        }
-        if (find_entry(state.boosts, username) != state.boosts.end()) {
-            return BalloonResult{BalloonStatus::has_boost, score};
-        }
-        if (score < cost) {
-            return BalloonResult{BalloonStatus::insufficient_score, score};
-        }
-        state.scores[username] = score - cost;
-        state.raid_shields.erase(username);
-        state.balloons[username] = 0;
-        return BalloonResult{BalloonStatus::bought, score - cost};
-    });
-
-    if (result.status == BalloonStatus::bought) {
-        log_info(
-            "balloon bought user={} cost={} left={}",
-            username,
-            cost,
-            result.available_score
-        );
-    }
-    return result;
-}
-
 RaidShieldResult raid_shield_buy(Storage &storage, const std::string &username, int cost) {
     const RaidShieldResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         const std::int64_t score = counter(state.scores, username);
         if (find_entry(state.raid_shields, username) != state.raid_shields.end()) {
             return RaidShieldResult{RaidShieldStatus::already_owned, score};
-        }
-        if (find_entry(state.balloons, username) != state.balloons.end()) {
-            return RaidShieldResult{RaidShieldStatus::has_balloon, score};
         }
         if (find_entry(state.boosts, username) != state.boosts.end()) {
             return RaidShieldResult{RaidShieldStatus::has_boost, score};
@@ -936,6 +904,7 @@ RaidResult raid_start(
                 const std::string holder = state.current->username;
                 const Settlement settled =
                     settle_hold(state, holder, state.current->since, now, rules.signs);
+                state.balloons.erase(holder);
                 state.current.reset();
                 outcome.status = RaidStatus::left_place;
                 outcome.earned = settled.earned;
@@ -1001,50 +970,36 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 event.target_emoji = furniture_of(state, raid.target);
                 const bool target_at_home = at_home(state, raid.target);
                 event.undefended = !target_at_home;
-                const auto balloon = find_entry(state.balloons, raid.target);
-                if (target_at_home && balloon != state.balloons.end()) {
-                    const std::int64_t attempt = balloon->second + 1;
-                    if (static_cast<std::int64_t>(session.random_index(balloon_attempts)) >= attempt) {
-                        balloon->second = attempt;
-                        event.kind = RaidEvent::Kind::defended;
-                        event.cost = charge_attacker(state, raid.raider, rules.attack_cost);
-                    } else {
-                        state.balloons.erase(raid.target);
-                        event.balloon_popped = true;
-                    }
-                }
-                if (event.kind == RaidEvent::Kind::stolen) {
-                    const std::int64_t theirs = counter(state.scores, raid.target);
-                    /* A palla for every unit of road walked to get there: neighbours take
-                       little, whoever comes from far away pays for the journey. */
-                    const position::Point from = position::coordinates_of(player_id(session, state, raid.raider));
-                    const position::Point to = position::coordinates_of(player_id(session, state, raid.target));
-                    event.distance = position::distance(from, to);
-                    event.raider_percent = zodiac::percent_for(event.raider, now, rules.signs);
-                    event.target_percent = zodiac::percent_for(event.target, now, rules.signs);
-                    const std::int64_t walked =
-                        rules.loot_divisor > 0 ? event.distance / rules.loot_divisor : event.distance;
-                    const std::int64_t carried = walked * event.raider_percent / event.target_percent;
-                    /* The road says what could be taken, the ceiling what may be: no single
-                       raid leaves anybody at nothing. */
-                    const std::int64_t most =
-                        rules.loot_share > 0 ? theirs / rules.loot_share : theirs;
-                    event.loot = std::min({theirs, carried, most});
-                    if (event.loot > 0) {
-                        if (target_at_home) {
-                            if (find_entry(state.raid_shields, raid.target) != state.raid_shields.end()) {
-                                const std::int64_t potential = event.loot;
-                                event.loot = shielded_loot(potential);
-                                event.shield_absorbed = potential - event.loot;
-                            }
+                const std::int64_t theirs = counter(state.scores, raid.target);
+                /* A palla for every unit of road walked to get there: neighbours take
+                   little, whoever comes from far away pays for the journey. */
+                const position::Point from = position::coordinates_of(player_id(session, state, raid.raider));
+                const position::Point to = position::coordinates_of(player_id(session, state, raid.target));
+                event.distance = position::distance(from, to);
+                event.raider_percent = zodiac::percent_for(event.raider, now, rules.signs);
+                event.target_percent = zodiac::percent_for(event.target, now, rules.signs);
+                const std::int64_t walked =
+                    rules.loot_divisor > 0 ? event.distance / rules.loot_divisor : event.distance;
+                const std::int64_t carried = walked * event.raider_percent / event.target_percent;
+                /* The road says what could be taken, the ceiling what may be: no single
+                   raid leaves anybody at nothing. */
+                const std::int64_t most =
+                    rules.loot_share > 0 ? theirs / rules.loot_share : theirs;
+                event.loot = std::min({theirs, carried, most});
+                if (event.loot > 0) {
+                    if (target_at_home) {
+                        if (find_entry(state.raid_shields, raid.target) != state.raid_shields.end()) {
+                            const std::int64_t potential = event.loot;
+                            event.loot = shielded_loot(potential);
+                            event.shield_absorbed = potential - event.loot;
                         }
-                        const std::int64_t exposed = event.loot;
-                        event.loot = resistance_adjusted_loot(state, raid.target, exposed, now);
-                        event.resistance_absorbed = exposed - event.loot;
-                        state.scores[raid.target] = theirs - event.loot;
                     }
-                    raid.loot = event.loot;
+                    const std::int64_t exposed = event.loot;
+                    event.loot = resistance_adjusted_loot(state, raid.target, exposed, now);
+                    event.resistance_absorbed = exposed - event.loot;
+                    state.scores[raid.target] = theirs - event.loot;
                 }
+                raid.loot = event.loot;
                 settled.push_back(std::move(event));
             }
             if (raid.arrived && now >= raid.back) {
@@ -1070,19 +1025,15 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
         switch (event.kind) {
         case RaidEvent::Kind::stolen:
             log_info(
-                "raid stolen user={} target={} loot={} resistance={} undefended={} balloon_popped={} percent={}/{}",
+                "raid stolen user={} target={} loot={} resistance={} undefended={} percent={}/{}",
                 event.raider,
                 event.target,
                 event.loot,
                 event.resistance_absorbed,
                 event.undefended ? 1 : 0,
-                event.balloon_popped ? 1 : 0,
                 event.raider_percent,
                 event.target_percent
             );
-            break;
-        case RaidEvent::Kind::defended:
-            log_info("raid defended user={} target={} cost={}", event.raider, event.target, event.cost);
             break;
         case RaidEvent::Kind::returned:
             log_info("raid returned user={} target={} loot={}", event.raider, event.target, event.loot);
@@ -1107,9 +1058,6 @@ BoostResult boost_buy(
         /* A boost bought during a hold would multiply even the time before its purchase. */
         if (state.current && text::equals_ignore_case(state.current->username, username)) {
             return BoostResult{BoostStatus::holding_place, score};
-        }
-        if (find_entry(state.balloons, username) != state.balloons.end()) {
-            return BoostResult{BoostStatus::has_balloon, score};
         }
         if (score < cost) {
             return BoostResult{BoostStatus::insufficient_score, score};

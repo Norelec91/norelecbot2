@@ -25,6 +25,8 @@ struct ClaimResult {
     std::int64_t earned = 0;
     /* taken: getting in popped a balloon. defended: the percentage the next attempt will have. */
     bool balloon_popped = false;
+    /* A successful claim grants a temporary balloon unless a boost is active. */
+    bool balloon_active = false;
     int next_chance = 0;
     /* cooldown: seconds still to wait. defended: the penalty just handed out. */
     std::int64_t penalty_seconds = 0;
@@ -38,11 +40,9 @@ struct ClaimResult {
     int zodiac_percent = 100;
 };
 
-enum class BalloonStatus { bought, already_owned, has_boost, insufficient_score };
+enum class BoostStatus { bought, already_owned, holding_place, insufficient_score };
 
-enum class BoostStatus { bought, already_owned, holding_place, has_balloon, insufficient_score };
-
-enum class RaidShieldStatus { bought, already_owned, has_balloon, has_boost, insufficient_score };
+enum class RaidShieldStatus { bought, already_owned, has_boost, insufficient_score };
 
 struct RaidShieldResult {
     RaidShieldStatus status = RaidShieldStatus::bought;
@@ -57,11 +57,6 @@ struct FurnitureResult {
     /* How the name reads now, and how many pieces hang from it. */
     std::string shown;
     std::size_t howmany = 0;
-};
-
-struct BalloonResult {
-    BalloonStatus status = BalloonStatus::bought;
-    std::int64_t available_score = 0;
 };
 
 struct BoostResult {
@@ -101,8 +96,6 @@ struct RaidRules {
     int loot_share = 3;
     /* Seconds of travel per unit of distance, and the share of the loot: a quarter by default. */
     int travel_divisor = 1000;
-    /* What a raid the balloon turns back costs the raider. */
-    int attack_cost = 0;
     zodiac::Overrides signs;
 };
 
@@ -119,13 +112,12 @@ struct RaidResult {
 };
 
 struct RaidEvent {
-    enum class Kind { stolen, defended, returned };
+    enum class Kind { stolen, returned };
 
     Kind kind = Kind::stolen;
     std::string raider;
     std::string target;
     std::int64_t loot = 0;
-    std::int64_t cost = 0;
     /* I soprammobili appesi ai due nomi, da mostrare insieme a loro. */
     std::string raider_emoji;
     std::string target_emoji;
@@ -135,7 +127,6 @@ struct RaidEvent {
     std::int64_t seconds = 0;
     int raider_percent = 100;
     int target_percent = 100;
-    bool balloon_popped = false;
     /* A purchased shield absorbed part of this raid's potential loot. */
     std::int64_t shield_absorbed = 0;
     /* The target's raid resistance absorbed part of the remaining loot. */
@@ -212,7 +203,6 @@ struct ClaimRules {
 enum class LinkStatus { pending, linked, unknown_account, conflict, self, already_linked };
 [[nodiscard]] LinkStatus player_link(Storage &storage, std::int64_t user_id, const std::string &username,
                                      std::string_view other_name, std::string_view account_name = {});
-/* One balloon per user: it survives 4 attempts at most, then has to be bought again. */
 /* What is going around, so the prices can keep up with it. */
 struct Wealth {
     std::int64_t total = 0;
@@ -238,12 +228,6 @@ void debug_set(Storage &storage, const std::string &username, bool wanted);
 );
 /* Everybody's emoji, for whoever only has names to write. */
 [[nodiscard]] Authors furniture_all(Storage &storage);
-
-[[nodiscard]] BalloonResult balloon_buy(
-    Storage &storage,
-    const std::string &username,
-    int cost
-);
 
 [[nodiscard]] RaidShieldResult raid_shield_buy(
     Storage &storage,

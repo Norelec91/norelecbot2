@@ -40,7 +40,6 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
         .loot_divisor = config.loot_divisor,
         .loot_share = config.raid_share,
         .travel_divisor = config.travel_divisor,
-        .attack_cost = config.attack_cost,
         .signs = config.zodiac_signs,
     };
     while (!stop.load(std::memory_order_relaxed)) {

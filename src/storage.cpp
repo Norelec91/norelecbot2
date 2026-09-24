@@ -320,6 +320,15 @@ Storage::Storage(std::string conquister_path, std::string quotes_path)
     }
     ConquisterState migrated = *state;
     bool has_legacy_investments = false;
+    bool has_inactive_balloons = false;
+    for (auto balloon = migrated.balloons.begin(); balloon != migrated.balloons.end();) {
+        if (!migrated.current || balloon->first != migrated.current->username) {
+            balloon = migrated.balloons.erase(balloon);
+            has_inactive_balloons = true;
+        } else {
+            ++balloon;
+        }
+    }
     const std::int64_t cutover = std::chrono::duration_cast<std::chrono::seconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
     for (InvestmentDeposit &deposit : migrated.investments) {
@@ -328,9 +337,9 @@ Storage::Storage(std::string conquister_path, std::string quotes_path)
             has_legacy_investments = true;
         }
     }
-    if ((has_legacy_shields || has_legacy_investments) &&
+    if ((has_legacy_shields || has_legacy_investments || has_inactive_balloons) &&
         !save_json(conquister_path_, state_to_json(migrated))) {
-        throw StorageError("Legacy game state could not be migrated");
+        throw StorageError("Game state could not be migrated");
     }
     log_info("JSON storage ready (conquister={}, quotes={})", conquister_path_, quotes_path_);
 }

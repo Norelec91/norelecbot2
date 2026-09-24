@@ -46,6 +46,10 @@ TEST_CASE("the REST routes answer with the documented JSON") {
     expect(storage, "/leaderboard", 200, "{\"entries\":[],\"current\":null}\n");
     static_cast<void>(conquister_claim(storage, 7, "Norelec", 100));
     expect(storage, "/leaderboard", 200, "{\"entries\":[],\"current\":{\"username\":\"Norelec\",\"since\":100}}\n");
+    storage.transaction([](StorageSession &session) {
+        session.state().balloons["Norelec"] = 3;
+        return 0;
+    });
     static_cast<void>(conquister_claim(storage, 8, "bob", 150));
     expect(
         storage,

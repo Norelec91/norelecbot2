@@ -193,7 +193,6 @@ RaidRules raid_rules(const CommandContext &context) {
         .loot_divisor = context.config.loot_divisor,
         .loot_share = context.config.raid_share,
         .travel_divisor = context.config.travel_divisor,
-        .attack_cost = context.config.attack_cost,
         .signs = context.config.zodiac_signs,
     };
 }
@@ -355,6 +354,9 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
         );
     }
     reply += std::format("🪐 {} sei in {}!", dressed(furniture, context.player_key, username), conquister_place);
+    if (result.balloon_active) {
+        reply += " 🎈 Palloncino gratuito attivo finché resti qui.";
+    }
     if (const std::optional<std::string> quote = optional_random_quote(context.storage)) {
         reply += std::format("\n\n{}", *quote);
     }
@@ -481,33 +483,10 @@ std::string handle_buy_furniture(const CommandContext &context, std::string_view
     );
 }
 
-std::string handle_buy_balloon(const CommandContext &context, std::string_view) {
-    if (context.username.empty()) {
-        return missing_username_reply();
-    }
-    const std::string username{context.username};
-    const int cost = price(context, context.config.balloon_cost);
-    const BalloonResult result = balloon_buy(context.storage, std::string{context.player_key}, cost);
-    if (result.status == BalloonStatus::already_owned) {
-        return std::format("{} hai già un palloncino.", username);
-    }
-    if (result.status == BalloonStatus::has_boost) {
-        return std::format("{} hai un boost attivo: il palloncino puoi comprarlo dopo.", username);
-    }
-    if (result.status == BalloonStatus::insufficient_score) {
-        return std::format(
-            "{} ti servono {} palle per un palloncino (ne hai {}).",
-            username,
-            cost,
-            result.available_score
-        );
-    }
-    return std::format(
-        "🎈 {} hai comprato un palloncino spendendo {} palle! Ora puoi difendere la tua posizione in {}.",
-        username,
-        cost,
-        conquister_place
-    );
+std::string handle_buy_balloon(const CommandContext &, std::string_view) {
+    return "🎈 /buyballoon è deprecato: non serve più comprare il palloncino. "
+           "Lo ricevi gratis quando entri in @TheConquister37, se non hai un boost. "
+           "Sparisce quando lasci il posto e non protegge a casa.";
 }
 
 std::string handle_quotes(const CommandContext &context, std::string_view argument) {
@@ -597,9 +576,6 @@ std::string handle_buy_boost(const CommandContext &context, std::string_view) {
             conquister_place
         );
     }
-    if (result.status == BoostStatus::has_balloon) {
-        return std::format("{} hai un palloncino: il boost puoi comprarlo dopo.", username);
-    }
     if (result.status == BoostStatus::insufficient_score) {
         return std::format(
             "{} ti servono {} palle per un boost (ne hai {}).",
@@ -628,9 +604,6 @@ std::string handle_buy_shield(const CommandContext &context, std::string_view) {
     if (result.status == RaidShieldStatus::already_owned) {
         return std::format("{} hai già uno scudo pronto.", username);
     }
-    if (result.status == RaidShieldStatus::has_balloon) {
-        return std::format("{} hai un palloncino: lo scudo puoi comprarlo dopo.", username);
-    }
     if (result.status == RaidShieldStatus::has_boost) {
         return std::format("{} hai un boost attivo: lo scudo puoi comprarlo dopo.", username);
     }
@@ -640,7 +613,7 @@ std::string handle_buy_shield(const CommandContext &context, std::string_view) {
     }
     return std::format(
         "🛡️ {} hai comprato uno scudo spendendo {} palle! Ridurrà i furti mentre sei a casa, "
-        "finché non compri un palloncino o un boost.",
+        "finché non compri un boost.",
         username, cost
     );
 }
@@ -718,16 +691,6 @@ std::string raid_event_reply(const RaidEvent &event) {
         }
         return std::format("🪐 {} sei tornato in {} a mani vuote.", raider, home);
     }
-    if (event.kind == RaidEvent::Kind::defended) {
-        return std::format(
-            "🎈 {} il palloncino di {} ha resistito{}. Torni in {} a mani vuote tra {}.",
-            raider,
-            target,
-            event.cost > 0 ? std::format(" e ti costa {} palle", event.cost) : "",
-            home,
-            format_wait(event.seconds)
-        );
-    }
     std::string reply = std::format(
         "💰 {} hai rubato {} palle a {}{}",
         raider,
@@ -737,8 +700,6 @@ std::string raid_event_reply(const RaidEvent &event) {
     );
     if (event.undefended) {
         reply += ", che non era a casa";
-    } else if (event.balloon_popped) {
-        reply += ", bucandogli il palloncino";
     }
     reply += std::format("! Torni in {} tra {}.", home, format_wait(event.seconds));
     return reply;
