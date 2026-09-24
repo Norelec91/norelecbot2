@@ -110,7 +110,7 @@ TEST_CASE("the bot answers the commands it knows and ignores the rest") {
         const std::string deprecated_balloon =
             "🎈 /buyballoon è deprecato: non serve più comprare il palloncino. "
             "Ce l'hai sempre e protegge il posto dove sei: "
-            "@TheConquister37 o casa tua. Quando scoppia, se ne forma subito uno nuovo.";
+            "@TheConquister37 o il tuo pianeta. Quando scoppia, se ne forma subito uno nuovo.";
         CHECK(command_is_for_bot("/buyballoon"));
         CHECK(reply("/buyballoon") == deprecated_balloon);
         context.user_id = 5;
@@ -130,7 +130,7 @@ TEST_CASE("the bot answers the commands it knows and ignores the rest") {
         CHECK(command_is_for_bot("/buyshield"));
         CHECK(reply("/buyshield") ==
               "🛡️ /buyshield è deprecato: lo scudo non esiste più. "
-              "Contro le razzie resta il palloncino, che ti protegge quando sei a casa.");
+              "Contro le razzie resta il palloncino, che ti protegge quando sei sul tuo pianeta.");
 
         config.quote_cost = 0;
         context.user_id = 3;
@@ -431,7 +431,7 @@ TEST_CASE("We @someone sends the player out to rob them") {
         return command_dispatch(context, text).value_or("<nessuna risposta>");
     };
 
-    CHECK(reply("We @alice") == "🚀 bob parti per alice: arrivi tra 5 secondi. La tua casa resta scoperta.");
+    CHECK(reply("We @alice") == "🚀 bob parti per alice: arrivi tra 5 secondi. Il tuo pianeta resta scoperto.");
     CHECK(reply("We @alice") == "🚀 bob sei già in viaggio, torni tra 10 secondi.");
     /* Another player, who is at home and can therefore get an answer of his own. */
     context.username = "carol";
@@ -614,7 +614,7 @@ TEST_CASE("the raids tell what happened") {
     event.target_on_telegram = true;
     event.undefended = true;
     CHECK(raid_event_reply(event) ==
-          "💰 bob hai rubato 250 palle a @alice, che non era a casa! Torni in bob tra 52 secondi.");
+          "💰 bob hai rubato 250 palle a @alice, che non era sul suo pianeta! Torni in bob tra 52 secondi.");
 
     event.undefended = false;
     event.balloon_held = true;
@@ -704,7 +704,7 @@ TEST_CASE("the profile shows where a player stands") {
     REQUIRE(command_dispatch(alice, "We @TheConquister37"));
     CHECK(command_dispatch(alice, "/profile")->contains("\n🪐 in @TheConquister37 da "));
     REQUIRE(command_dispatch(bob, "We @Alice")->contains("parti per Alice"));
-    CHECK(command_dispatch(alice, "/profile @Bob")->contains("\n🚀 in viaggio verso Alice: a casa tra "));
+    CHECK(command_dispatch(alice, "/profile @Bob")->contains("\n🚀 in viaggio verso Alice: rientra tra "));
 }
 
 TEST_CASE("the help lists every We line with the asker's own name") {
@@ -720,11 +720,13 @@ TEST_CASE("the help lists every We line with the asker's own name") {
     const std::string help = command_dispatch(telegram, "/help").value_or("");
     CHECK(help.starts_with("📖 Come si gioca\n\n"));
     CHECK(help.contains("\nWe @Alice 🍕 3 — appendi 🍕 nel posto 3\n"));
-    CHECK(help.contains("\nWe @Alice ⚡ — con il fulmine al nome ogni possesso vale x3\n"));
+    CHECK_FALSE(help.contains("⚡"));
+    CHECK(help.contains("\nWe @Alice — torni sul tuo pianeta, dal posto, dal viaggio o ritiri l'investimento\n"));
+    CHECK(help.ends_with("\n/link <nome> — collega account Telegram e nick IRC Azzurra registrato"));
     CHECK(help.contains("\nWe @giocatore 500 — gli porti 500 palle\n"));
     CHECK(help.contains("\nWe @TheConquister37 🍕 — bruci una 🍕\n"));
     CHECK(help.contains("\n/leaderboard — classifica\n"));
-    CHECK(help.contains("\n/profile [nome] — il tuo profilo, o quello di un altro\n"));
+    CHECK(help.contains("\n/profile [nome] — il tuo profilo o quello di un altro\n"));
 
     /* On IRC: bare nicks and the bang instead of the slash; the place keeps its @. */
     const std::string on_irc = command_dispatch(irc, "/help").value_or("");
@@ -739,7 +741,7 @@ TEST_CASE("the help lists every We line with the asker's own name") {
     CHECK(command_dispatch(irc, "/buyshield")->starts_with("🛡️ !buyshield è deprecato"));
     CHECK(command_dispatch(irc, "/buyballoon")->starts_with("🎈 !buyballoon è deprecato"));
     CHECK(command_dispatch(irc, "/buyfurniture") ==
-          "🛋️ !buyfurniture è deprecato: le emoji ora si comprano da casa con We Bob 🍕, "
+          "🛋️ !buyfurniture è deprecato: le emoji ora si comprano dal tuo pianeta con We Bob 🍕, "
           "oppure We Bob 🍕 3 per sceglierne il posto.");
     CommandContext owner = irc;
     owner.owner = true;
@@ -804,17 +806,17 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     CHECK(furniture_all(storage).at("tg:1") == "[]🎈");
     /* On the road she cannot buy, and the old command only points to the new way. */
     CHECK(command_dispatch(alice, "We @Alice 🚀") ==
-          "🛋️ Alice sei in viaggio: le emoji si appendono al nome da casa. Per tornare indietro scrivi We @Alice.");
+          "🛋️ Alice sei in viaggio: le emoji si appendono al nome dal tuo pianeta. Per tornare indietro scrivi We @Alice.");
     CHECK(command_dispatch(alice, "We @Alice 1 2") ==
-          "🛋️ Alice sei in viaggio: le emoji si spostano da casa. Per tornare indietro scrivi We @Alice.");
+          "🛋️ Alice sei in viaggio: le emoji si spostano dal tuo pianeta. Per tornare indietro scrivi We @Alice.");
     CHECK(command_dispatch(alice, "We @TheConquister37 🎈") ==
-          "🔥 Alice sei in viaggio: si brucia da casa o da @TheConquister37. Per tornare indietro scrivi We @Alice.");
+          "🔥 Alice sei in viaggio: si brucia dal tuo pianeta o da @TheConquister37. Per tornare indietro scrivi We @Alice.");
     CHECK(command_dispatch(alice, "We @TheConquister37 1") ==
-          "🔥 Alice sei in viaggio: si brucia da casa o da @TheConquister37. Per tornare indietro scrivi We @Alice.");
+          "🔥 Alice sei in viaggio: si brucia dal tuo pianeta o da @TheConquister37. Per tornare indietro scrivi We @Alice.");
     CHECK(command_dispatch(alice, "We @Alice 1") ==
-          "🏦 Alice sei in viaggio: si investe da casa. Per tornare indietro scrivi We @Alice.");
+          "🏦 Alice sei in viaggio: si investe dal tuo pianeta. Per tornare indietro scrivi We @Alice.");
     CHECK(command_dispatch(alice, "/buyfurniture 🚀") ==
-          "🛋️ /buyfurniture è deprecato: le emoji ora si comprano da casa con We @Alice 🍕, "
+          "🛋️ /buyfurniture è deprecato: le emoji ora si comprano dal tuo pianeta con We @Alice 🍕, "
           "oppure We @Alice 🍕 3 per sceglierne il posto.");
 
     RaidEvent given;
@@ -829,7 +831,7 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     given.no_room = true;
     given.target_emoji = "🐝🐝";
     CHECK(raid_event_reply(given) ==
-          "🎁 Alice @Bob (🐝🐝) non ha più posto per 🍕: te la riporti a casa. Torni in Alice tra 5 secondi.");
+          "🎁 Alice @Bob (🐝🐝) non ha più posto per 🍕: te la riporti sul tuo pianeta. Torni in Alice tra 5 secondi.");
 
     RaidEvent home;
     home.kind = RaidEvent::Kind::returned;
@@ -951,7 +953,7 @@ TEST_CASE("We with a number for somebody else sends the palle to them") {
 
     const std::string leaving = command_dispatch(alice, "We @Bob 400").value_or("");
     CHECK(leaving.contains("🚀 Alice parti per Bob con 400 palle da consegnare"));
-    CHECK(leaving.contains("La tua casa resta scoperta"));
+    CHECK(leaving.contains("Il tuo pianeta resta scoperto"));
     CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 600);
     /* Handed over only when he gets there, not when he sets off. */
     CHECK(conquister_user(storage, "Bob", RaidTargetKind::telegram)->score == 50);

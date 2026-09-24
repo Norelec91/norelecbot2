@@ -321,7 +321,7 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
     }
     if (!gift_emoji.empty()) {
         return std::format(
-            "🚀 {} parti per {} con {} da consegnare: arrivi tra {}. La tua casa resta scoperta.",
+            "🚀 {} parti per {} con {} da consegnare: arrivi tra {}. Il tuo pianeta resta scoperto.",
             username,
             result.target,
             gift_emoji,
@@ -330,7 +330,7 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
     }
     if (gift > 0) {
         return std::format(
-            "🚀 {} parti per {} con {} palle da consegnare: arrivi tra {}. La tua casa resta scoperta.",
+            "🚀 {} parti per {} con {} palle da consegnare: arrivi tra {}. Il tuo pianeta resta scoperto.",
             username,
             result.target,
             gift,
@@ -338,7 +338,7 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
         );
     }
     return std::format(
-        "🚀 {} parti per {}: arrivi tra {}. La tua casa resta scoperta.",
+        "🚀 {} parti per {}: arrivi tra {}. Il tuo pianeta resta scoperto.",
         username,
         result.target,
         format_wait(result.seconds)
@@ -389,7 +389,7 @@ std::string handle_burn(const CommandContext &context, std::int64_t amount) {
     case BurnStatus::insufficient_score:
         return std::format("🔥 {} hai solo {} palle disponibili.", context.username, result.score);
     case BurnStatus::travelling:
-        return on_the_road(context, "🔥", "si brucia da casa o da @TheConquister37.");
+        return on_the_road(context, "🔥", "si brucia dal tuo pianeta o da @TheConquister37.");
     case BurnStatus::burned:
         break;
     }
@@ -421,7 +421,7 @@ std::string handle_furniture_move(const CommandContext &context, const ParsedMov
     case FurnitureMoveStatus::same_position:
         return departure + std::format("🛋️ {} il posto di partenza e quello di arrivo sono lo stesso.", username);
     case FurnitureMoveStatus::not_home:
-        return on_the_road(context, "🛋️", "le emoji si spostano da casa.");
+        return on_the_road(context, "🛋️", "le emoji si spostano dal tuo pianeta.");
     case FurnitureMoveStatus::empty_slot:
         return departure + std::format("🛋️ {} nel posto {} non c'è nessuna emoji.", username, move.from);
     case FurnitureMoveStatus::swapped:
@@ -442,7 +442,7 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
     }
     switch (furniture_burn(context.storage, std::string{context.player_key}, std::string{emoji}).status) {
     case FurnitureBurnStatus::travelling:
-        return on_the_road(context, "🔥", "si brucia da casa o da @TheConquister37.");
+        return on_the_road(context, "🔥", "si brucia dal tuo pianeta o da @TheConquister37.");
     case FurnitureBurnStatus::not_owned:
         return std::format("🔥 {} non hai {} appesa al nome.", context.username, emoji);
     case FurnitureBurnStatus::burned:
@@ -497,7 +497,7 @@ std::optional<std::string> handle_investment(const CommandContext &context, cons
     case InvestmentStatus::not_self:
         return std::nullopt;
     case InvestmentStatus::not_home:
-        return on_the_road(context, "🏦", "si investe da casa.");
+        return on_the_road(context, "🏦", "si investe dal tuo pianeta.");
     case InvestmentStatus::invalid_amount:
         return std::format("🏦 {} indica un numero di palle maggiore di zero.", context.username);
     case InvestmentStatus::insufficient_score:
@@ -666,7 +666,7 @@ std::string handle_buy_furniture(const CommandContext &context, std::string_view
         return missing_username_reply();
     }
     return std::format(
-        "🛋️ {}buyfurniture è deprecato: le emoji ora si comprano da casa con We {} 🍕, "
+        "🛋️ {}buyfurniture è deprecato: le emoji ora si comprano dal tuo pianeta con We {} 🍕, "
         "oppure We {} 🍕 3 per sceglierne il posto.",
         command_prefix(context),
         own_name(context),
@@ -694,7 +694,7 @@ std::string handle_furniture(const CommandContext &context, std::string_view wan
     const std::string departure = departure_line(context, result.departure, now);
     switch (result.status) {
     case FurnitureStatus::not_home:
-        return on_the_road(context, "🛋️", "le emoji si appendono al nome da casa.");
+        return on_the_road(context, "🛋️", "le emoji si appendono al nome dal tuo pianeta.");
     case FurnitureStatus::full:
         return departure + std::format(
             "🛋️ {} hai già tutti i {} posti pieni: scegli quale sostituire con We {} <emoji> <posizione>. "
@@ -749,23 +749,21 @@ std::string handle_help(const CommandContext &context, std::string_view) {
         help += std::format("{} — {}\n", example, meaning);
     };
     line(std::format("We {}", conquister_place), "entri nel posto: 1 palla al secondo finché lo tieni");
-    line(std::format("We {}", me), "torni a casa, dal posto o dal viaggio, o ritiri l'investimento");
+    line(std::format("We {}", me), "torni sul tuo pianeta, dal posto, dal viaggio o ritiri l'investimento");
     line(std::format("We {} 1000", me), "investi 1000 palle");
-    line(std::format("We {} 🍕", me), "appendi 🍕 al nome nel primo posto libero, da casa");
+    line(std::format("We {} 🍕", me), "appendi 🍕 al nome nel primo posto libero, dal tuo pianeta");
     line(std::format("We {} 🍕 3", me), "appendi 🍕 nel posto 3");
-    line(std::format("We {} ⚡", me), std::format("con il fulmine al nome ogni possesso vale x{}",
-                                                  context.config.boost_multiplier));
     line(std::format("We {} 1 2", me), "sposti l'emoji dal posto 1 al posto 2");
     line(std::format("We {}", other), "parti per razziarlo");
     line(std::format("We {} 500", other), "gli porti 500 palle");
     line(std::format("We {} 🍕", other), "gli porti una 🍕");
     line(std::format("We {} 500", conquister_place), "bruci 500 palle");
     line(std::format("We {} 🍕", conquister_place), "bruci una 🍕");
-    help += std::format("\nDa {} le righe col tuo nome ti riportano prima a casa. "
+    help += std::format("\nDa {} le righe col tuo nome ti riportano prima sul tuo pianeta. "
                         "In viaggio si può solo tornare indietro: We {}.\n", conquister_place, me);
-    help += std::format("\n{0}leaderboard — classifica\n{0}profile [nome] — il tuo profilo, o quello di un altro\n"
+    help += std::format("\n{0}leaderboard — classifica\n{0}profile [nome] — il tuo profilo o quello di un altro\n"
                         "{0}addquote <testo> — aggiungi una citazione\n"
-                        "{0}link <nome> — collega account Telegram e nick IRC",
+                        "{0}link <nome> — collega account Telegram e nick IRC Azzurra registrato",
                         slash);
     return help;
 }
@@ -810,7 +808,7 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
                             profile.multiplier > 1 ? std::format(" col ⚡ x{}", profile.multiplier) : std::string{});
         break;
     case ProfilePlace::road:
-        card += std::format("🚀 {} {}: a casa tra {}\n", profile.returning ? "sulla via del ritorno da" : "in viaggio verso",
+        card += std::format("🚀 {} {}: rientra tra {}\n", profile.returning ? "sulla via del ritorno da" : "in viaggio verso",
                             profile.heading, format_wait(profile.home_in));
         break;
     }
@@ -827,7 +825,7 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
 std::string handle_buy_balloon(const CommandContext &context, std::string_view) {
     return std::format("🎈 {}buyballoon è deprecato: non serve più comprare il palloncino. "
                        "Ce l'hai sempre e protegge il posto dove sei: "
-                       "@TheConquister37 o casa tua. Quando scoppia, se ne forma subito uno nuovo.",
+                       "@TheConquister37 o il tuo pianeta. Quando scoppia, se ne forma subito uno nuovo.",
                        command_prefix(context));
 }
 
@@ -918,7 +916,7 @@ std::string handle_buy_boost(const CommandContext &context, std::string_view) {
 
 std::string handle_buy_shield(const CommandContext &context, std::string_view) {
     return std::format("🛡️ {}buyshield è deprecato: lo scudo non esiste più. "
-                       "Contro le razzie resta il palloncino, che ti protegge quando sei a casa.",
+                       "Contro le razzie resta il palloncino, che ti protegge quando sei sul tuo pianeta.",
                        command_prefix(context));
 }
 
@@ -1008,7 +1006,7 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
     }
     if (event.kind == RaidEvent::Kind::delivered && !event.gift_emoji.empty()) {
         if (event.no_room) {
-            return std::format("🎁 {} {}{} non ha più posto per {}: te la riporti a casa. Torni in {} tra {}.",
+            return std::format("🎁 {} {}{} non ha più posto per {}: te la riporti sul tuo pianeta. Torni in {} tra {}.",
                                raider, mention, target, event.gift_emoji, home, format_wait(event.seconds));
         }
         return std::format("🎁 {} hai consegnato {} a {}{}! Torni in {} tra {}.",
@@ -1041,7 +1039,7 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
         ? std::format("💰 {} hai bucato il palloncino di {}{} e rubato {} palle", raider, mention, target, event.loot)
         : std::format("💰 {} hai rubato {} palle a {}{}", raider, event.loot, mention, target);
     if (event.undefended) {
-        reply += ", che non era a casa";
+        reply += ", che non era sul suo pianeta";
     }
     reply += std::format("! Torni in {} tra {}.", home, format_wait(event.seconds));
     return reply;
