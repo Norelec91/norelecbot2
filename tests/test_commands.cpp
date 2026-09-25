@@ -624,8 +624,7 @@ TEST_CASE("the raids tell what happened") {
     home.raider = "bob";
     home.target = "alice";
     home.loot = 250;
-    /* The arrival already told the loot: the homecoming is not announced. */
-    CHECK_FALSE(raid_event_reply(home));
+    CHECK(raid_event_reply(home) == "🪐 bob torni in bob con 250 palle.");
     home.loot = 0;
     CHECK_FALSE(raid_event_reply(home));
 
