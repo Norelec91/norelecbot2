@@ -12,6 +12,7 @@
 #include <format>
 #include <limits>
 #include <utility>
+#include <vector>
 
 namespace norelecbot {
 namespace {
@@ -202,21 +203,25 @@ std::string palle(std::int64_t count) {
 }
 
 std::string format_wait(std::int64_t seconds) {
-    const std::int64_t minutes = seconds / 60;
+    /* Exact, largest unit first, the empty ones left out: "1 ora e 5 secondi", "23 ore, 59 minuti e 30 secondi". */
+    const std::int64_t hours = seconds / 3600;
+    const std::int64_t minutes = seconds % 3600 / 60;
     const std::int64_t rest = seconds % 60;
-    if (minutes == 0) {
-        return std::format("{} second{}", rest, rest == 1 ? "o" : "i");
+    std::vector<std::string> parts;
+    if (hours > 0) {
+        parts.push_back(std::format("{} or{}", hours, hours == 1 ? "a" : "e"));
     }
-    if (rest == 0) {
-        return std::format("{} minut{}", minutes, minutes == 1 ? "o" : "i");
+    if (minutes > 0) {
+        parts.push_back(std::format("{} minut{}", minutes, minutes == 1 ? "o" : "i"));
     }
-    return std::format(
-        "{} minut{} e {} second{}",
-        minutes,
-        minutes == 1 ? "o" : "i",
-        rest,
-        rest == 1 ? "o" : "i"
-    );
+    if (rest > 0 || parts.empty()) {
+        parts.push_back(std::format("{} second{}", rest, rest == 1 ? "o" : "i"));
+    }
+    std::string text = parts.front();
+    for (std::size_t index = 1; index < parts.size(); ++index) {
+        text += (index + 1 == parts.size() ? " e " : ", ") + parts[index];
+    }
+    return text;
 }
 
 std::string missing_username_reply() {
@@ -243,7 +248,6 @@ std::string failed_attempt_toll(const ClaimResult &result) {
 RaidRules raid_rules(const CommandContext &context) {
     return {
         .loot_divisor = context.config.loot_divisor,
-        .loot_share = context.config.raid_share,
         .travel_divisor = context.config.travel_divisor,
         .signs = context.config.zodiac_signs,
         .furniture_limit = static_cast<std::size_t>(context.config.furniture_limit),
@@ -1091,14 +1095,26 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
                 const InvestmentResult investment = investment_withdraw(context.storage, bound_key,
                     telegram ? target.substr(1) : target,
                     telegram ? RaidTargetKind::telegram : RaidTargetKind::irc, seconds_now(),
-                    context.config.zodiac_signs, context.config.lightning_percent);
+                    context.config.zodiac_signs, context.config.lightning_percent,
+                    std::int64_t{context.config.investment_lock_hours} * 3600);
                 const std::string departure = departure_line(bound, investment.departure, seconds_now());
+                /* Deposits still in their lock stay in the bank, and he is told when the first comes out. */
+                const std::string waiting = investment.still_locked == 0 ? std::string{}
+                    : std::format(" Restano in banca {}: la prima parte si sblocca tra {}.",
+                                  palle(investment.still_locked), format_wait(investment.unlock_in));
                 if (investment.status == InvestmentStatus::withdrawn) {
-                    return departure + std::format("🏦 {} hai ritirato {} (rendimento: {} {}). Saldo: {}.",
+                    return departure + std::format("🏦 {} hai ritirato {} (rendimento: {} {}). Saldo: {}.{}",
                                                    context.username, palle(investment.amount),
                                                    signed_amount(investment.interest),
                                                    investment.interest == 1 || investment.interest == -1 ? "palla" : "palle",
-                                                   palle(investment.score));
+                                                   palle(investment.score), waiting);
+                }
+                if (investment.status == InvestmentStatus::locked) {
+                    return departure + std::format("🏦 {} {} in banca si {} tra {}.", context.username,
+                                                   investment.still_locked == 1 ? std::string{"la tua palla"}
+                                                       : std::format("le tue {} palle", investment.still_locked),
+                                                   investment.still_locked == 1 ? "sblocca" : "sbloccano",
+                                                   format_wait(investment.unlock_in));
                 }
                 if (investment.status == InvestmentStatus::balance_limit) {
                     return departure + std::format("🏦 {} il saldo è troppo alto per ritirare l'investimento: contatta il proprietario del bot.",

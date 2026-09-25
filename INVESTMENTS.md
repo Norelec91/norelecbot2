@@ -7,6 +7,13 @@ makes the same line a delivery instead, described in `RAIDS.md`. The amount must
 positive and cannot exceed the available score. Further deposits are allowed;
 each keeps its own start time.
 
+Every deposit stays in the bank for `NORELECBOT_INVESTMENT_LOCK_HOURS` (24 by
+default) before it can be withdrawn. A withdrawal takes out the deposits past
+their lock and leaves the younger ones in the bank, saying when the first of them
+frees; with none past its lock nothing moves and the reply says how long is
+left. A lock of 96 hours, a whole round of the four houses, makes every deposit
+live through at least one unfavourable day.
+
 Deposited palle leave the score immediately. They cannot be stolen or spent on
 items or quotes while invested. Interest continues to accrue even when the
 player later travels or occupies @TheConquister37, but deposits and withdrawals

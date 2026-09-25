@@ -1173,7 +1173,8 @@ InvestmentResult investment_deposit(Storage &storage, const std::string &player,
 
 InvestmentResult investment_withdraw(Storage &storage, const std::string &player,
                                      std::string_view target, RaidTargetKind platform,
-                                     std::int64_t now, zodiac::Overrides signs, std::int64_t lightning) {
+                                     std::int64_t now, zodiac::Overrides signs, std::int64_t lightning,
+                                     std::int64_t lock_seconds) {
     return storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         InvestmentResult result;
@@ -1193,11 +1194,23 @@ InvestmentResult investment_withdraw(Storage &storage, const std::string &player
             result.status = InvestmentStatus::not_home;
             return result;
         }
+        /* A deposit stays in the bank for its lock: whoever could take it out the same day would only
+           ever bank the good days. */
+        const auto ripe = [&](const InvestmentDeposit &deposit) {
+            return deposit.player == player && now - deposit.since >= lock_seconds;
+        };
+        for (const InvestmentDeposit &deposit : state.investments) {
+            if (deposit.player == player && !ripe(deposit)) {
+                result.still_locked += deposit.amount;
+                const std::int64_t left = deposit.since + lock_seconds - now;
+                result.unlock_in = result.unlock_in == 0 ? left : std::min(result.unlock_in, left);
+            }
+        }
         long double total = 0;
         long double principal = 0;
         bool found = false;
         for (const InvestmentDeposit &deposit : state.investments) {
-            if (deposit.player != player) {
+            if (!ripe(deposit)) {
                 continue;
             }
             found = true;
@@ -1210,7 +1223,7 @@ InvestmentResult investment_withdraw(Storage &storage, const std::string &player
             principal += static_cast<long double>(deposit.amount);
         }
         if (!found) {
-            result.status = InvestmentStatus::no_investment;
+            result.status = InvestmentStatus::locked;
             return result;
         }
         const std::int64_t score = counter(state.scores, player);
@@ -1222,9 +1235,7 @@ InvestmentResult investment_withdraw(Storage &storage, const std::string &player
         const auto payout = static_cast<std::int64_t>(std::floor(std::nextafter(
             total, std::numeric_limits<long double>::infinity())));
         state.scores[player] = score + payout;
-        std::erase_if(state.investments, [&player](const InvestmentDeposit &deposit) {
-            return deposit.player == player;
-        });
+        std::erase_if(state.investments, ripe);
         result.status = InvestmentStatus::withdrawn;
         result.amount = payout;
         result.interest = payout - static_cast<std::int64_t>(principal);
@@ -1430,11 +1441,8 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                     const std::int64_t walked =
                         rules.loot_divisor > 0 ? event.distance / rules.loot_divisor : event.distance;
                     const std::int64_t carried = walked * event.raider_percent / event.target_percent;
-                    /* The road says what could be taken, the ceiling what may be: no single
-                       raid leaves anybody at nothing. */
-                    const std::int64_t most =
-                        rules.loot_share > 0 ? theirs / rules.loot_share : theirs;
-                    event.loot = std::min({theirs, carried, most});
+                    /* The road says what can be taken, and nobody loses more than he has. */
+                    event.loot = std::min(theirs, carried);
                     if (event.loot > 0) {
                         state.scores[raid.target] = theirs - event.loot;
                     }

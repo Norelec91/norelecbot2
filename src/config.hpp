@@ -14,15 +14,14 @@ namespace norelecbot {
 
 struct AppConfig {
     static constexpr int default_quote_cost = 1000;
+    /* How long a deposit stays in the bank before it can be withdrawn. */
+    static constexpr int default_investment_lock_hours = 24;
     static constexpr int default_furniture_cost = 10000;
     /* How much dearer an emoji gets, in percent, for every copy of it already in the game. */
     static constexpr int default_furniture_inflation = 50;
     /* How much road buys a palla: the distance between the two is divided by this before it
        becomes loot, so a journey is worth a few minutes of holding the place, not a day of it. */
     static constexpr int default_loot_divisor = 50;
-    /* A raid takes at most this fraction of what the target owns: three means a third. Zero
-       lifts the ceiling and lets a raid clean him out. */
-    static constexpr int default_raid_share = 3;
     static constexpr int default_furniture_limit = 10;
     static constexpr int default_cooldown_seconds = 300;
     static constexpr int default_travel_divisor = 350;
@@ -48,11 +47,11 @@ struct AppConfig {
     int furniture_limit = default_furniture_limit;
     int furniture_inflation = default_furniture_inflation;
     int loot_divisor = default_loot_divisor;
-    int raid_share = default_raid_share;
     int cooldown_seconds = default_cooldown_seconds;
     /* Seconds of travel per unit of distance, and the share of a raid's loot. */
     int travel_divisor = default_travel_divisor;
     int lightning_percent = default_lightning_percent;
+    int investment_lock_hours = default_investment_lock_hours;
     /* Players whose real sign the owner knows, instead of the one their name gives. */
     std::vector<zodiac::Override> zodiac_signs;
     std::int64_t conquister_chat_id = 0;

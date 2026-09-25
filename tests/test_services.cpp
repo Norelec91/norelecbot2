@@ -357,11 +357,11 @@ namespace {
 
 /* Far enough apart that every ride is the shortest one, so the tests do not depend on where ids land. */
 RaidRules quick_rides() {
-    return RaidRules{.loot_divisor = 50, .loot_share = 3, .travel_divisor = 1000000, .signs = {}};
+    return RaidRules{.loot_divisor = 50, .travel_divisor = 1000000, .signs = {}};
 }
 
 RaidRules full_rides() {
-    return RaidRules{.loot_divisor = 1, .loot_share = 10, .travel_divisor = 1000000, .signs = {}};
+    return RaidRules{.loot_divisor = 1, .travel_divisor = 1000000, .signs = {}};
 }
 
 }
@@ -380,8 +380,8 @@ TEST_CASE("a raid on an empty house is marked undefended") {
     REQUIRE(arrivals.size() == 2);
     CHECK(arrivals[1].raider == "bob");
     CHECK(arrivals[1].undefended);
-    /* A tenth of her 2000 palle: nobody at home to stand in the way. */
-    CHECK(arrivals[1].loot == 200);
+    /* The whole road, with nobody at home to stand in the way. */
+    CHECK(arrivals[1].loot == arrivals[1].distance * arrivals[1].raider_percent / arrivals[1].target_percent);
 }
 
 TEST_CASE("the balloon guards only where its owner is, and follows him home") {
@@ -427,8 +427,7 @@ TEST_CASE("every raid that gets through takes the whole road, however many came 
              << R"("ids":{"alice":0,"bob":5000,"carol":4000},)"
              << R"("raid_resistance_levels":{"alice":3},"raid_resistance_since":{"alice":0}})";
     }
-    RaidRules rules = full_rides();
-    rules.loot_share = 0;
+    const RaidRules rules = full_rides();
     const auto potential = [](const RaidEvent &event) {
         return event.distance * event.raider_percent / event.target_percent;
     };
@@ -449,7 +448,7 @@ TEST_CASE("every raid that gets through takes the whole road, however many came 
     }
 }
 
-TEST_CASE("a raid takes a quarter of what the target has, and carries it home") {
+TEST_CASE("a raid takes what the road allows, up to all the target has, and carries it home") {
     const TestPaths paths{"raid-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
@@ -474,14 +473,12 @@ TEST_CASE("a raid takes a quarter of what the target has, and carries it home") 
     CHECK(arrival[0].kind == RaidEvent::Kind::stolen);
     CHECK(arrival[0].raider == "bob");
     CHECK(arrival[0].target == "alice");
-    /* A palla for every unit of road, but never more than a third of what the target owns: one
-       raid alone leaves nobody at nothing. */
+    /* A palla for every unit of road, never more than the target owns. */
     CHECK(arrival[0].distance > 0);
     const std::int64_t carried = (arrival[0].distance / 50) *
         zodiac::percent_for("bob", 5) / zodiac::percent_for("alice", 5);
-    const std::int64_t loot = std::min(carried, std::int64_t{1000} / 3);
+    const std::int64_t loot = std::min(carried, std::int64_t{1000});
     CHECK(arrival[0].loot == loot);
-    CHECK(conquister_user(storage, "alice")->score > 0);
     /* alice has never written to the bot from Telegram, so her name carries no mention. */
     CHECK_FALSE(arrival[0].target_on_telegram);
     /* Taken from the target at once, handed over only at the end of the ride. */
@@ -1085,7 +1082,7 @@ TEST_CASE("turning back mid journey only costs the road already walked") {
     Storage storage{paths.conquister, paths.quotes};
     /* A divisor of one turns the distance itself into seconds, so the legs are long enough to
        turn back in the middle of one. */
-    const RaidRules slow{.loot_divisor = 50, .loot_share = 0, .travel_divisor = 1, .signs = {}};
+    const RaidRules slow{.loot_divisor = 50, .travel_divisor = 1, .signs = {}};
 
     const RaidResult left = raid_start(storage, 7, "bob", "alice", 0, slow);
     REQUIRE(left.status == RaidStatus::started);
@@ -1391,7 +1388,7 @@ TEST_CASE("raids can steal only the non-invested balance") {
     });
     REQUIRE(investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 1000, 0).status ==
             InvestmentStatus::deposited);
-    const RaidRules rules{.loot_divisor = 1, .loot_share = 0, .travel_divisor = 1000,
+    const RaidRules rules{.loot_divisor = 1, .travel_divisor = 1000,
                           .signs = {}};
     const RaidResult trip = raid_start(storage, 2, bob, "Alice", 1, rules, RaidTargetKind::telegram);
     REQUIRE(trip.status == RaidStatus::started);

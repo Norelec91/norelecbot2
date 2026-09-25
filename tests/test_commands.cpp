@@ -510,6 +510,12 @@ TEST_CASE("We invests and withdraws only with the owner's platform name") {
     CHECK(deposited.contains("hai investito 1000 palle."));
     CHECK(deposited.contains("oroscopo "));
     CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 1000);
+    /* A deposit stays in the bank for a day. */
+    const std::string locked = command_dispatch(alice, "We @Alice").value_or("");
+    /* A second may pass between the two lines. */
+    CHECK((locked == "🏦 Alice le tue 1000 palle in banca si sbloccano tra 24 ore." ||
+           locked == "🏦 Alice le tue 1000 palle in banca si sbloccano tra 23 ore, 59 minuti e 59 secondi."));
+    config.investment_lock_hours = 0;
     const std::string withdrawn = command_dispatch(alice, "We @Alice").value_or("");
     CHECK(withdrawn.contains("hai ritirato"));
     CHECK(withdrawn.contains("rendimento:"));

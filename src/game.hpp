@@ -102,7 +102,7 @@ struct BurnResult {
 };
 
 enum class InvestmentStatus { deposited, withdrawn, not_self, not_home, insufficient_score,
-                              no_investment, invalid_amount, balance_limit };
+                              no_investment, invalid_amount, balance_limit, locked };
 
 struct InvestmentResult {
     InvestmentStatus status = InvestmentStatus::no_investment;
@@ -112,14 +112,15 @@ struct InvestmentResult {
     int zodiac_percent = 100;
     int daily_rate = 0;
     Departure departure;
+    /* Deposits still inside their lock: the palle put in, and how long until the first one frees. */
+    std::int64_t still_locked = 0;
+    std::int64_t unlock_in = 0;
 };
 
 struct RaidRules {
     /* How much road buys a palla. */
     int loot_divisor = 50;
-    /* At most this fraction of what the target owns is taken; zero means all of it. */
-    int loot_share = 3;
-    /* Seconds of travel per unit of distance, and the share of the loot: a quarter by default. */
+    /* Units of distance per second of travel. */
     int travel_divisor = 1000;
     zodiac::Overrides signs;
     /* How many emoji a name can carry: an emoji brought to a full name has nowhere to go. */
@@ -350,9 +351,10 @@ struct FurnitureBurnResult {
 [[nodiscard]] InvestmentResult investment_deposit(Storage &storage, const std::string &player,
     std::string_view target, RaidTargetKind platform, std::int64_t amount, std::int64_t now,
     zodiac::Overrides signs = {}, std::int64_t lightning = 0);
+/* Only deposits older than lock_seconds come out; the younger ones stay in the bank. */
 [[nodiscard]] InvestmentResult investment_withdraw(Storage &storage, const std::string &player,
     std::string_view target, RaidTargetKind platform, std::int64_t now,
-    zodiac::Overrides signs = {}, std::int64_t lightning = 0);
+    zodiac::Overrides signs = {}, std::int64_t lightning = 0, std::int64_t lock_seconds = 0);
 
 /* Settles the raids that have reached the target or come home by now. */
 [[nodiscard]] std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRules &rules);

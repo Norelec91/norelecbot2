@@ -101,9 +101,6 @@ constexpr std::array settings{
     Setting{"NORELECBOT_LOOT_DIVISOR", [](AppConfig &config, std::string_view value) {
         return set_number(config.loot_divisor, value, AppConfig::default_loot_divisor, 1);
     }},
-    Setting{"NORELECBOT_RAID_SHARE", [](AppConfig &config, std::string_view value) {
-        return set_number(config.raid_share, value, AppConfig::default_raid_share, 0);
-    }},
     Setting{"NORELECBOT_COOLDOWN_SECONDS", [](AppConfig &config, std::string_view value) {
         return set_number(config.cooldown_seconds, value, AppConfig::default_cooldown_seconds, 0);
     }},
@@ -125,6 +122,9 @@ constexpr std::array settings{
         }
         config.zodiac_signs = std::move(chosen);
         return true;
+    }},
+    Setting{"NORELECBOT_INVESTMENT_LOCK_HOURS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.investment_lock_hours, value, AppConfig::default_investment_lock_hours, 0, 24 * 365);
     }},
     Setting{"NORELECBOT_LIGHTNING_PERCENT", [](AppConfig &config, std::string_view value) {
         return set_number(config.lightning_percent, value, AppConfig::default_lightning_percent, 0, 1000);
