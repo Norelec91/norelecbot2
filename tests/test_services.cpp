@@ -961,6 +961,30 @@ TEST_CASE("with a lower inflation every copy costs half again, not twice") {
     CHECK(furniture_buy(storage, "alice", "⚡", 0, 1000, 10, 0, {}, 50).charged == 7593);
 }
 
+TEST_CASE("a pile of poo is thrown, not hung: a full name takes it and keeps nothing") {
+    const TestPaths paths{"poo-throw-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":10,"bob":10},"quotes_added":{},)"
+             << R"("furniture":{"alice":"💩🍕","bob":"🐝🐝🐝🐝🐝🐝🐝🐝🐝🐝"}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 0, quick_rides(), RaidTargetKind::any, 0, "💩").status ==
+            RaidStatus::started);
+    CHECK(furniture_all(storage).at("alice") == "[]🍕");
+    const std::vector<RaidEvent> arrival = raid_due(storage, 5, quick_rides());
+    REQUIRE(arrival.size() == 1);
+    CHECK(arrival[0].kind == RaidEvent::Kind::delivered);
+    CHECK(arrival[0].gift_emoji == "💩");
+    CHECK_FALSE(arrival[0].no_room);
+    CHECK(furniture_all(storage).at("bob") == "🐝🐝🐝🐝🐝🐝🐝🐝🐝🐝");
+    /* Splattered: nothing comes back. */
+    const std::vector<RaidEvent> home = raid_due(storage, 10, quick_rides());
+    REQUIRE(home.size() == 1);
+    CHECK(home[0].gift_emoji.empty());
+    CHECK(furniture_all(storage).at("alice") == "[]🍕");
+}
+
 TEST_CASE("an emoji on its way to somebody still counts for the price") {
     const TestPaths paths{"furniture-transit-price-test"};
     {

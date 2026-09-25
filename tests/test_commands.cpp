@@ -758,14 +758,14 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     CHECK(command_dispatch(alice, "We @Bob 🍕🎈") == "🛋️ Alice una emoji per volta.");
     CHECK(command_dispatch(alice, "We @Bob 🍕 2") ==
           "🛋️ Alice la posizione si sceglie solo sul tuo nome: scrivi We @Bob 🍕.");
-    CHECK(command_dispatch(alice, "We @Bob 🚀") == "🎁 Alice non hai 🚀 appesa al nome.");
+    CHECK(command_dispatch(alice, "We @Bob 🚀") == "🎁 Alice non hai 🚀 nel pianeta.");
     /* On her own name it is a purchase: one copy already hangs there, so the price doubles. */
     CHECK(command_dispatch(alice, "We @Alice 🍕")->contains("ce ne sono già 1 in giro"));
     CHECK(command_dispatch(alice, "We @Nessuno 🍕") == "🚀 Alice non conosco nessun giocatore di nome @Nessuno.");
 
     CHECK(command_dispatch(alice, "We @TheConquister37 🐟") ==
           "🔥 Alice hai riportato 🐟 in @TheConquister37: è uscita dal gioco.");
-    CHECK(command_dispatch(alice, "We @TheConquister37 🐟") == "🔥 Alice non hai 🐟 appesa al nome.");
+    CHECK(command_dispatch(alice, "We @TheConquister37 🐟") == "🔥 Alice non hai 🐟 nel pianeta.");
     /* Two slots on her own name: the emoji change places. */
     CHECK(command_is_for_bot("We @Alice 1 2"));
     CHECK(command_dispatch(alice, "We @Alice 1 2") ==
@@ -787,7 +787,7 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     CHECK(command_dispatch(alice, "We @TheConquister37 💩") ==
           "@Alice, tiri una palla di cacca a @TheConquister37, bravo hai fatto centro, l'hai completamente smerdato!");
     CHECK(furniture_all(storage).at("tg:1") == "🍕🎈");
-    CHECK(command_dispatch(alice, "We @TheConquister37 💩") == "🔥 Alice non hai 💩 appesa al nome.");
+    CHECK(command_dispatch(alice, "We @TheConquister37 💩") == "🔥 Alice non hai 💩 nel pianeta.");
 
     const std::string leaving = command_dispatch(alice, "We @Bob 🍕").value_or("");
     CHECK(leaving.starts_with("🚀 Alice parti per Bob con 🍕 da consegnare: arrivi tra "));
@@ -826,8 +826,6 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     poo.raider_on_telegram = true;
     CHECK(raid_event_reply(poo) ==
           "@Alice, tiri una palla di cacca a @Bob, bravo hai fatto centro, l'hai completamente smerdato!");
-    poo.no_room = true;
-    CHECK(raid_event_reply(poo)->contains("non ha più posto per 💩"));
     given.no_room = true;
     given.target_emoji = "🐝🐝";
     CHECK(raid_event_reply(given) ==

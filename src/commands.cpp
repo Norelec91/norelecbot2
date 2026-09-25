@@ -308,7 +308,7 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
     case RaidStatus::invalid_amount:
         return std::format("🎁 {} indica un numero di palle maggiore di zero.", username);
     case RaidStatus::no_such_emoji:
-        return std::format("🎁 {} non hai {} appesa al nome.", username, gift_emoji);
+        return std::format("🎁 {} non hai {} nel pianeta.", username, gift_emoji);
     case RaidStatus::no_room:
         return std::format("🎁 {} {} non ha posti liberi per {}.", username, target, gift_emoji);
     case RaidStatus::started:
@@ -452,7 +452,7 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
     case FurnitureBurnStatus::travelling:
         return on_the_road(context, "🔥", "si brucia dal tuo pianeta o da @TheConquister37.");
     case FurnitureBurnStatus::not_owned:
-        return std::format("🔥 {} non hai {} appesa al nome.", context.username, emoji);
+        return std::format("🔥 {} non hai {} nel pianeta.", context.username, emoji);
     case FurnitureBurnStatus::burned:
         break;
     }

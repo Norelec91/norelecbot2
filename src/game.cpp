@@ -880,6 +880,10 @@ bool same_emoji(std::string_view one, std::string_view other) {
     return without_variation(one) == without_variation(other);
 }
 
+bool is_poo(std::string_view emoji) {
+    return same_emoji(emoji, "💩");
+}
+
 std::vector<std::string> slots_of(const ConquisterState &state, const std::string &player) {
     return furniture_slots(furniture_of(state, player));
 }
@@ -1331,7 +1335,8 @@ RaidResult raid_start(
                 outcome.status = RaidStatus::no_such_emoji;
                 return outcome;
             }
-            if (!has_room(state, *known, rules.furniture_limit)) {
+            /* A pile of poo is thrown, not hung: it needs no room on the target's name. */
+            if (!is_poo(gift_emoji) && !has_room(state, *known, rules.furniture_limit)) {
                 outcome.status = RaidStatus::no_room;
                 return outcome;
             }
@@ -1417,8 +1422,11 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                     }
                     if (!raid.gift_emoji.empty()) {
                         event.gift_emoji = raid.gift_emoji;
-                        /* A name that filled up meanwhile sends it back the way it came. */
-                        if (has_room(state, raid.target, rules.furniture_limit) &&
+                        /* Poo splatters on arrival and is gone; any other emoji is hung, and a name
+                           that filled up meanwhile sends it back the way it came. */
+                        if (is_poo(raid.gift_emoji)) {
+                            raid.gift_emoji.clear();
+                        } else if (has_room(state, raid.target, rules.furniture_limit) &&
                             give_emoji(state, raid.target, raid.gift_emoji, rules.furniture_limit, now)) {
                             raid.gift_emoji.clear();
                             event.target_emoji = furniture_of(state, raid.target);
