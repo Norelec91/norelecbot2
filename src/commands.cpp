@@ -966,10 +966,8 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
             return std::format("🎁 {} torni in {} con {} ancora in tasca.", raider, home,
                                event.gift == 1 ? std::string{"la tua palla"} : std::format("le tue {} palle", event.gift));
         }
-        if (event.loot > 0) {
-            return std::format("🪐 {} torni in {} con {}.", raider, home, palle(event.loot));
-        }
-        /* Coming home with nothing is not news. */
+        /* The arrival already said what was taken and when he is back: only what came back
+           undelivered is news. */
         return std::nullopt;
     }
     if (event.kind == RaidEvent::Kind::delivered && !event.gift_emoji.empty()) {
