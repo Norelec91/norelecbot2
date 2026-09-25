@@ -35,6 +35,9 @@ struct CommandContext {
 /* What the bot says when a raid reaches its target or comes home; nothing for a homecoming empty-handed. */
 [[nodiscard]] std::optional<std::string> raid_event_reply(const RaidEvent &event);
 
+/* What the group is told once when the bank closes: who got back how much. */
+[[nodiscard]] std::string bank_closed_announcement(const std::vector<Refund> &refunds);
+
 /* Whether the text is a claim or a known command, without running it. */
 [[nodiscard]] bool command_is_for_bot(std::string_view text);
 

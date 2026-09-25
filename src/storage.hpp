@@ -39,16 +39,6 @@ using Counters = nlohmann::ordered_map<std::string, std::int64_t>;
 /* Quotes mapped to whoever added them, in file order. */
 using Authors = nlohmann::ordered_map<std::string, std::string>;
 
-/* When a player's number of ⚡ changed, and how many he had from then on. */
-struct LightningChange {
-    std::int64_t since = 0;
-    std::int64_t bolts = 0;
-
-    bool operator==(const LightningChange &) const = default;
-};
-
-/* Player -> the changes of his ⚡, oldest first: the bank counts the ones he had as each day began. */
-using LightningHistory = nlohmann::ordered_map<std::string, std::vector<LightningChange>>;
 
 /* A player away from home, robbing another one. */
 struct Raid {
@@ -66,17 +56,6 @@ struct Raid {
     std::string gift_emoji;
 
     bool operator==(const Raid &) const = default;
-};
-
-/* A deposit remains separate from the score and keeps its own accrual start. */
-struct InvestmentDeposit {
-    std::string player;
-    std::int64_t amount = 0;
-    std::int64_t since = 0;
-    /* -1 marks a deposit made before zodiac returns; migration sets the cutover. */
-    std::int64_t fixed_until = 0;
-
-    bool operator==(const InvestmentDeposit &) const = default;
 };
 
 struct ConquisterState {
@@ -105,16 +84,14 @@ struct ConquisterState {
     Authors link_requests;
     /* The raids under way, in the order they left. */
     std::vector<Raid> raids;
-    std::vector<InvestmentDeposit> investments;
-    /* Local day start (Unix seconds) -> shared bank volatility from 0 to 100 percent. */
-    Counters investment_magnitudes;
     /* Who added each quote, for the ones added since the bot started writing it down. */
     Authors quote_authors;
     /* The emoji each player bought to hang beside his name. */
     Authors furniture;
     /* Players who turned the debug switch on for themselves: their purchases are free. */
     Counters debugging;
-    LightningHistory lightning_history;
+    /* The bank closed: palle given back from the deposits, per player, until the group is told. */
+    Counters bank_refunds;
 
     bool operator==(const ConquisterState &) const = default;
 };

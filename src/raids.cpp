@@ -43,7 +43,18 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
         .signs = config.zodiac_signs,
         .furniture_limit = static_cast<std::size_t>(config.furniture_limit),
     };
+    /* The closing of the bank is told once, on the second round: by then IRC has had a tick to connect. */
+    int rounds = 0;
     while (!stop.load(std::memory_order_relaxed)) {
+        if (++rounds == 2) {
+            try {
+                if (const std::vector<Refund> refunds = take_bank_refunds(storage); !refunds.empty()) {
+                    announce(config, bank_closed_announcement(refunds));
+                }
+            } catch (const std::exception &error) {
+                log_warning("The closing of the bank could not be told: {}", error.what());
+            }
+        }
         try {
             for (const RaidEvent &event : raid_due(storage, seconds_now(), rules)) {
                 if (const std::optional<std::string> reply = raid_event_reply(event)) {

@@ -20,27 +20,6 @@ std::int64_t earnings(std::string_view holder, std::int64_t seconds, std::int64_
     return seconds * lightning / 100 * zodiac::percent_for(holder, now) / 100;
 }
 
-int bank_rate(std::string_view holder, std::int64_t now, int magnitude, zodiac::Overrides signs = {}) {
-    const int percent = zodiac::percent_for(holder, now, signs);
-    return percent == 125 ? magnitude : percent == 75 ? -magnitude : 0;
-}
-
-std::string_view matching_sign(zodiac::Element house) {
-    return house == zodiac::Element::water ? "cancro" :
-        house == zodiac::Element::fire ? "leone" :
-        house == zodiac::Element::air ? "gemelli" : "toro";
-}
-
-std::string_view opposing_sign(zodiac::Element house) {
-    return house == zodiac::Element::water ? "leone" :
-        house == zodiac::Element::fire ? "cancro" :
-        house == zodiac::Element::air ? "toro" : "gemelli";
-}
-
-std::string_view neutral_sign(zodiac::Element house) {
-    return house == zodiac::Element::water || house == zodiac::Element::fire ? "gemelli" : "cancro";
-}
-
 Json read_json(const std::string &path) {
     std::ifstream file{path, std::ios::binary};
     return Json::parse(file);
@@ -294,7 +273,7 @@ TEST_CASE("every ⚡ on the name as a player comes in adds its share to that hol
     const ClaimResult entered = conquister_claim(storage, 1, "alice", 0, rules);
     CHECK(entered.entered_lightning == 150);
     /* Burning the ⚡ halfway changes nothing: what the hold is worth was fixed on the way in. */
-    CHECK(furniture_burn(storage, "alice", "⚡", 0).status == FurnitureBurnStatus::burned);
+    CHECK(furniture_burn(storage, "alice", "⚡").status == FurnitureBurnStatus::burned);
     const ClaimResult kicked = conquister_claim(storage, 2, "bob", 1000, rules);
     CHECK(kicked.previous_username == "alice");
     CHECK(kicked.lightning == 150);
@@ -1089,11 +1068,11 @@ TEST_CASE("an emoji is carried to another player, or burnt at the place") {
     CHECK(furniture_buy(storage, "alice", "🚀", 0, 0, 10, 0).status == FurnitureStatus::full);
 
     /* Brought to the place, an emoji is gone: the first copy, leaving a hole. */
-    const FurnitureBurnResult burnt = furniture_burn(storage, "alice", "🐝", 0);
+    const FurnitureBurnResult burnt = furniture_burn(storage, "alice", "🐝");
     CHECK(burnt.status == FurnitureBurnStatus::burned);
     CHECK(burnt.shown == "[]🐝🐝🐝🐝🐝🐝🐝🐝🎈");
-    CHECK(furniture_burn(storage, "alice", "🎺", 0).status == FurnitureBurnStatus::not_owned);
-    CHECK(furniture_burn(storage, "bob", "🍕", 0).shown.empty());
+    CHECK(furniture_burn(storage, "alice", "🎺").status == FurnitureBurnStatus::not_owned);
+    CHECK(furniture_burn(storage, "bob", "🍕").shown.empty());
     CHECK(hung("bob").empty());
 }
 
@@ -1131,302 +1110,6 @@ TEST_CASE("turning back mid journey only costs the road already walked") {
     CHECK(raid_start(storage, 7, "bob", "alice", third + third, slow).status == RaidStatus::started);
 }
 
-TEST_CASE("investments earn zodiac interest, remain separate from score, and survive a restart") {
-    const TestPaths paths{"investment-service-test"};
-    const std::int64_t first_day = zodiac::next_day_start(0);
-    const std::int64_t second_day = zodiac::next_day_start(first_day);
-    const std::int64_t third_day = zodiac::next_day_start(second_day);
-    {
-        Storage storage{paths.conquister, paths.quotes};
-        const std::string alice = player_seen(storage, 1, "Alice");
-        const std::string bob = player_seen(storage, 2, "Bob");
-        storage.transaction([&](StorageSession &session) {
-            session.state().scores[alice] = 3000;
-            session.state().investment_magnitudes[std::to_string(first_day)] = 100;
-            session.state().investment_magnitudes[std::to_string(second_day)] = 100;
-            return 0;
-        });
-        CHECK(investment_deposit(storage, alice, "Bob", RaidTargetKind::telegram, 1000, 0).status ==
-              InvestmentStatus::not_self);
-        CHECK(investment_deposit(storage, alice, "Alice", RaidTargetKind::irc, 1000, 0).status ==
-              InvestmentStatus::not_self);
-        CHECK(investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 0, 0).status ==
-              InvestmentStatus::invalid_amount);
-        CHECK(investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 4000, 0).status ==
-              InvestmentStatus::insufficient_score);
-        CHECK(investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 1000, first_day).status ==
-              InvestmentStatus::deposited);
-        CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 2000);
-        CHECK(investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 1000, second_day).status ==
-              InvestmentStatus::deposited);
-        CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 1000);
-        CHECK(investment_withdraw(storage, bob, "Alice", RaidTargetKind::telegram, second_day).status ==
-              InvestmentStatus::not_self);
-    }
-    {
-        Storage storage{paths.conquister, paths.quotes};
-        const InvestmentResult payout = investment_withdraw(storage, "tg:1", "Alice", RaidTargetKind::telegram,
-                                                              third_day);
-        const int first_rate = bank_rate("Alice", first_day, 100);
-        const int second_rate = bank_rate("Alice", second_day, 100);
-        const std::int64_t first_factor = 1 + first_rate / 100;
-        const std::int64_t second_factor = 1 + second_rate / 100;
-        const std::int64_t expected = 1000 * first_factor * second_factor + 1000 * second_factor;
-        CHECK(payout.status == InvestmentStatus::withdrawn);
-        CHECK(payout.amount == expected);
-        CHECK(payout.interest == expected - 2000);
-        CHECK(payout.score == expected + 1000);
-        CHECK(investment_withdraw(storage, "tg:1", "Alice", RaidTargetKind::telegram, third_day).status ==
-              InvestmentStatus::no_investment);
-        CHECK(read_json(paths.conquister).at("investments").empty());
-    }
-}
-
-TEST_CASE("zodiac bank returns double, preserve, or wipe out deposits") {
-    const TestPaths paths{"zodiac-investment-test"};
-    const std::int64_t first_day = zodiac::next_day_start(0);
-    const std::int64_t second_day = zodiac::next_day_start(first_day);
-    const std::int64_t third_day = zodiac::next_day_start(second_day);
-    const std::int64_t fourth_day = zodiac::next_day_start(third_day);
-    const std::int64_t fifth_day = zodiac::next_day_start(fourth_day);
-    const zodiac::Element house = zodiac::element_of_day(first_day);
-    const std::vector<zodiac::Override> signs{{"Alice", std::string{matching_sign(house)}},
-                                               {"Bob", std::string{opposing_sign(house)}},
-                                               {"Carol", std::string{matching_sign(house)}},
-                                               {"Dave", std::string{neutral_sign(house)}},
-                                               {"Eve", std::string{opposing_sign(house)}}};
-    Storage storage{paths.conquister, paths.quotes};
-    const std::string alice = player_seen(storage, 1, "Alice");
-    const std::string bob = player_seen(storage, 2, "Bob");
-    const std::string carol = player_seen(storage, 3, "Carol");
-    const std::string dave = player_seen(storage, 4, "Dave");
-    const std::string eve = player_seen(storage, 5, "Eve");
-    storage.transaction([&](StorageSession &session) {
-        session.state().scores[alice] = 1000;
-        session.state().scores[bob] = 1000;
-        session.state().scores[carol] = 1000;
-        session.state().scores[dave] = 1000;
-        session.state().scores[eve] = 1000;
-        for (const std::int64_t day : {first_day, second_day, third_day, fourth_day}) {
-            session.state().investment_magnitudes[std::to_string(day)] = 100;
-        }
-        return 0;
-    });
-    CHECK(investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 1000, first_day, signs)
-              .zodiac_percent == 125);
-    CHECK(investment_deposit(storage, bob, "Bob", RaidTargetKind::telegram, 1000, first_day, signs)
-              .daily_rate == -100);
-    CHECK(investment_deposit(storage, carol, "Carol", RaidTargetKind::telegram, 1000, first_day, signs)
-              .daily_rate == 100);
-    CHECK(investment_deposit(storage, dave, "Dave", RaidTargetKind::telegram, 1000, first_day, signs)
-              .daily_rate == 0);
-    CHECK(investment_deposit(storage, eve, "Eve", RaidTargetKind::telegram, 1000, first_day, signs)
-              .daily_rate == -100);
-    CHECK(investment_withdraw(storage, alice, "Alice", RaidTargetKind::telegram, second_day, signs).amount == 2000);
-    CHECK(investment_withdraw(storage, bob, "Bob", RaidTargetKind::telegram, second_day, signs).amount == 0);
-    CHECK(investment_withdraw(storage, dave, "Dave", RaidTargetKind::telegram, second_day, signs).amount == 1000);
-    CHECK(investment_withdraw(storage, eve, "Eve", RaidTargetKind::telegram, first_day + 43200, signs).amount == 500);
-    CHECK(investment_withdraw(storage, carol, "Carol", RaidTargetKind::telegram, fifth_day, signs).amount == 0);
-}
-
-TEST_CASE("an intermediate bank magnitude is shared and survives a restart") {
-    const TestPaths paths{"intermediate-investment-magnitude-test"};
-    const std::int64_t first_day = zodiac::next_day_start(0);
-    const std::int64_t second_day = zodiac::next_day_start(first_day);
-    const zodiac::Element house = zodiac::element_of_day(first_day);
-    const std::vector<zodiac::Override> signs{{"Alice", std::string{matching_sign(house)}},
-                                               {"Bob", std::string{opposing_sign(house)}},
-                                               {"Carol", std::string{neutral_sign(house)}}};
-    {
-        Storage storage{paths.conquister, paths.quotes};
-        const std::string alice = player_seen(storage, 1, "Alice");
-        const std::string bob = player_seen(storage, 2, "Bob");
-        const std::string carol = player_seen(storage, 3, "Carol");
-        storage.transaction([&](StorageSession &session) {
-            session.state().scores[alice] = 1000;
-            session.state().scores[bob] = 1000;
-            session.state().scores[carol] = 1000;
-            session.state().investment_magnitudes[std::to_string(first_day)] = 37;
-            return 0;
-        });
-        CHECK(investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 1000, first_day, signs)
-                  .daily_rate == 37);
-        CHECK(investment_deposit(storage, bob, "Bob", RaidTargetKind::telegram, 1000, first_day, signs)
-                  .daily_rate == -37);
-        CHECK(investment_deposit(storage, carol, "Carol", RaidTargetKind::telegram, 1000, first_day, signs)
-                  .daily_rate == 0);
-    }
-    CHECK(read_json(paths.conquister).at("investment_magnitudes").at(std::to_string(first_day)) == 37);
-    Storage reopened{paths.conquister, paths.quotes};
-    CHECK(investment_withdraw(reopened, "tg:1", "Alice", RaidTargetKind::telegram, second_day, signs).amount == 1370);
-    CHECK(investment_withdraw(reopened, "tg:2", "Bob", RaidTargetKind::telegram, second_day, signs).amount == 630);
-    CHECK(investment_withdraw(reopened, "tg:3", "Carol", RaidTargetKind::telegram, second_day, signs).amount == 1000);
-}
-
-TEST_CASE("a newly drawn bank magnitude is saved for the whole local day") {
-    const TestPaths paths{"drawn-investment-magnitude-test"};
-    const std::int64_t first_day = zodiac::next_day_start(0);
-    const zodiac::Element house = zodiac::element_of_day(first_day);
-    const std::vector<zodiac::Override> signs{{"Alice", std::string{matching_sign(house)}},
-                                               {"Bob", std::string{opposing_sign(house)}}};
-    int chosen = -1;
-    {
-        Storage storage{paths.conquister, paths.quotes};
-        const std::string alice = player_seen(storage, 1, "Alice");
-        const std::string bob = player_seen(storage, 2, "Bob");
-        storage.transaction([&](StorageSession &session) {
-            session.state().scores[alice] = 1000;
-            session.state().scores[bob] = 1000;
-            return 0;
-        });
-        chosen = investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 1, first_day, signs).daily_rate;
-        CHECK(chosen >= 0);
-        CHECK(chosen <= 100);
-        CHECK(investment_deposit(storage, bob, "Bob", RaidTargetKind::telegram, 1, first_day, signs).daily_rate ==
-              -chosen);
-    }
-    CHECK(read_json(paths.conquister).at("investment_magnitudes").at(std::to_string(first_day)) == chosen);
-    Storage reopened{paths.conquister, paths.quotes};
-    CHECK(investment_deposit(reopened, "tg:1", "Alice", RaidTargetKind::telegram, 1, first_day, signs).daily_rate ==
-          chosen);
-}
-
-TEST_CASE("daily investment returns accrue at one-second resolution") {
-    const TestPaths paths{"investment-per-second-test"};
-    Storage storage{paths.conquister, paths.quotes};
-    const std::string alice = player_seen(storage, 1, "Alice");
-    const std::vector<zodiac::Override> signs{{"Alice", std::string{matching_sign(zodiac::element_of_day(0))}}};
-    storage.transaction([&](StorageSession &session) {
-        session.state().scores[alice] = 1000000;
-        session.state().investment_magnitudes[std::to_string(zodiac::day_start(0))] = 100;
-        return 0;
-    });
-    CHECK(investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 1000000, 0, signs).status ==
-          InvestmentStatus::deposited);
-    const InvestmentResult payout = investment_withdraw(storage, alice, "Alice", RaidTargetKind::telegram, 1, signs);
-    CHECK(payout.status == InvestmentStatus::withdrawn);
-    CHECK(payout.amount == 1000011);
-    CHECK(payout.interest == 11);
-}
-
-TEST_CASE("old compound investments keep their accrued return through the changeover") {
-    const TestPaths paths{"legacy-investment-rate-test"};
-    const std::int64_t before = std::chrono::duration_cast<std::chrono::seconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
-    {
-        std::ofstream file{paths.conquister, std::ios::binary};
-        file << Json{{"current", nullptr}, {"scores", Json{{"tg:1", 0}}},
-                     {"telegram_names", Json{{"alice", "tg:1"}}},
-                     {"investments", Json::array({Json{{"player", "tg:1"}, {"amount", 1000},
-                                                        {"since", before - 86400}}})}}.dump();
-    }
-    Storage storage{paths.conquister, paths.quotes};
-    const Json saved = read_json(paths.conquister);
-    const std::int64_t cutover = saved.at("investments").at(0).at("fixed_until").get<std::int64_t>();
-    CHECK(cutover >= before);
-    const InvestmentResult payout = investment_withdraw(storage, "tg:1", "Alice", RaidTargetKind::telegram,
-                                                         cutover);
-    CHECK(payout.status == InvestmentStatus::withdrawn);
-    CHECK(payout.amount == 1030);
-}
-
-TEST_CASE("migrated investments switch to zodiac returns after the changeover") {
-    const TestPaths paths{"legacy-investment-cutover-test"};
-    const std::int64_t before = std::chrono::duration_cast<std::chrono::seconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
-    {
-        std::ofstream file{paths.conquister, std::ios::binary};
-        file << Json{{"current", nullptr}, {"scores", Json{{"tg:1", 0}}},
-                     {"telegram_names", Json{{"alice", "tg:1"}}},
-                     {"display_names", Json{{"tg:1", "Alice"}}},
-                     {"investments", Json::array({Json{{"player", "tg:1"}, {"amount", 1000000000},
-                                                        {"since", before - 86400}}})}}.dump();
-    }
-    Storage storage{paths.conquister, paths.quotes};
-    const std::int64_t cutover = read_json(paths.conquister).at("investments").at(0)
-                                     .at("fixed_until").get<std::int64_t>();
-    const std::int64_t elapsed = std::min<std::int64_t>(60, zodiac::next_day_start(cutover) - cutover);
-    const std::vector<zodiac::Override> signs{{"Alice", std::string{matching_sign(zodiac::element_of_day(cutover))}}};
-    storage.transaction([&](StorageSession &session) {
-        session.state().investment_magnitudes[std::to_string(zodiac::day_start(cutover))] = 100;
-        return 0;
-    });
-    const InvestmentResult payout = investment_withdraw(storage, "tg:1", "Alice", RaidTargetKind::telegram,
-                                                         cutover + elapsed, signs);
-    const long double old_balance = 1000000000.0L * std::pow(1.03L,
-        static_cast<long double>(cutover - (before - 86400)) / 86400.0L);
-    const long double expected = old_balance * (1.0L + static_cast<long double>(elapsed) /
-        static_cast<long double>(zodiac::next_day_start(cutover) - zodiac::day_start(cutover)));
-    CHECK(payout.status == InvestmentStatus::withdrawn);
-    CHECK(payout.amount == static_cast<std::int64_t>(std::floor(std::nextafter(
-        expected, std::numeric_limits<long double>::infinity()))));
-}
-
-TEST_CASE("investment withdrawal and deposit require the player to be home") {
-    const TestPaths paths{"investment-location-test"};
-    Storage storage{paths.conquister, paths.quotes};
-    const std::string alice = player_seen(storage, 1, "Alice");
-    CHECK_FALSE(player_seen(storage, 2, "Bob").empty());
-    storage.transaction([&](StorageSession &session) {
-        session.state().scores[alice] = 2000;
-        return 0;
-    });
-    CHECK(investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 1000, 0).status ==
-          InvestmentStatus::deposited);
-    CHECK(raid_start(storage, 1, alice, "Bob", 1, {}, RaidTargetKind::telegram).status == RaidStatus::started);
-    CHECK(investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 1, 2).status ==
-          InvestmentStatus::not_home);
-    CHECK(investment_withdraw(storage, alice, "Alice", RaidTargetKind::telegram, 2).status ==
-          InvestmentStatus::not_home);
-    storage.transaction([&](StorageSession &session) {
-        session.state().raids.clear();
-        session.state().current = Holder{.user_id = 1, .username = alice, .since = 3};
-        return 0;
-    });
-    /* From the place the same line takes her home first, paying the hold, and withdraws there. */
-    const InvestmentResult from_place = investment_withdraw(storage, alice, "Alice", RaidTargetKind::telegram, 86400);
-    CHECK(from_place.status == InvestmentStatus::withdrawn);
-    CHECK(from_place.departure.left);
-    CHECK(from_place.departure.earned > 0);
-    CHECK_FALSE(conquister_user(storage, "Alice", RaidTargetKind::telegram)->in_conquister);
-
-    /* With nothing to withdraw she stays where she is: the line is then just the way home. */
-    storage.transaction([&](StorageSession &session) {
-        session.state().current = Holder{.user_id = 1, .username = alice, .since = 86400};
-        return 0;
-    });
-    const InvestmentResult nothing = investment_withdraw(storage, alice, "Alice", RaidTargetKind::telegram, 86401);
-    CHECK(nothing.status == InvestmentStatus::no_investment);
-    CHECK_FALSE(nothing.departure.left);
-    CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->in_conquister);
-}
-
-TEST_CASE("raids can steal only the non-invested balance") {
-    const TestPaths paths{"investment-raid-test"};
-    Storage storage{paths.conquister, paths.quotes};
-    const std::string alice = player_seen(storage, 1, "Alice");
-    const std::string bob = player_seen(storage, 2, "Bob");
-    storage.transaction([&](StorageSession &session) {
-        session.state().scores[alice] = 2000;
-        return 0;
-    });
-    REQUIRE(investment_deposit(storage, alice, "Alice", RaidTargetKind::telegram, 1000, 0).status ==
-            InvestmentStatus::deposited);
-    const RaidRules rules{.loot_divisor = 1, .travel_divisor = 1000,
-                          .signs = {}};
-    const RaidResult trip = raid_start(storage, 2, bob, "Alice", 1, rules, RaidTargetKind::telegram);
-    REQUIRE(trip.status == RaidStatus::started);
-    const std::vector<RaidEvent> arrival = raid_due(storage, 1 + trip.seconds, rules);
-    REQUIRE(arrival.size() == 1);
-    CHECK(arrival[0].loot <= 1000);
-    CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 1000 - arrival[0].loot);
-    const InvestmentResult payout = investment_withdraw(storage, alice, "Alice", RaidTargetKind::telegram,
-                                                         1 + trip.seconds);
-    CHECK(payout.status == InvestmentStatus::withdrawn);
-    CHECK(payout.amount > 0);
-    CHECK(payout.score == 1000 - arrival[0].loot + payout.amount);
-}
-
 TEST_CASE("a hold saved with a whole multiplier keeps it as a percent") {
     const TestPaths paths{"lightning-legacy-test"};
     {
@@ -1440,55 +1123,36 @@ TEST_CASE("a hold saved with a whole multiplier keeps it as a percent") {
     CHECK(kicked.earned == earnings("alice", 1000, 1000, 300));
 }
 
-TEST_CASE("every ⚡ makes a good day at the bank better and a bad one less bad") {
-    const TestPaths paths{"lightning-bank-test"};
-    const std::int64_t day = zodiac::day_start(1790200800);
-    const std::int64_t end = zodiac::next_day_start(day);
-    const zodiac::Element house = zodiac::element_of_day(day);
-    {
-        /* Alice and Carol have one ⚡ each, Bob none; the day moves the bank by 40%. */
-        std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":null,"scores":{"alice":1000,"bob":1000,"carol":1000},"quotes_added":{},)"
-             << R"("furniture":{"alice":"⚡","carol":"⚡"},"investment_magnitudes":{")" << day << R"(":40}})";
-    }
-    Storage storage{paths.conquister, paths.quotes};
-    const std::vector<zodiac::Override> signs{{"alice", std::string{matching_sign(house)}},
-                                               {"bob", std::string{matching_sign(house)}},
-                                               {"carol", std::string{opposing_sign(house)}}};
-    const InvestmentResult alice = investment_deposit(storage, "alice", "alice", RaidTargetKind::any, 1000, day, signs, 50);
-    CHECK(alice.daily_rate == 60);
-    CHECK(investment_deposit(storage, "bob", "bob", RaidTargetKind::any, 1000, day, signs, 50).daily_rate == 40);
-    /* A bad day gets the same share back: -40% is -20% with one ⚡, 0% with two, +20% with three. */
-    CHECK(investment_deposit(storage, "carol", "carol", RaidTargetKind::any, 1000, day, signs, 50).daily_rate == -20);
-
-    CHECK(investment_withdraw(storage, "alice", "alice", RaidTargetKind::any, end, signs, 50).amount == 1600);
-    CHECK(investment_withdraw(storage, "bob", "bob", RaidTargetKind::any, end, signs, 50).amount == 1400);
-    CHECK(investment_withdraw(storage, "carol", "carol", RaidTargetKind::any, end, signs, 50).amount == 800);
-    storage.transaction([](StorageSession &session) {
-        session.state().furniture["carol"] = "⚡⚡⚡";
-        session.state().lightning_history.erase("carol");
-        return 0;
-    });
-    CHECK(investment_deposit(storage, "carol", "carol", RaidTargetKind::any, 100, day, signs, 50).daily_rate == 20);
-}
-
-TEST_CASE("a ⚡ bought during the day helps the bank from the next one") {
-    const TestPaths paths{"lightning-bank-history-test"};
-    const std::int64_t day = zodiac::day_start(1790200800);
-    const std::int64_t end = zodiac::next_day_start(day);
-    const zodiac::Element house = zodiac::element_of_day(day);
+TEST_CASE("closing the bank gives the deposits back once, to be told once") {
+    const TestPaths paths{"bank-closed-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":null,"scores":{"bob":2000},"quotes_added":{},)"
-             << R"("investment_magnitudes":{")" << day << R"(":40}})";
+        file << R"({"current":null,"scores":{"alice":10,"bob":0},"quotes_added":{},)"
+             << R"("telegram_ids":{"alice":1},)"
+             << R"("investments":[{"player":"alice","amount":1000,"since":0,"fixed_until":0},)"
+             << R"({"player":"bob","amount":300,"since":0,"fixed_until":0},)"
+             << R"({"player":"alice","amount":500,"since":10,"fixed_until":0}],)"
+             << R"("investment_magnitudes":{"0":50},"lightning_history":{"alice":[[0,1]]}})";
     }
+    {
+        const Storage storage{paths.conquister, paths.quotes};
+        const Json saved = read_json(paths.conquister);
+        CHECK_FALSE(saved.contains("investments"));
+        CHECK_FALSE(saved.contains("investment_magnitudes"));
+        CHECK_FALSE(saved.contains("lightning_history"));
+        CHECK(saved.at("scores").at("alice") == 1510);
+        CHECK(saved.at("scores").at("bob") == 300);
+    }
+    /* A restart before the group is told gives nothing twice and keeps the list. */
     Storage storage{paths.conquister, paths.quotes};
-    const std::vector<zodiac::Override> signs{{"bob", std::string{matching_sign(house)}}};
-    REQUIRE(investment_deposit(storage, "bob", "bob", RaidTargetKind::any, 1000, day, signs, 50).status ==
-            InvestmentStatus::deposited);
-    REQUIRE(furniture_buy(storage, "bob", "⚡", 0, 0, 10, day + 60).status == FurnitureStatus::bought);
-    const Json saved = read_json(paths.conquister);
-    CHECK(saved.at("lightning_history").at("bob") == Json::parse(std::format("[[0,0],[{},1]]", day + 60)));
-    /* The day began without it, so this one pays the plain 40%. */
-    CHECK(investment_withdraw(storage, "bob", "bob", RaidTargetKind::any, end, signs, 50).amount == 1400);
+    CHECK(conquister_user(storage, "alice")->score == 1510);
+    const std::vector<Refund> refunds = take_bank_refunds(storage);
+    REQUIRE(refunds.size() == 2);
+    CHECK(refunds[0].name == "alice");
+    CHECK(refunds[0].on_telegram);
+    CHECK(refunds[0].amount == 1500);
+    CHECK(refunds[1].name == "bob");
+    CHECK_FALSE(refunds[1].on_telegram);
+    CHECK(refunds[1].amount == 300);
+    CHECK(take_bank_refunds(storage).empty());
 }

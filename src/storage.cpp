@@ -90,22 +90,6 @@ Authors parse_authors(const Json &state, const char *name) {
     return authors;
 }
 
-LightningHistory parse_lightning_history(const Json &state) {
-    LightningHistory history;
-    const auto section = state.find("lightning_history");
-    if (section == state.end() || !section->is_object()) {
-        return history;
-    }
-    for (const auto &[player, changes] : section->items()) {
-        std::vector<LightningChange> mine;
-        std::ranges::transform(changes, std::back_inserter(mine), [](const Json &change) {
-            return LightningChange{.since = integer(change.at(0)), .bolts = integer(change.at(1))};
-        });
-        history[player] = std::move(mine);
-    }
-    return history;
-}
-
 std::vector<Raid> parse_raids(const Json &state) {
     std::vector<Raid> raids;
     const auto section = state.find("raids");
@@ -130,42 +114,25 @@ std::vector<Raid> parse_raids(const Json &state) {
     return raids;
 }
 
-std::vector<InvestmentDeposit> parse_investments(const Json &state) {
-    std::vector<InvestmentDeposit> deposits;
-    const auto section = state.find("investments");
-    if (section == state.end()) {
-        return deposits;
-    }
-    if (!section->is_array()) {
-        throw std::invalid_argument("investments is not an array");
-    }
-    for (const Json &entry : *section) {
-        InvestmentDeposit deposit{
-            .player = entry.at("player").get<std::string>(),
-            .amount = integer(entry.at("amount")),
-            .since = integer(entry.at("since")),
-            .fixed_until = entry.contains("fixed_until") ? integer(entry.at("fixed_until")) : -1,
-        };
-        if (deposit.player.empty() || deposit.amount <= 0) {
-            throw std::invalid_argument("invalid investment deposit");
-        }
-        deposits.push_back(std::move(deposit));
-    }
-    return deposits;
-}
-
-Counters parse_investment_magnitudes(const Json &state) {
-    Counters magnitudes = parse_counters(state, "investment_magnitudes");
-    for (const auto &[day, magnitude] : magnitudes) {
-        static_cast<void>(day);
-        if (magnitude < 0 || magnitude > 100) {
-            throw std::invalid_argument("investment magnitude is outside 0% to 100%");
-        }
-    }
-    return magnitudes;
-}
-
 /* Missing sections count as empty, like in the original C version. */
+/* The bank closed: whatever an older version kept in deposits goes back to its owner, and waits to be
+   announced. Only the palle put in come back, not what the days made of them. */
+void refund_deposits(const Json &json, ConquisterState &state) {
+    const auto section = json.find("investments");
+    if (section == json.end() || !section->is_array()) {
+        return;
+    }
+    for (const Json &deposit : *section) {
+        const auto player = deposit.at("player").get<std::string>();
+        const std::int64_t amount = integer(deposit.at("amount"));
+        if (player.empty() || amount <= 0) {
+            continue;
+        }
+        state.scores[player] += amount;
+        state.bank_refunds[player] += amount;
+    }
+}
+
 ConquisterState parse_state(const Json &json) {
     if (!json.is_object()) {
         throw std::invalid_argument("unexpected structure");
@@ -182,7 +149,7 @@ ConquisterState parse_state(const Json &json) {
                     ? integer(current->at("multiplier")) * 100 : 0,
         };
     }
-    return ConquisterState{
+    ConquisterState state{
         std::move(holder),
         parse_counters(json, "scores"),
         parse_counters(json, "quotes_added"),
@@ -197,24 +164,16 @@ ConquisterState parse_state(const Json &json) {
         parse_authors(json, "irc_nicks"),
         parse_authors(json, "link_requests"),
         parse_raids(json),
-        parse_investments(json),
-        parse_investment_magnitudes(json),
         parse_authors(json, "quote_authors"),
         parse_authors(json, "furniture"),
         parse_counters(json, "debugging"),
-        parse_lightning_history(json),
+        parse_counters(json, "bank_refunds"),
     };
+    refund_deposits(json, state);
+    return state;
 }
 
 Json state_to_json(const ConquisterState &state) {
-    Json lightning_history = Json::object();
-    for (const auto &[player, changes] : state.lightning_history) {
-        Json mine = Json::array();
-        std::ranges::transform(changes, std::back_inserter(mine), [](const LightningChange &change) {
-            return Json::array({change.since, change.bolts});
-        });
-        lightning_history[player] = std::move(mine);
-    }
     Json raids = Json::array();
     std::ranges::transform(state.raids, std::back_inserter(raids), [](const Raid &raid) {
         return Json{
@@ -227,11 +186,6 @@ Json state_to_json(const ConquisterState &state) {
             {"gift", raid.gift},
             {"gift_emoji", raid.gift_emoji},
         };
-    });
-    Json investments = Json::array();
-    std::ranges::transform(state.investments, std::back_inserter(investments), [](const InvestmentDeposit &deposit) {
-        return Json{{"player", deposit.player}, {"amount", deposit.amount}, {"since", deposit.since},
-                    {"fixed_until", deposit.fixed_until}};
     });
     Json current = nullptr;
     if (state.current) {
@@ -257,12 +211,10 @@ Json state_to_json(const ConquisterState &state) {
         {"irc_nicks", state.irc_nicks},
         {"link_requests", state.link_requests},
         {"raids", std::move(raids)},
-        {"investments", std::move(investments)},
-        {"investment_magnitudes", state.investment_magnitudes},
         {"quote_authors", state.quote_authors},
         {"furniture", state.furniture},
         {"debugging", state.debugging},
-        {"lightning_history", std::move(lightning_history)},
+        {"bank_refunds", state.bank_refunds},
     };
 }
 
@@ -279,7 +231,8 @@ std::optional<ConquisterState> load_state(const std::string &path, bool *has_leg
                    without them. */
                 *has_legacy_shields = json->contains("shields") || json->contains("raid_shields") ||
                     json->contains("raid_resistance_levels") || json->contains("raid_resistance_since") ||
-                    json->contains("boosts");
+                    json->contains("boosts") || json->contains("investments") ||
+                    json->contains("investment_magnitudes") || json->contains("lightning_history");
             }
             return state;
         } catch (const std::exception &failure) {
@@ -349,18 +302,7 @@ Storage::Storage(std::string conquister_path, std::string quotes_path)
     if (!state || !quotes_valid) {
         throw StorageError("JSON storage could not be loaded");
     }
-    ConquisterState migrated = *state;
-    bool has_legacy_investments = false;
-    const std::int64_t cutover = std::chrono::duration_cast<std::chrono::seconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
-    for (InvestmentDeposit &deposit : migrated.investments) {
-        if (deposit.fixed_until == -1) {
-            deposit.fixed_until = std::max(cutover, deposit.since);
-            has_legacy_investments = true;
-        }
-    }
-    if ((has_legacy_shields || has_legacy_investments) &&
-        !save_json(conquister_path_, state_to_json(migrated))) {
+    if (has_legacy_shields && !save_json(conquister_path_, state_to_json(*state))) {
         throw StorageError("Game state could not be migrated");
     }
     log_info("JSON storage ready (conquister={}, quotes={})", conquister_path_, quotes_path_);

@@ -123,9 +123,6 @@ constexpr std::array settings{
         config.zodiac_signs = std::move(chosen);
         return true;
     }},
-    Setting{"NORELECBOT_INVESTMENT_LOCK_HOURS", [](AppConfig &config, std::string_view value) {
-        return set_number(config.investment_lock_hours, value, AppConfig::default_investment_lock_hours, 0, 24 * 365);
-    }},
     Setting{"NORELECBOT_LIGHTNING_PERCENT", [](AppConfig &config, std::string_view value) {
         return set_number(config.lightning_percent, value, AppConfig::default_lightning_percent, 0, 1000);
     }},

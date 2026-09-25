@@ -14,8 +14,6 @@ namespace norelecbot {
 
 struct AppConfig {
     static constexpr int default_quote_cost = 1000;
-    /* How long a deposit stays in the bank before it can be withdrawn. */
-    static constexpr int default_investment_lock_hours = 24;
     static constexpr int default_furniture_cost = 10000;
     /* How much dearer an emoji gets, in percent, for every copy of it already in the game. */
     static constexpr int default_furniture_inflation = 50;
@@ -51,7 +49,6 @@ struct AppConfig {
     /* Seconds of travel per unit of distance, and the share of a raid's loot. */
     int travel_divisor = default_travel_divisor;
     int lightning_percent = default_lightning_percent;
-    int investment_lock_hours = default_investment_lock_hours;
     /* Players whose real sign the owner knows, instead of the one their name gives. */
     std::vector<zodiac::Override> zodiac_signs;
     std::int64_t conquister_chat_id = 0;

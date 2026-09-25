@@ -101,22 +101,6 @@ struct BurnResult {
     std::int64_t score = 0;
 };
 
-enum class InvestmentStatus { deposited, withdrawn, not_self, not_home, insufficient_score,
-                              no_investment, invalid_amount, balance_limit, locked };
-
-struct InvestmentResult {
-    InvestmentStatus status = InvestmentStatus::no_investment;
-    std::int64_t amount = 0;
-    std::int64_t interest = 0;
-    std::int64_t score = 0;
-    int zodiac_percent = 100;
-    int daily_rate = 0;
-    Departure departure;
-    /* Deposits still inside their lock: the palle put in, and how long until the first one frees. */
-    std::int64_t still_locked = 0;
-    std::int64_t unlock_in = 0;
-};
-
 struct RaidRules {
     /* How much road buys a palla. */
     int loot_divisor = 50;
@@ -253,18 +237,13 @@ struct Profile {
     std::string heading;
     bool returning = false;
     std::int64_t home_in = 0;
-    /* What he put in the bank, and what it is worth now. */
-    std::int64_t invested = 0;
-    std::int64_t investment_value = 0;
 };
 
 /* A player named as on that platform; nothing for a name nobody plays under. */
 [[nodiscard]] std::optional<Profile> player_profile(Storage &storage, std::string_view name, RaidTargetKind platform,
-                                                   std::int64_t now, zodiac::Overrides signs = {},
-                                                   std::int64_t lightning = 0);
+                                                   std::int64_t now);
 /* The player behind an internal key, even one with nothing on file yet. */
-[[nodiscard]] Profile player_profile_of(Storage &storage, const std::string &key, std::int64_t now,
-                                        zodiac::Overrides signs = {}, std::int64_t lightning = 0);
+[[nodiscard]] Profile player_profile_of(Storage &storage, const std::string &key, std::int64_t now);
 /* limit 0 returns every entry. */
 [[nodiscard]] Leaderboard conquister_leaderboard(Storage &storage, std::size_t limit);
 /* Case-insensitive lookup; rank is 0 when the user has no score yet. */
@@ -272,6 +251,16 @@ struct Profile {
                                                            RaidTargetKind platform = RaidTargetKind::any);
 /* Seconds until a traveller already on his way back is home; nothing when he is not coming back yet. */
 [[nodiscard]] std::optional<std::int64_t> returning_in(Storage &storage, const std::string &player, std::int64_t now);
+/* A player given back what he kept in the bank when it closed. */
+struct Refund {
+    std::string name;
+    bool on_telegram = false;
+    std::int64_t amount = 0;
+};
+
+/* The refunds not announced yet, largest first; reading them empties the list. */
+[[nodiscard]] std::vector<Refund> take_bank_refunds(Storage &storage);
+
 /* Whether a name, as written on that platform, is this very player. */
 [[nodiscard]] bool names_player(Storage &storage, const std::string &player, std::string_view name,
                                 RaidTargetKind platform);
@@ -326,7 +315,7 @@ struct FurnitureBurnResult {
 /* An emoji brought back to @TheConquister37 leaves the game too: the first slot that holds it is
    emptied. Not from the road. */
 [[nodiscard]] FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player,
-                                                 const std::string &emoji, std::int64_t now);
+                                                 const std::string &emoji);
 
 /* Sends a player to rob another one, if he is at home and the target is somebody the bot knows.
    Naming himself sends him home instead: at once from @TheConquister37, at the end of the ride if he
@@ -344,17 +333,6 @@ struct FurnitureBurnResult {
     /* An emoji of his own to hang on the target on arrival instead of robbing him. */
     std::string_view gift_emoji = {}
 );
-
-/* Funds leave the stealable score until withdrawn while the owner is home. From @TheConquister37 both
-   take him home first, paying what the hold earned; a withdrawal only when there is something to
-   withdraw. */
-[[nodiscard]] InvestmentResult investment_deposit(Storage &storage, const std::string &player,
-    std::string_view target, RaidTargetKind platform, std::int64_t amount, std::int64_t now,
-    zodiac::Overrides signs = {}, std::int64_t lightning = 0);
-/* Only deposits older than lock_seconds come out; the younger ones stay in the bank. */
-[[nodiscard]] InvestmentResult investment_withdraw(Storage &storage, const std::string &player,
-    std::string_view target, RaidTargetKind platform, std::int64_t now,
-    zodiac::Overrides signs = {}, std::int64_t lightning = 0, std::int64_t lock_seconds = 0);
 
 /* Settles the raids that have reached the target or come home by now. */
 [[nodiscard]] std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRules &rules);

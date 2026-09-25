@@ -48,12 +48,12 @@ std::string_view raid_target(std::string_view message) {
     return valid_raid_target(target) ? target : std::string_view{};
 }
 
-struct ParsedInvestment {
+struct ParsedAmount {
     std::string_view target;
     std::int64_t amount = 0;
 };
 
-std::optional<ParsedInvestment> investment_target(std::string_view message) {
+std::optional<ParsedAmount> amount_target(std::string_view message) {
     if (!message.starts_with(raid_trigger)) {
         return std::nullopt;
     }
@@ -63,7 +63,7 @@ std::optional<ParsedInvestment> investment_target(std::string_view message) {
         return std::nullopt;
     }
     if (const auto amount = text::parse_int64(rest.substr(separator))) {
-        return ParsedInvestment{rest.substr(0, separator), *amount};
+        return ParsedAmount{rest.substr(0, separator), *amount};
     }
     return std::nullopt;
 }
@@ -448,7 +448,7 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
     if (context.username.empty()) {
         return missing_username_reply();
     }
-    switch (furniture_burn(context.storage, std::string{context.player_key}, std::string{emoji}, seconds_now()).status) {
+    switch (furniture_burn(context.storage, std::string{context.player_key}, std::string{emoji}).status) {
     case FurnitureBurnStatus::travelling:
         return on_the_road(context, "🔥", "si brucia dal tuo pianeta o da @TheConquister37.");
     case FurnitureBurnStatus::not_owned:
@@ -463,7 +463,7 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
 }
 
 /* "We nome numero" toward somebody else: the palle travel with him and change hands when he arrives. */
-std::string handle_gift(const CommandContext &context, const ParsedInvestment &request) {
+std::string handle_gift(const CommandContext &context, const ParsedAmount &request) {
     if (context.username.empty()) {
         return missing_username_reply();
     }
@@ -471,47 +471,6 @@ std::string handle_gift(const CommandContext &context, const ParsedInvestment &r
         return std::format("🎁 {} indica un numero di palle maggiore di zero.", context.username);
     }
     return handle_raid(context, request.target, request.amount);
-}
-
-/* A change with its sign, except nothing, which has none. */
-std::string signed_amount(std::int64_t value) {
-    return value == 0 ? std::string{"0"} : std::format("{:+}", value);
-}
-
-/* Nothing when the named player is somebody else: those palle are a delivery, not a deposit. */
-std::optional<std::string> handle_investment(const CommandContext &context, const ParsedInvestment &request) {
-    if (context.username.empty()) {
-        return missing_username_reply();
-    }
-    const bool telegram = request.target.starts_with('@');
-    const std::string_view name = telegram ? request.target.substr(1) : request.target;
-    const std::int64_t now = seconds_now();
-    const InvestmentResult result = investment_deposit(context.storage, std::string{context.player_key}, name,
-        telegram ? RaidTargetKind::telegram : RaidTargetKind::irc, request.amount, now,
-        context.config.zodiac_signs, context.config.lightning_percent);
-    /* From @TheConquister37 the deposit is made on the way home: first what the hold was worth. */
-    const std::string departure = departure_line(context, result.departure, now);
-    switch (result.status) {
-    case InvestmentStatus::deposited: {
-        const std::string_view horoscope = result.zodiac_percent == 125 ? "favorevole" :
-            result.zodiac_percent == 75 ? "sfavorevole" : "neutro";
-        return departure + std::format("🏦 {} hai investito {}. "
-                                       "Rendimento di oggi: {}% (oroscopo {}). "
-                                       "Saldo disponibile: {}.",
-                                       context.username, palle(result.amount), signed_amount(result.daily_rate),
-                                       horoscope, palle(result.score));
-    }
-    case InvestmentStatus::not_self:
-        return std::nullopt;
-    case InvestmentStatus::not_home:
-        return on_the_road(context, "🏦", "si investe dal tuo pianeta.");
-    case InvestmentStatus::invalid_amount:
-        return std::format("🏦 {} indica un numero di palle maggiore di zero.", context.username);
-    case InvestmentStatus::insufficient_score:
-        return departure + std::format("🏦 {} hai solo {} a disposizione.", context.username, palle(result.score));
-    default:
-        return std::string{internal_error_reply};
-    }
 }
 
 std::string handle_claim(const CommandContext &context, std::string_view) {
@@ -743,8 +702,7 @@ std::string handle_help(const CommandContext &context, std::string_view) {
         help += std::format("{} — {}\n", example, meaning);
     };
     line(std::format("We {}", conquister_place), "entri nel posto: 1 palla al secondo finché lo tieni");
-    line(std::format("We {}", me), "torni sul tuo pianeta, dal posto, dal viaggio o ritiri l'investimento");
-    line(std::format("We {} 1000", me), "investi 1000 palle");
+    line(std::format("We {}", me), "torni sul tuo pianeta, dal posto o dal viaggio");
     line(std::format("We {} 🍕", me), "appendi 🍕 al nome nel primo posto libero, dal tuo pianeta");
     line(std::format("We {} 🍕 3", me), "appendi 🍕 nel posto 3");
     line(std::format("We {} 1 2", me), "sposti l'emoji dal posto 1 al posto 2");
@@ -772,13 +730,11 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
         if (context.username.empty()) {
             return missing_username_reply();
         }
-        found = player_profile_of(context.storage, std::string{context.player_key}, now, context.config.zodiac_signs,
-                                  context.config.lightning_percent);
+        found = player_profile_of(context.storage, std::string{context.player_key}, now);
     } else {
         const bool telegram = wanted.starts_with('@');
         found = player_profile(context.storage, telegram ? wanted.substr(1) : wanted,
-                               telegram ? RaidTargetKind::telegram : RaidTargetKind::irc, now,
-                               context.config.zodiac_signs, context.config.lightning_percent);
+                               telegram ? RaidTargetKind::telegram : RaidTargetKind::irc, now);
         if (!found) {
             return std::format("👤 {} non conosco nessun giocatore di nome {}.", context.username, wanted);
         }
@@ -808,11 +764,6 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
         card += std::format("🚀 {} {}: rientra tra {}\n", profile.returning ? "sulla via del ritorno da" : "in viaggio verso",
                             profile.heading, format_wait(profile.home_in));
         break;
-    }
-    if (profile.invested > 0) {
-        card += std::format("🏦 {} investit{}, ora ne {} {}\n", palle(profile.invested),
-                            profile.invested == 1 ? "a" : "e", profile.investment_value == 1 ? "vale" : "valgono",
-                            profile.investment_value);
     }
     if (profile.quotes_added > 0) {
         card += std::format("📜 {} citazion{}\n", profile.quotes_added, profile.quotes_added == 1 ? "e" : "i");
@@ -946,9 +897,19 @@ const CommandDefinition *find_command(std::string_view name) {
 
 }
 
+std::string bank_closed_announcement(const std::vector<Refund> &refunds) {
+    std::string told = "🏦 La banca chiude: gli investimenti non esistono più e le palle depositate tornano sul "
+                       "pianeta di chi le aveva messe.";
+    for (std::size_t index = 0; index < refunds.size(); ++index) {
+        told += std::format("{}{}{} {}", index == 0 ? " " : ", ", refunds[index].on_telegram ? "@" : "",
+                            refunds[index].name, palle(refunds[index].amount));
+    }
+    return told + ".";
+}
+
 bool command_is_for_bot(std::string_view text) {
     const std::string_view message = text::trim(text);
-    return message == conquister_trigger || !raid_target(message).empty() || investment_target(message).has_value() ||
+    return message == conquister_trigger || !raid_target(message).empty() || amount_target(message).has_value() ||
            emoji_target(message).has_value() || slot_move(message).has_value() ||
            (!message.empty() && find_command(parse_command(message).name) != nullptr);
 }
@@ -1040,18 +1001,21 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
             remember_sender();
             return handle_claim(bound, {});
         }
-        if (const auto investment = investment_target(message)) {
+        if (const auto transfer = amount_target(message)) {
             if (!context.claims_allowed) {
                 return std::nullopt;
             }
             remember_sender();
-            if (names_the_place(investment->target)) {
-                return handle_burn(bound, investment->amount);
+            if (names_the_place(transfer->target)) {
+                return handle_burn(bound, transfer->amount);
             }
-            if (std::optional<std::string> reply = handle_investment(bound, *investment)) {
-                return reply;
+            const bool telegram = transfer->target.starts_with('@');
+            if (!bound.player_key.empty() &&
+                names_player(context.storage, bound_key, telegram ? transfer->target.substr(1) : transfer->target,
+                             telegram ? RaidTargetKind::telegram : RaidTargetKind::irc)) {
+                return std::format("🏦 {} la banca è chiusa: gli investimenti non esistono più.", context.username);
             }
-            return handle_gift(bound, *investment);
+            return handle_gift(bound, *transfer);
         }
         if (const auto move = slot_move(message)) {
             if (!context.claims_allowed) {
@@ -1098,37 +1062,6 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
                 return std::nullopt;
             }
             remember_sender();
-            if (!bound.player_key.empty()) {
-                const bool telegram = target.starts_with('@');
-                const InvestmentResult investment = investment_withdraw(context.storage, bound_key,
-                    telegram ? target.substr(1) : target,
-                    telegram ? RaidTargetKind::telegram : RaidTargetKind::irc, seconds_now(),
-                    context.config.zodiac_signs, context.config.lightning_percent,
-                    std::int64_t{context.config.investment_lock_hours} * 3600);
-                const std::string departure = departure_line(bound, investment.departure, seconds_now());
-                /* Deposits still in their lock stay in the bank, and he is told when the first comes out. */
-                const std::string waiting = investment.still_locked == 0 ? std::string{}
-                    : std::format(" Restano in banca {}: la prima parte si sblocca tra {}.",
-                                  palle(investment.still_locked), format_wait(investment.unlock_in));
-                if (investment.status == InvestmentStatus::withdrawn) {
-                    return departure + std::format("🏦 {} hai ritirato {} (rendimento: {} {}). Saldo: {}.{}",
-                                                   context.username, palle(investment.amount),
-                                                   signed_amount(investment.interest),
-                                                   investment.interest == 1 || investment.interest == -1 ? "palla" : "palle",
-                                                   palle(investment.score), waiting);
-                }
-                if (investment.status == InvestmentStatus::locked) {
-                    return departure + std::format("🏦 {} {} in banca si {} tra {}.", context.username,
-                                                   investment.still_locked == 1 ? std::string{"la tua palla"}
-                                                       : std::format("le tue {} palle", investment.still_locked),
-                                                   investment.still_locked == 1 ? "sblocca" : "sbloccano",
-                                                   format_wait(investment.unlock_in));
-                }
-                if (investment.status == InvestmentStatus::balance_limit) {
-                    return departure + std::format("🏦 {} il saldo è troppo alto per ritirare l'investimento: contatta il proprietario del bot.",
-                                                   context.username);
-                }
-            }
             return handle_raid(bound, target);
         }
         if (message.empty()) {

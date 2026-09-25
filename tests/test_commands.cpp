@@ -487,91 +487,6 @@ TEST_CASE("the @ prefix selects Telegram names and bare names select IRC nicks")
     CHECK(command_dispatch(context, "We Lucy")->contains("sei già in viaggio"));
 }
 
-TEST_CASE("We invests and withdraws only with the owner's platform name") {
-    const TestPaths paths{"investment-command-test"};
-    AppConfig config;
-    config.conquister_path = paths.conquister;
-    config.quotes_path = paths.quotes;
-    Storage storage{paths.conquister, paths.quotes};
-    const CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
-    REQUIRE(command_dispatch(alice, "/leaderboard"));
-    storage.transaction([](StorageSession &session) {
-        session.state().scores["tg:1"] = 2000;
-        return 0;
-    });
-    CHECK(command_is_for_bot("We @Alice 1000"));
-    CHECK_FALSE(command_is_for_bot("We @Alice ora"));
-    /* Another name means a delivery, so the refusal is about the player, not about the deposit. */
-    CHECK(command_dispatch(alice, "We Alice 1000")->contains("non conosco nessun giocatore di nome Alice"));
-    CHECK(command_dispatch(alice, "We @Bob 1000")->contains("non conosco nessun giocatore di nome @Bob"));
-    CHECK(command_dispatch(alice, "We @Alice 0")->contains("maggiore di zero"));
-    CHECK(command_dispatch(alice, "We @Alice 3000")->contains("solo 2000"));
-    const std::string deposited = command_dispatch(alice, "We @Alice 1000").value_or("");
-    CHECK(deposited.contains("hai investito 1000 palle."));
-    CHECK(deposited.contains("oroscopo "));
-    CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 1000);
-    /* A deposit stays in the bank for a day. */
-    const std::string locked = command_dispatch(alice, "We @Alice").value_or("");
-    /* A second may pass between the two lines. */
-    CHECK((locked == "🏦 Alice le tue 1000 palle in banca si sbloccano tra 24 ore." ||
-           locked == "🏦 Alice le tue 1000 palle in banca si sbloccano tra 23 ore, 59 minuti e 59 secondi."));
-    config.investment_lock_hours = 0;
-    const std::string withdrawn = command_dispatch(alice, "We @Alice").value_or("");
-    CHECK(withdrawn.contains("hai ritirato"));
-    CHECK(withdrawn.contains("rendimento:"));
-    CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score >= 1999);
-    CHECK(command_dispatch(alice, "We @Alice") == "🪐 Alice sei già in @Alice!");
-
-    const CommandContext irc{.storage = storage, .config = config, .user_id = 0, .username = "Bob"};
-    REQUIRE(command_dispatch(irc, "/leaderboard"));
-    storage.transaction([](StorageSession &session) {
-        session.state().scores["irc:bob"] = 1000;
-        return 0;
-    });
-    CHECK(command_dispatch(irc, "We Bob 1000")->contains("hai investito 1000"));
-    CHECK(command_dispatch(irc, "We Bob")->contains("hai ritirato"));
-}
-
-TEST_CASE("investment replies explain the zodiac sign without a percentage multiplier") {
-    const TestPaths paths{"investment-horoscope-reply-test"};
-    AppConfig config;
-    config.conquister_path = paths.conquister;
-    config.quotes_path = paths.quotes;
-    const std::int64_t today = seconds_now_for_test();
-    const zodiac::Element house = zodiac::element_of_day(today);
-    const std::string_view favorable = house == zodiac::Element::water ? "cancro" :
-        house == zodiac::Element::fire ? "leone" :
-        house == zodiac::Element::air ? "gemelli" : "toro";
-    const std::string_view unfavorable = house == zodiac::Element::water ? "leone" :
-        house == zodiac::Element::fire ? "cancro" :
-        house == zodiac::Element::air ? "toro" : "gemelli";
-    const std::string_view neutral = house == zodiac::Element::water || house == zodiac::Element::fire
-        ? "gemelli" : "cancro";
-    config.zodiac_signs = {{"Alice", std::string{favorable}}, {"Bob", std::string{neutral}},
-                           {"Carol", std::string{unfavorable}}};
-    Storage storage{paths.conquister, paths.quotes};
-    storage.transaction([&](StorageSession &session) {
-        session.state().investment_magnitudes[std::to_string(zodiac::day_start(today))] = 69;
-        return 0;
-    });
-    const auto check_reply = [&](std::int64_t user_id, std::string_view name,
-                                 std::string_view rate, std::string_view label) {
-        const CommandContext context{.storage = storage, .config = config, .user_id = user_id, .username = name};
-        REQUIRE(command_dispatch(context, "/leaderboard"));
-        storage.transaction([&](StorageSession &session) {
-            session.state().scores[std::format("tg:{}", user_id)] = 365;
-            return 0;
-        });
-        const std::string message = command_dispatch(context, std::format("We @{} 365", name)).value_or("");
-        CHECK(message.contains(std::format("Rendimento di oggi: {}% (oroscopo {}).", rate, label)));
-        CHECK_FALSE(message.contains("oroscopo 125%"));
-    };
-    check_reply(1, "Alice", "+69", "favorevole");
-    /* Nothing gained or lost carries no sign. */
-    check_reply(2, "Bob", "0", "neutro");
-    check_reply(3, "Carol", "-69", "sfavorevole");
-}
-
 TEST_CASE("an ambiguous old holder is not claimed by an IRC namesake") {
     const TestPaths paths{"legacy-dual-target-command-test"};
     {
@@ -671,17 +586,15 @@ TEST_CASE("the profile shows where a player stands") {
         state.balloons["tg:1"] = 1;
         return 0;
     });
-    REQUIRE(command_dispatch(alice, "We @Alice 1000")->contains("hai investito 1000 palle"));
 
     CHECK(command_is_for_bot("/profile"));
     const std::string mine = command_dispatch(alice, "/profile").value_or("");
     /* Carol has no palle yet, so the ranking has two players. */
-    CHECK(mine.starts_with("👤 Alice (🍕[]⚡)\n💰 4000 palle, 2° su 2 in classifica\n"));
+    CHECK(mine.starts_with("👤 Alice (🍕[]⚡)\n💰 5000 palle, 2° su 2 in classifica\n"));
     CHECK(mine.contains(": oggi è giorno di "));
     CHECK(mine.contains("\n🪐 in @Alice\n"));
     /* The balloon stays out of it, worn or not. */
     CHECK_FALSE(mine.contains("🎈"));
-    CHECK(mine.contains("\n🏦 1000 palle investite, ora ne valgono "));
     CHECK(mine.ends_with("\n📜 3 citazioni"));
 
     /* The same card, seen by somebody else, with the name as it is written on that platform. */
@@ -713,7 +626,8 @@ TEST_CASE("the help lists every We line with the asker's own name") {
     CHECK(help.starts_with("📖 Come si gioca\n\n"));
     CHECK(help.contains("\nWe @Alice 🍕 3 — appendi 🍕 nel posto 3\n"));
     CHECK_FALSE(help.contains("⚡"));
-    CHECK(help.contains("\nWe @Alice — torni sul tuo pianeta, dal posto, dal viaggio o ritiri l'investimento\n"));
+    CHECK(help.contains("\nWe @Alice — torni sul tuo pianeta, dal posto o dal viaggio\n"));
+    CHECK_FALSE(help.contains("invest"));
     CHECK(help.ends_with("\n/link <nome> — collega account Telegram e nick IRC Azzurra registrato"));
     CHECK(help.contains("\nWe @giocatore 500 — gli porti 500 palle\n"));
     CHECK(help.contains("\nWe @TheConquister37 🍕 — bruci una 🍕\n"));
@@ -801,15 +715,13 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
           "🔥 Alice sei in viaggio: si brucia dal tuo pianeta o da @TheConquister37. Per tornare indietro scrivi We @Alice.");
     CHECK(command_dispatch(alice, "We @TheConquister37 1") ==
           "🔥 Alice sei in viaggio: si brucia dal tuo pianeta o da @TheConquister37. Per tornare indietro scrivi We @Alice.");
-    CHECK(command_dispatch(alice, "We @Alice 1") ==
-          "🏦 Alice sei in viaggio: si investe dal tuo pianeta. Per tornare indietro scrivi We @Alice.");
 
     /* Once the pizza is handed over she is on her way back: nothing to turn around, just when she is home. */
     const std::int64_t later = std::chrono::duration_cast<std::chrono::seconds>(
         std::chrono::system_clock::now().time_since_epoch()).count() + 6;
     REQUIRE(raid_due(storage, later, RaidRules{}).size() == 1);
-    const std::string back = command_dispatch(alice, "We @Alice 1").value_or("");
-    CHECK(back.starts_with("🏦 Alice sei sulla via del ritorno: si investe dal tuo pianeta. Rientri tra "));
+    const std::string back = command_dispatch(alice, "We @Alice 1 2").value_or("");
+    CHECK(back.starts_with("🛋️ Alice sei sulla via del ritorno: le emoji si spostano dal tuo pianeta. Rientri tra "));
 
     RaidEvent given;
     given.kind = RaidEvent::Kind::delivered;
@@ -867,38 +779,29 @@ TEST_CASE("the quotes are open to the admins as well as to the owner") {
     CHECK(reply("/debug 0").contains("Debug spento"));
 }
 
-TEST_CASE("We with a number for yourself from the place takes you home and invests") {
-    const TestPaths paths{"invest-from-place-command-test"};
+TEST_CASE("the bank is closed, and the group was told who got back what") {
+    const TestPaths paths{"bank-closed-command-test"};
     AppConfig config;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
     Storage storage{paths.conquister, paths.quotes};
     const CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
-    REQUIRE(command_dispatch(alice, "We @TheConquister37"));
+    REQUIRE(command_dispatch(alice, "/leaderboard"));
     storage.transaction([](StorageSession &session) {
         session.state().scores["tg:1"] = 2000;
         return 0;
     });
-    REQUIRE(conquister_user(storage, "Alice", RaidTargetKind::telegram)->in_conquister);
-
-    /* A number that makes no sense does not even take her out of the place. */
-    CHECK(command_dispatch(alice, "We @Alice 0")->contains("maggiore di zero"));
+    CHECK(command_dispatch(alice, "We @Alice 1000") == "🏦 Alice la banca è chiusa: gli investimenti non esistono più.");
+    CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 2000);
+    /* Not even from the place, which she does not leave for it. */
+    REQUIRE(command_dispatch(alice, "We @TheConquister37"));
+    CHECK(command_dispatch(alice, "We @Alice 1000") == "🏦 Alice la banca è chiusa: gli investimenti non esistono più.");
     CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->in_conquister);
 
-    const std::string reply = command_dispatch(alice, "We @Alice 1000").value_or("");
-    CHECK(reply.starts_with("🪐 Alice torni da @TheConquister37 in @Alice con "));
-    CHECK(reply.contains("\n🏦 Alice hai investito 1000 palle. "));
-    const auto after = conquister_user(storage, "Alice", RaidTargetKind::telegram);
-    REQUIRE(after);
-    CHECK_FALSE(after->in_conquister);
-    CHECK(after->score >= 1000);
-
-    /* Too many palle: she still goes home, and is told what she has. */
-    REQUIRE(command_dispatch(alice, "We @TheConquister37"));
-    const std::string broke = command_dispatch(alice, "We @Alice 999999").value_or("");
-    CHECK(broke.starts_with("🪐 Alice torni da @TheConquister37"));
-    CHECK(broke.contains("\n🏦 Alice hai solo "));
-    CHECK_FALSE(conquister_user(storage, "Alice", RaidTargetKind::telegram)->in_conquister);
+    CHECK(bank_closed_announcement({{.name = "Giangiui", .on_telegram = true, .amount = 60213},
+                                    {.name = "Carol", .on_telegram = false, .amount = 1}}) ==
+          "🏦 La banca chiude: gli investimenti non esistono più e le palle depositate tornano sul pianeta di chi "
+          "le aveva messe. @Giangiui 60213 palle, Carol 1 palla.");
 }
 
 TEST_CASE("We with a number for the place destroys the palle") {
