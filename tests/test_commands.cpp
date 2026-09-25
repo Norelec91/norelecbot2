@@ -820,6 +820,14 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     given.target_emoji = "🍕";
     given.seconds = 5;
     CHECK(raid_event_reply(given) == "🎁 Alice hai consegnato 🍕 a @Bob (🍕)! Torni in Alice tra 5 secondi.");
+    /* A pile of poo that lands is a throw, like the one at the place. */
+    RaidEvent poo = given;
+    poo.gift_emoji = "💩";
+    poo.raider_on_telegram = true;
+    CHECK(raid_event_reply(poo) ==
+          "@Alice, tiri una palla di cacca a @Bob, bravo hai fatto centro, l'hai completamente smerdato!");
+    poo.no_room = true;
+    CHECK(raid_event_reply(poo)->contains("non ha più posto per 💩"));
     given.no_room = true;
     given.target_emoji = "🐝🐝";
     CHECK(raid_event_reply(given) ==

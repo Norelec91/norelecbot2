@@ -371,6 +371,12 @@ std::string on_the_road(const CommandContext &context, std::string_view emoji, s
                        emoji, context.username, what, own_name(context));
 }
 
+/* A pile of poo is not handed over or burnt: it is thrown, at the place or at a player. */
+std::string poo_throw(std::string_view thrower, std::string_view target) {
+    return std::format("{}, tiri una palla di cacca a {}, bravo hai fatto centro, l'hai completamente smerdato!",
+                       thrower, target);
+}
+
 /* The place itself, written with or without the mention that reaches it on Telegram. */
 bool names_the_place(std::string_view target) {
     const std::string_view name = target.starts_with('@') ? target.substr(1) : target;
@@ -451,8 +457,7 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
         break;
     }
     if (emoji == "💩") {
-        return std::format("{}, tiri una palla di cacca a {}, bravo hai fatto centro, l'hai completamente smerdato!",
-                           own_name(context), conquister_place);
+        return poo_throw(own_name(context), conquister_place);
     }
     return std::format("🔥 {} hai riportato {} in {}: è uscita dal gioco.", context.username, emoji, conquister_place);
 }
@@ -976,6 +981,9 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
         if (event.no_room) {
             return std::format("🎁 {} {}{} non ha più posto per {}: te la riporti sul tuo pianeta. Torni in {} tra {}.",
                                raider, mention, target, event.gift_emoji, home, format_wait(event.seconds));
+        }
+        if (event.gift_emoji == "💩") {
+            return poo_throw(home, std::format("{}{}", mention, event.target));
         }
         return std::format("🎁 {} hai consegnato {} a {}{}! Torni in {} tra {}.",
                            raider, event.gift_emoji, mention, target, home, format_wait(event.seconds));

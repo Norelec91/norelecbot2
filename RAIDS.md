@@ -100,7 +100,8 @@ traveller cannot fill the slot it left, and a gift brought to him while it
 travels needs two empty slots on his name, so that one is always left for it. Carrying
 an emoji does not change how many copies of it hang in the game, so it does not
 change its price. An emoji in transit is kept in the `gift_emoji` field of the
-`raids` section.
+`raids` section. A 💩 that lands is announced as a throw at the
+target, with the same line as the one thrown at @TheConquister37.
 
 ## Palle brought back to the place
 
