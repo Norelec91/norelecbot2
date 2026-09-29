@@ -251,16 +251,6 @@ struct Profile {
                                                            RaidTargetKind platform = RaidTargetKind::any);
 /* Seconds until a traveller already on his way back is home; nothing when he is not coming back yet. */
 [[nodiscard]] std::optional<std::int64_t> returning_in(Storage &storage, const std::string &player, std::int64_t now);
-/* A player given back what he kept in the bank when it closed. */
-struct Refund {
-    std::string name;
-    bool on_telegram = false;
-    std::int64_t amount = 0;
-};
-
-/* The refunds not announced yet, largest first; reading them empties the list. */
-[[nodiscard]] std::vector<Refund> take_bank_refunds(Storage &storage);
-
 /* Whether a name, as written on that platform, is this very player. */
 [[nodiscard]] bool names_player(Storage &storage, const std::string &player, std::string_view name,
                                 RaidTargetKind platform);

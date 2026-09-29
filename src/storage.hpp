@@ -90,8 +90,6 @@ struct ConquisterState {
     Authors furniture;
     /* Players who turned the debug switch on for themselves: their purchases are free. */
     Counters debugging;
-    /* The bank closed: palle given back from the deposits, per player, until the group is told. */
-    Counters bank_refunds;
 
     bool operator==(const ConquisterState &) const = default;
 };

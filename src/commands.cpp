@@ -897,16 +897,6 @@ const CommandDefinition *find_command(std::string_view name) {
 
 }
 
-std::string bank_closed_announcement(const std::vector<Refund> &refunds) {
-    std::string told = "🏦 La banca chiude: gli investimenti non esistono più e le palle depositate tornano sul "
-                       "pianeta di chi le aveva messe.";
-    for (std::size_t index = 0; index < refunds.size(); ++index) {
-        told += std::format("{}{}{} {}", index == 0 ? " " : ", ", refunds[index].on_telegram ? "@" : "",
-                            refunds[index].name, palle(refunds[index].amount));
-    }
-    return told + ".";
-}
-
 bool command_is_for_bot(std::string_view text) {
     const std::string_view message = text::trim(text);
     return message == conquister_trigger || !raid_target(message).empty() || amount_target(message).has_value() ||
@@ -1013,7 +1003,7 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
             if (!bound.player_key.empty() &&
                 names_player(context.storage, bound_key, telegram ? transfer->target.substr(1) : transfer->target,
                              telegram ? RaidTargetKind::telegram : RaidTargetKind::irc)) {
-                return std::format("🏦 {} la banca è chiusa: gli investimenti non esistono più.", context.username);
+                return std::format("🎁 {} non puoi portare palle a te stesso.", context.username);
             }
             return handle_gift(bound, *transfer);
         }

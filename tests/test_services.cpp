@@ -1122,37 +1122,3 @@ TEST_CASE("a hold saved with a whole multiplier keeps it as a percent") {
     CHECK(kicked.lightning == 300);
     CHECK(kicked.earned == earnings("alice", 1000, 1000, 300));
 }
-
-TEST_CASE("closing the bank gives the deposits back once, to be told once") {
-    const TestPaths paths{"bank-closed-test"};
-    {
-        std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":null,"scores":{"alice":10,"bob":0},"quotes_added":{},)"
-             << R"("telegram_ids":{"alice":1},)"
-             << R"("investments":[{"player":"alice","amount":1000,"since":0,"fixed_until":0},)"
-             << R"({"player":"bob","amount":300,"since":0,"fixed_until":0},)"
-             << R"({"player":"alice","amount":500,"since":10,"fixed_until":0}],)"
-             << R"("investment_magnitudes":{"0":50},"lightning_history":{"alice":[[0,1]]}})";
-    }
-    {
-        const Storage storage{paths.conquister, paths.quotes};
-        const Json saved = read_json(paths.conquister);
-        CHECK_FALSE(saved.contains("investments"));
-        CHECK_FALSE(saved.contains("investment_magnitudes"));
-        CHECK_FALSE(saved.contains("lightning_history"));
-        CHECK(saved.at("scores").at("alice") == 1510);
-        CHECK(saved.at("scores").at("bob") == 300);
-    }
-    /* A restart before the group is told gives nothing twice and keeps the list. */
-    Storage storage{paths.conquister, paths.quotes};
-    CHECK(conquister_user(storage, "alice")->score == 1510);
-    const std::vector<Refund> refunds = take_bank_refunds(storage);
-    REQUIRE(refunds.size() == 2);
-    CHECK(refunds[0].name == "alice");
-    CHECK(refunds[0].on_telegram);
-    CHECK(refunds[0].amount == 1500);
-    CHECK(refunds[1].name == "bob");
-    CHECK_FALSE(refunds[1].on_telegram);
-    CHECK(refunds[1].amount == 300);
-    CHECK(take_bank_refunds(storage).empty());
-}

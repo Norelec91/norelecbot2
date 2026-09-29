@@ -627,7 +627,6 @@ TEST_CASE("the help lists every We line with the asker's own name") {
     CHECK(help.contains("\nWe @Alice 🍕 3 — appendi 🍕 nel posto 3\n"));
     CHECK_FALSE(help.contains("⚡"));
     CHECK(help.contains("\nWe @Alice — torni sul tuo pianeta, dal posto o dal viaggio\n"));
-    CHECK_FALSE(help.contains("invest"));
     CHECK(help.ends_with("\n/link <nome> — collega account Telegram e nick IRC Azzurra registrato"));
     CHECK(help.contains("\nWe @giocatore 500 — gli porti 500 palle\n"));
     CHECK(help.contains("\nWe @TheConquister37 🍕 — bruci una 🍕\n"));
@@ -779,8 +778,8 @@ TEST_CASE("the quotes are open to the admins as well as to the owner") {
     CHECK(reply("/debug 0").contains("Debug spento"));
 }
 
-TEST_CASE("the bank is closed, and the group was told who got back what") {
-    const TestPaths paths{"bank-closed-command-test"};
+TEST_CASE("We with a number for yourself does nothing") {
+    const TestPaths paths{"self-transfer-command-test"};
     AppConfig config;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -791,17 +790,12 @@ TEST_CASE("the bank is closed, and the group was told who got back what") {
         session.state().scores["tg:1"] = 2000;
         return 0;
     });
-    CHECK(command_dispatch(alice, "We @Alice 1000") == "🏦 Alice la banca è chiusa: gli investimenti non esistono più.");
+    CHECK(command_dispatch(alice, "We @Alice 1000") == "🎁 Alice non puoi portare palle a te stesso.");
     CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 2000);
     /* Not even from the place, which she does not leave for it. */
     REQUIRE(command_dispatch(alice, "We @TheConquister37"));
-    CHECK(command_dispatch(alice, "We @Alice 1000") == "🏦 Alice la banca è chiusa: gli investimenti non esistono più.");
+    CHECK(command_dispatch(alice, "We @Alice 1000") == "🎁 Alice non puoi portare palle a te stesso.");
     CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->in_conquister);
-
-    CHECK(bank_closed_announcement({{.name = "Giangiui", .on_telegram = true, .amount = 60213},
-                                    {.name = "Carol", .on_telegram = false, .amount = 1}}) ==
-          "🏦 La banca chiude: gli investimenti non esistono più e le palle depositate tornano sul pianeta di chi "
-          "le aveva messe. @Giangiui 60213 palle, Carol 1 palla.");
 }
 
 TEST_CASE("We with a number for the place destroys the palle") {

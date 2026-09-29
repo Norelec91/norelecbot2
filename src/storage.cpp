@@ -115,24 +115,6 @@ std::vector<Raid> parse_raids(const Json &state) {
 }
 
 /* Missing sections count as empty, like in the original C version. */
-/* The bank closed: whatever an older version kept in deposits goes back to its owner, and waits to be
-   announced. Only the palle put in come back, not what the days made of them. */
-void refund_deposits(const Json &json, ConquisterState &state) {
-    const auto section = json.find("investments");
-    if (section == json.end() || !section->is_array()) {
-        return;
-    }
-    for (const Json &deposit : *section) {
-        const auto player = deposit.at("player").get<std::string>();
-        const std::int64_t amount = integer(deposit.at("amount"));
-        if (player.empty() || amount <= 0) {
-            continue;
-        }
-        state.scores[player] += amount;
-        state.bank_refunds[player] += amount;
-    }
-}
-
 ConquisterState parse_state(const Json &json) {
     if (!json.is_object()) {
         throw std::invalid_argument("unexpected structure");
@@ -167,9 +149,7 @@ ConquisterState parse_state(const Json &json) {
         parse_authors(json, "quote_authors"),
         parse_authors(json, "furniture"),
         parse_counters(json, "debugging"),
-        parse_counters(json, "bank_refunds"),
     };
-    refund_deposits(json, state);
     return state;
 }
 
@@ -214,7 +194,6 @@ Json state_to_json(const ConquisterState &state) {
         {"quote_authors", state.quote_authors},
         {"furniture", state.furniture},
         {"debugging", state.debugging},
-        {"bank_refunds", state.bank_refunds},
     };
 }
 
@@ -231,8 +210,7 @@ std::optional<ConquisterState> load_state(const std::string &path, bool *has_leg
                    without them. */
                 *has_legacy_shields = json->contains("shields") || json->contains("raid_shields") ||
                     json->contains("raid_resistance_levels") || json->contains("raid_resistance_since") ||
-                    json->contains("boosts") || json->contains("investments") ||
-                    json->contains("investment_magnitudes") || json->contains("lightning_history");
+                    json->contains("boosts");
             }
             return state;
         } catch (const std::exception &failure) {

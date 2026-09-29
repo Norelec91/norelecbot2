@@ -448,22 +448,6 @@ std::optional<std::int64_t> returning_in(Storage &storage, const std::string &pl
     });
 }
 
-std::vector<Refund> take_bank_refunds(Storage &storage) {
-    std::vector<Refund> refunds = storage.transaction([](StorageSession &session) {
-        ConquisterState &state = session.state();
-        std::vector<Refund> taken;
-        for (const auto &[key, amount] : state.bank_refunds) {
-            taken.push_back({.name = display_name(state, key),
-                             .on_telegram = counter(state.telegram_ids, key) != 0,
-                             .amount = amount});
-        }
-        state.bank_refunds.clear();
-        return taken;
-    });
-    std::ranges::sort(refunds, std::ranges::greater{}, &Refund::amount);
-    return refunds;
-}
-
 bool names_player(Storage &storage, const std::string &player, std::string_view name, RaidTargetKind platform) {
     return storage.transaction([&](StorageSession &session) {
         return player_by_name(session.state(), name, platform) == player;
