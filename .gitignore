@@ -5,6 +5,8 @@
 .DS_Store
 bin/
 build-check/
+build-win/
+.clangd
 
 # Local deployment notes and target host.
 DEPLOY.md

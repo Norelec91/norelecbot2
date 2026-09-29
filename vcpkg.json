@@ -1,11 +1,14 @@
 {
   "name": "norelecbot",
   "version-string": "1.0.0",
+  "builtin-baseline": "9e2895bf6afb246396d85232ba70fcfa1fa67ba1",
   "dependencies": [
     {
       "name": "cpp-httplib",
       "features": ["openssl"]
     },
-    "nlohmann-json"
+    "nlohmann-json",
+    "spdlog",
+    "doctest"
   ]
 }

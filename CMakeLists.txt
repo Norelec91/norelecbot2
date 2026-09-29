@@ -26,6 +26,11 @@ endif()
 option(NORELECBOT_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 option(NORELECBOT_FUZZ "Build the libFuzzer targets (requires clang)" OFF)
 
+if(WIN32)
+    # windows.h would otherwise define min and max as macros and break std::min and std::max.
+    add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN)
+endif()
+
 if(MSVC)
     add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
     add_compile_options(/W4 /WX /utf-8 /permissive- /EHsc)

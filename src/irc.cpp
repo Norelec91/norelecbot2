@@ -166,16 +166,10 @@ void set_read_timeout(Handle handle, int seconds, int microseconds) {
 
 /* Tries the addresses in the order getaddrinfo returns them, which /etc/gai.conf puts IPv4 first. */
 Socket connect_to(const std::string &host, int port) {
-    const addrinfo hints{
-        .ai_flags = 0,
-        .ai_family = AF_UNSPEC,
-        .ai_socktype = SOCK_STREAM,
-        .ai_protocol = 0,
-        .ai_addrlen = 0,
-        .ai_addr = nullptr,
-        .ai_canonname = nullptr,
-        .ai_next = nullptr,
-    };
+    // Not designated initializers: Windows declares ai_canonname before ai_addr, POSIX the other way round.
+    addrinfo hints{};
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
     addrinfo *found = nullptr;
     if (getaddrinfo(host.c_str(), std::to_string(port).c_str(), &hints, &found) != 0 || found == nullptr) {
         log_warning("IRC cannot resolve {}", host);
