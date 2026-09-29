@@ -129,7 +129,16 @@ ConquisterState parse_state(const Json &json) {
             .lightning_percent = current->contains("lightning_percent") ? integer(current->at("lightning_percent"))
                 : current->contains("multiplier") && integer(current->at("multiplier")) > 1
                     ? integer(current->at("multiplier")) * 100 : 0,
+            .lobsters = {},
         };
+        if (const auto lobsters = current->find("lobsters"); lobsters != current->end()) {
+            if (!lobsters->is_object()) {
+                throw std::invalid_argument("lobsters is not an object");
+            }
+            for (const auto &entry : lobsters->items()) {
+                holder->lobsters[std::stoul(entry.key())] = entry.value().get<std::string>();
+            }
+        }
     }
     ConquisterState state{
         std::move(holder),
@@ -175,6 +184,13 @@ Json state_to_json(const ConquisterState &state) {
             {"since", state.current->since},
             {"lightning_percent", state.current->lightning_percent},
         };
+        if (!state.current->lobsters.empty()) {
+            Json lobsters = Json::object();
+            for (const auto &[slot, emoji] : state.current->lobsters) {
+                lobsters[std::to_string(slot)] = emoji;
+            }
+            current["lobsters"] = std::move(lobsters);
+        }
     }
     return Json{
         {"current", std::move(current)},

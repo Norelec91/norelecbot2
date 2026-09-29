@@ -27,6 +27,8 @@ struct ClaimResult {
     bool balloon_popped = false;
     /* taken: what the new hold is worth in percent, fixed by the ⚡ on his name; 0 without one. */
     std::int64_t entered_lightning = 0;
+    /* taken: what the 🦞 on his name became, slot by slot, copying the kicked holder's; empty if none did. */
+    std::vector<std::string> lobsters_became;
     int next_chance = 0;
     /* cooldown: seconds still to wait. defended: the penalty just handed out. */
     std::int64_t penalty_seconds = 0;

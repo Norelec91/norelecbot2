@@ -374,6 +374,34 @@ TEST_CASE("a name that came from IRC is never written as a mention") {
     CHECK(reply.contains("carol hai cacciato @bob da @TheConquister37.\n"));
 }
 
+TEST_CASE("getting in tells what the 🦞 became") {
+    const TestPaths paths{"lobster-command-test"};
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{config.conquister_path, config.quotes_path};
+
+    const auto play = [&](std::int64_t user_id, std::string_view username) {
+        const CommandContext context{
+            .storage = storage,
+            .config = config,
+            .user_id = user_id,
+            .username = username,
+        };
+        return command_dispatch(context, "We @TheConquister37").value_or("<nessuna risposta>");
+    };
+
+    CHECK_FALSE(play(0, "alice").contains("aragoste"));
+    storage.transaction([](StorageSession &session) {
+        session.state().balloons["irc:alice"] = 3;
+        session.state().furniture["irc:alice"] = "🍕[]⚡";
+        session.state().furniture["tg:2"] = "🦞🦞🦞";
+        return 0;
+    });
+    const std::string reply = play(2, "bob");
+    CHECK(reply.contains("\n🦞 Le tue aragoste diventano 🍕⚡ finché resti qui."));
+}
+
 TEST_CASE("the balloon replies follow the same rule") {
     const TestPaths paths{"mention-balloon-test"};
     {

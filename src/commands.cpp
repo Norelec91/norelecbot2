@@ -542,6 +542,13 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
         );
     }
     reply += std::format("🪐 {} sei in {}!", dressed(furniture, context.player_key, username), conquister_place);
+    if (!result.lobsters_became.empty()) {
+        std::string became;
+        for (const std::string &emoji : result.lobsters_became) {
+            became += emoji;
+        }
+        reply += std::format("\n🦞 Le tue aragoste diventano {} finché resti qui.", became);
+    }
     if (const std::optional<std::string> quote = optional_random_quote(context.storage)) {
         reply += std::format("\n\n{}", *quote);
     }

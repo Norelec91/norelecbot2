@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <mutex>
 #include <optional>
 #include <random>
@@ -30,6 +31,9 @@ struct Holder {
     std::int64_t since = 0;
     /* What this hold is worth in percent, fixed on the way in by the ⚡ he had on his name; 0 for nothing. */
     std::int64_t lightning_percent = 0;
+    /* The 🦞 on his name, by slot from 0, that came in as the emoji the kicked holder had in that same
+       slot: they count and show as that emoji until he leaves. */
+    std::map<std::size_t, std::string> lobsters{};
 
     bool operator==(const Holder &) const = default;
 };

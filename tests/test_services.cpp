@@ -305,6 +305,51 @@ TEST_CASE("every ⚡ on the name as a player comes in adds its share to that hol
     CHECK(left.earned == earnings("bob", 100, 2100, 250));
 }
 
+TEST_CASE("a 🦞 comes in as what the kicked holder has in the same slot, and leaves as a 🦞") {
+    const TestPaths paths{"lobster-test"};
+    {
+        /* Both balloons already took three attempts, so every claim gets in. */
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":0,"bob":0,"carol":0},"quotes_added":{},)"
+             << R"("furniture":{"alice":"⚡[]🎈🦞","bob":"🦞🦞🍕🦞"},"balloons":{"alice":3,"bob":3,"carol":3}})";
+    }
+    const ClaimRules rules{.cooldown_seconds = 0, .signs = {}, .lightning = 50};
+    {
+        Storage storage{paths.conquister, paths.quotes};
+        /* Into an empty place nothing is copied. */
+        CHECK(conquister_claim(storage, 1, "alice", 0, rules).lobsters_became.empty());
+
+        /* Slot 1 copies the ⚡ and counts as one; slot 2 finds nothing, slot 4 finds another 🦞. */
+        const ClaimResult entered = conquister_claim(storage, 2, "bob", 100, rules);
+        CHECK(entered.lobsters_became == std::vector<std::string>{"⚡"});
+        CHECK(entered.entered_lightning == 150);
+        CHECK(player_profile_of(storage, "bob", 100).furniture == "⚡🦞🍕🦞");
+        CHECK(furniture_all(storage).at("bob") == "⚡🦞🍕🦞");
+        CHECK(furniture_all(storage).at("alice") == "⚡[]🎈🦞");
+    }
+    /* The copy survives a restart, and what is saved on the name is still the 🦞. */
+    const Json saved = read_json(paths.conquister);
+    CHECK(saved.at("furniture").at("bob") == "🦞🦞🍕🦞");
+    CHECK(saved.at("current").at("lobsters").at("0") == "⚡");
+    Storage storage{paths.conquister, paths.quotes};
+    CHECK(player_profile_of(storage, "bob", 200).furniture == "⚡🦞🍕🦞");
+
+    /* The ⚡ it became is not his to burn; burning that 🦞 takes what it had become with it. */
+    CHECK(furniture_burn(storage, "bob", "⚡").status == FurnitureBurnStatus::not_owned);
+    CHECK(furniture_burn(storage, "bob", "🦞").shown == "[]🦞🍕🦞");
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["bob"] = "🦞🦞🍕🦞";
+        return 0;
+    });
+
+    /* Kicked out, he is back to his 🦞, and the hold was worth what the copied ⚡ made it. */
+    const ClaimResult kicked = conquister_claim(storage, 3, "carol", 300, rules);
+    CHECK(kicked.lightning == 150);
+    CHECK(kicked.lobsters_became.empty());
+    CHECK(player_profile_of(storage, "bob", 300).furniture == "🦞🦞🍕🦞");
+    CHECK(furniture_all(storage).at("bob") == "🦞🦞🍕🦞");
+}
+
 TEST_CASE("bought boosts leave old saves without a refund") {
     const TestPaths paths{"boost-retired-test"};
     {

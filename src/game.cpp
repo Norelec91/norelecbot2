@@ -11,6 +11,7 @@
 #include <cmath>
 #include <iterator>
 #include <limits>
+#include <map>
 #include <ranges>
 #include <utility>
 
@@ -19,6 +20,11 @@ namespace {
 
 constexpr std::size_t quotes_page_size = 30;
 std::string display_name(const ConquisterState &state, const std::string &key);
+/* What hangs beside a name as the group sees it: the holder's 🦞 show what they came in as. */
+std::string shown_furniture(const ConquisterState &state, const std::string &player);
+/* For every 🦞 on the claimer's name, the emoji the kicked holder has in that same slot. */
+std::map<std::size_t, std::string> lobsters_copying(const ConquisterState &state, const std::string &claimer,
+                                                    const std::string &kicked);
 
 /* Higher score first, then username in byte order. */
 constexpr auto ranks_before = [](const auto &first, const auto &second) {
@@ -510,12 +516,21 @@ ClaimResult conquister_claim(
             outcome.lightning = settled.lightning;
             outcome.zodiac_percent = settled.zodiac_percent;
         }
+        /* His 🦞 turn into what the holder he kicks out has in the same slots, and count as that. */
+        std::map<std::size_t, std::string> lobsters;
+        if (!outcome.previous_key.empty()) {
+            lobsters = lobsters_copying(state, username, outcome.previous_key);
+        }
+        for (const auto &[slot, emoji] : lobsters) {
+            outcome.lobsters_became.push_back(emoji);
+        }
+        state.current = Holder{.user_id = user_id, .username = username, .since = now,
+                               .lightning_percent = 0, .lobsters = std::move(lobsters)};
         /* The ⚡ on his name as he comes in fix what this hold is worth, each one adding its share:
            nothing hung or burnt later can change it. He brings his own balloon, as worn as it is. */
-        const std::int64_t bolts = count_bolts(furniture_of(state, username));
+        const std::int64_t bolts = count_bolts(shown_furniture(state, username));
         outcome.entered_lightning = bolts > 0 && rules.lightning > 0 ? 100 + bolts * rules.lightning : 0;
-        state.current = Holder{.user_id = user_id, .username = username, .since = now,
-                               .lightning_percent = outcome.entered_lightning};
+        state.current->lightning_percent = outcome.entered_lightning;
         return outcome;
     });
 
@@ -578,7 +593,7 @@ namespace {
 Profile profile_from(ConquisterState &state, const std::string &key, std::int64_t now) {
     Profile profile;
     profile.name = display_name(state, key);
-    profile.furniture = furniture_of(state, key);
+    profile.furniture = shown_furniture(state, key);
     profile.on_telegram = counter(state.telegram_ids, key) != 0;
     profile.players = state.scores.size();
     if (const Counters::value_type *score = find_ignore_case(state.scores, key); score != nullptr) {
@@ -774,8 +789,39 @@ bool is_poo(std::string_view emoji) {
     return same_emoji(emoji, "💩");
 }
 
+bool is_lobster(std::string_view emoji) {
+    return same_emoji(emoji, "🦞");
+}
+
 std::vector<std::string> slots_of(const ConquisterState &state, const std::string &player) {
     return furniture_slots(furniture_of(state, player));
+}
+
+std::map<std::size_t, std::string> lobsters_copying(const ConquisterState &state, const std::string &claimer,
+                                                    const std::string &kicked) {
+    const std::vector<std::string> mine = slots_of(state, claimer);
+    const std::vector<std::string> theirs = slots_of(state, kicked);
+    std::map<std::size_t, std::string> copied;
+    for (std::size_t slot = 0; slot < std::min(mine.size(), theirs.size()); ++slot) {
+        if (is_lobster(mine[slot]) && !theirs[slot].empty() && !is_lobster(theirs[slot])) {
+            copied[slot] = theirs[slot];
+        }
+    }
+    return copied;
+}
+
+std::string shown_furniture(const ConquisterState &state, const std::string &player) {
+    if (!state.current || state.current->username != player || state.current->lobsters.empty()) {
+        return furniture_of(state, player);
+    }
+    std::vector<std::string> slots = slots_of(state, player);
+    for (const auto &[slot, emoji] : state.current->lobsters) {
+        /* One burnt from the place is gone, and so is what it had become. */
+        if (slot < slots.size() && is_lobster(slots[slot])) {
+            slots[slot] = emoji;
+        }
+    }
+    return furniture_stored(std::move(slots));
 }
 
 /* Writes a name's slots back; a name left with nothing loses its entry. */
@@ -896,7 +942,7 @@ FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, 
         if (!take_emoji(state, player, emoji)) {
             return FurnitureBurnResult{.status = FurnitureBurnStatus::not_owned, .shown = {}};
         }
-        return FurnitureBurnResult{.status = FurnitureBurnStatus::burned, .shown = furniture_of(state, player)};
+        return FurnitureBurnResult{.status = FurnitureBurnStatus::burned, .shown = shown_furniture(state, player)};
     });
     if (result.status == FurnitureBurnStatus::burned) {
         log_info("emoji burned user={} emoji={}", player, emoji);
@@ -989,7 +1035,16 @@ FurnitureResult furniture_buy(
 }
 
 Authors furniture_all(Storage &storage) {
-    return storage.transaction([](StorageSession &session) { return session.state().furniture; });
+    return storage.transaction([](StorageSession &session) {
+        const ConquisterState &state = session.state();
+        Authors shown = state.furniture;
+        if (state.current) {
+            if (const auto mine = find_entry(shown, state.current->username); mine != shown.end()) {
+                mine->second = shown_furniture(state, state.current->username);
+            }
+        }
+        return shown;
+    });
 }
 
 BurnResult palle_burn(Storage &storage, const std::string &player, std::int64_t amount) {
@@ -1184,8 +1239,8 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 event.seconds = std::max<std::int64_t>(raid.back - now, 0);
                 event.target_on_telegram = counter(state.telegram_ids, raid.target) != 0;
                 event.raider_on_telegram = counter(state.telegram_ids, raid.raider) != 0;
-                event.raider_emoji = furniture_of(state, raid.raider);
-                event.target_emoji = furniture_of(state, raid.target);
+                event.raider_emoji = shown_furniture(state, raid.raider);
+                event.target_emoji = shown_furniture(state, raid.target);
                 /* Whoever came to give hands the palle or the emoji over and robs nothing. */
                 if (raid.gift > 0 || !raid.gift_emoji.empty()) {
                     event.kind = RaidEvent::Kind::delivered;
@@ -1203,7 +1258,7 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                         } else if (has_room(state, raid.target, rules.furniture_limit) &&
                             give_emoji(state, raid.target, raid.gift_emoji, rules.furniture_limit)) {
                             raid.gift_emoji.clear();
-                            event.target_emoji = furniture_of(state, raid.target);
+                            event.target_emoji = shown_furniture(state, raid.target);
                         } else {
                             event.no_room = true;
                         }
@@ -1251,8 +1306,8 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                     .loot = raid.loot,
                     .gift = raid.gift,
                     .gift_emoji = raid.gift_emoji,
-                    .raider_emoji = furniture_of(state, raid.raider),
-                    .target_emoji = furniture_of(state, raid.target),
+                    .raider_emoji = shown_furniture(state, raid.raider),
+                    .target_emoji = shown_furniture(state, raid.target),
                     .raider_on_telegram = counter(state.telegram_ids, raid.raider) != 0,
                 });
             }
