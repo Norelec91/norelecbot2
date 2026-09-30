@@ -111,6 +111,8 @@ struct RaidRules {
     zodiac::Overrides signs;
     /* How many emoji a name can carry: an emoji brought to a full name has nowhere to go. */
     std::size_t furniture_limit = 10;
+    /* How long a player hit by a 💩 stays "lo smerdato". */
+    std::int64_t smeared_seconds = 86400;
 };
 
 struct RaidResult {
@@ -143,6 +145,9 @@ struct RaidEvent {
     /* The furniture hung beside the two names, to be shown along with them. */
     std::string raider_emoji;
     std::string target_emoji;
+    /* Whether each of the two is "lo smerdato" right now: a delivered 💩 makes the target one. */
+    bool raider_smeared = false;
+    bool target_smeared = false;
     /* The road between the two, which is also what can be carried off. */
     std::int64_t distance = 0;
     /* The ride home. */
@@ -224,6 +229,8 @@ enum class ProfilePlace { home, conquister, road };
 struct Profile {
     std::string name;
     std::string furniture;
+    /* Hit by a 💩 not long ago: he is "lo smerdato". */
+    bool smeared = false;
     /* Whether he plays from Telegram, where his home is written with the mention. */
     bool on_telegram = false;
     std::int64_t score = 0;
@@ -302,12 +309,18 @@ struct FurnitureBurnResult {
     FurnitureBurnStatus status = FurnitureBurnStatus::burned;
     /* How his name reads once it is gone. */
     std::string shown;
+    /* A 💩 thrown at the place hits whoever holds it, unless that is the thrower himself. */
+    std::string hit;
+    bool hit_on_telegram = false;
 };
 
 /* An emoji brought back to @TheConquister37 leaves the game too: the first slot that holds it is
-   emptied. Not from the road. */
+   emptied. Not from the road. A 💩 is thrown instead, and makes the holder "lo smerdato". */
 [[nodiscard]] FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player,
-                                                 const std::string &emoji);
+                                                 const std::string &emoji, std::int64_t now = 0,
+                                                 std::int64_t smeared_seconds = 0);
+/* The players who are "lo smerdato" right now. */
+[[nodiscard]] std::vector<std::string> smeared_all(Storage &storage, std::int64_t now);
 
 /* Sends a player to rob another one, if he is at home and the target is somebody the bot knows.
    Naming himself sends him home instead: at once from @TheConquister37, at the end of the ride if he

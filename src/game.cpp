@@ -22,6 +22,8 @@ constexpr std::size_t quotes_page_size = 30;
 std::string display_name(const ConquisterState &state, const std::string &key);
 /* What hangs beside a name as the group sees it: the holder's 🦞 show what they came in as. */
 std::string shown_furniture(const ConquisterState &state, const std::string &player);
+/* Hit by a 💩 and not clean yet. */
+bool is_smeared(const ConquisterState &state, const std::string &player, std::int64_t now);
 /* For every 🦞 on the claimer's name, the emoji the kicked holder has in that same slot. */
 std::map<std::size_t, std::string> lobsters_copying(const ConquisterState &state, const std::string &claimer,
                                                     const std::string &kicked);
@@ -594,6 +596,7 @@ Profile profile_from(ConquisterState &state, const std::string &key, std::int64_
     Profile profile;
     profile.name = display_name(state, key);
     profile.furniture = shown_furniture(state, key);
+    profile.smeared = is_smeared(state, key, now);
     profile.on_telegram = counter(state.telegram_ids, key) != 0;
     profile.players = state.scores.size();
     if (const Counters::value_type *score = find_ignore_case(state.scores, key); score != nullptr) {
@@ -793,6 +796,30 @@ bool is_lobster(std::string_view emoji) {
     return same_emoji(emoji, "🦞");
 }
 
+bool is_smeared(const ConquisterState &state, const std::string &player, std::int64_t now) {
+    return counter(state.smeared, player) > now;
+}
+
+/* A 💩 that lands makes him "lo smerdato" from now, however long he already was. */
+void smear(ConquisterState &state, const std::string &player, std::int64_t now, std::int64_t seconds) {
+    if (seconds > 0) {
+        state.smeared[player] = now + seconds;
+    }
+}
+
+/* Whoever is clean again loses his entry. */
+void wash(ConquisterState &state, std::int64_t now) {
+    std::vector<std::string> clean;
+    for (const auto &[player, until] : state.smeared) {
+        if (until <= now) {
+            clean.push_back(player);
+        }
+    }
+    for (const std::string &player : clean) {
+        state.smeared.erase(player);
+    }
+}
+
 std::vector<std::string> slots_of(const ConquisterState &state, const std::string &player) {
     return furniture_slots(furniture_of(state, player));
 }
@@ -933,21 +960,46 @@ FurnitureMoveResult furniture_move(Storage &storage, const std::string &username
     return result;
 }
 
-FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, const std::string &emoji) {
+FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, const std::string &emoji,
+                                   std::int64_t now, std::int64_t smeared_seconds) {
     const FurnitureBurnResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
+        FurnitureBurnResult outcome;
         if (is_away(state, player)) {
-            return FurnitureBurnResult{.status = FurnitureBurnStatus::travelling, .shown = {}};
+            outcome.status = FurnitureBurnStatus::travelling;
+            return outcome;
         }
         if (!take_emoji(state, player, emoji)) {
-            return FurnitureBurnResult{.status = FurnitureBurnStatus::not_owned, .shown = {}};
+            outcome.status = FurnitureBurnStatus::not_owned;
+            return outcome;
         }
-        return FurnitureBurnResult{.status = FurnitureBurnStatus::burned, .shown = shown_furniture(state, player)};
+        outcome.shown = shown_furniture(state, player);
+        if (is_poo(emoji) && state.current && !state.current->username.empty() &&
+            state.current->username != player) {
+            const std::string &holder = state.current->username;
+            smear(state, holder, now, smeared_seconds);
+            outcome.hit = display_name(state, holder);
+            outcome.hit_on_telegram = counter(state.telegram_ids, holder) != 0;
+        }
+        return outcome;
     });
     if (result.status == FurnitureBurnStatus::burned) {
-        log_info("emoji burned user={} emoji={}", player, emoji);
+        log_info("emoji burned user={} emoji={} hit={}", player, emoji, result.hit);
     }
     return result;
+}
+
+std::vector<std::string> smeared_all(Storage &storage, std::int64_t now) {
+    return storage.transaction([now](StorageSession &session) {
+        const ConquisterState &state = session.state();
+        std::vector<std::string> smeared;
+        for (const auto &[player, until] : state.smeared) {
+            if (until > now) {
+                smeared.push_back(player);
+            }
+        }
+        return smeared;
+    });
 }
 
 FurnitureResult furniture_buy(
@@ -1228,6 +1280,7 @@ bool defended_at_home(StorageSession &session, ConquisterState &state, const std
 std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRules &rules) {
     const std::vector<RaidEvent> events = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
+        wash(state, now);
         std::vector<RaidEvent> settled;
         for (Raid &raid : state.raids) {
             if (!raid.arrived && now >= raid.arrive) {
@@ -1241,6 +1294,8 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 event.raider_on_telegram = counter(state.telegram_ids, raid.raider) != 0;
                 event.raider_emoji = shown_furniture(state, raid.raider);
                 event.target_emoji = shown_furniture(state, raid.target);
+                event.raider_smeared = is_smeared(state, raid.raider, now);
+                event.target_smeared = is_smeared(state, raid.target, now);
                 /* Whoever came to give hands the palle or the emoji over and robs nothing. */
                 if (raid.gift > 0 || !raid.gift_emoji.empty()) {
                     event.kind = RaidEvent::Kind::delivered;
@@ -1251,10 +1306,13 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                     }
                     if (!raid.gift_emoji.empty()) {
                         event.gift_emoji = raid.gift_emoji;
-                        /* Poo splatters on arrival and is gone; any other emoji is hung, and a name
-                           that filled up meanwhile sends it back the way it came. */
+                        /* Poo splatters on arrival, making the target "lo smerdato", and is gone; any
+                           other emoji is hung, and a name that filled up meanwhile sends it back the
+                           way it came. */
                         if (is_poo(raid.gift_emoji)) {
                             raid.gift_emoji.clear();
+                            smear(state, raid.target, now, rules.smeared_seconds);
+                            event.target_smeared = true;
                         } else if (has_room(state, raid.target, rules.furniture_limit) &&
                             give_emoji(state, raid.target, raid.gift_emoji, rules.furniture_limit)) {
                             raid.gift_emoji.clear();
@@ -1308,6 +1366,8 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                     .gift_emoji = raid.gift_emoji,
                     .raider_emoji = shown_furniture(state, raid.raider),
                     .target_emoji = shown_furniture(state, raid.target),
+                    .raider_smeared = is_smeared(state, raid.raider, now),
+                    .target_smeared = is_smeared(state, raid.target, now),
                     .raider_on_telegram = counter(state.telegram_ids, raid.raider) != 0,
                 });
             }

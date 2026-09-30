@@ -146,21 +146,28 @@ int price(const CommandContext &context, int cost) {
     return debug_on(context.storage, std::string{context.player_key}) ? 0 : cost;
 }
 
-/* A name with what hangs beside it; a 💩 among them makes him "lo smerdato". */
-std::string with_furniture(std::string_view name, std::string_view furniture) {
-    if (furniture.empty()) {
-        return std::string{name};
-    }
-    const std::string_view title = furniture.contains("💩") ? " lo smerdato" : "";
-    return std::format("{}{} ({})", name, title, furniture);
+/* A name with its title, if a 💩 hit him lately, and what hangs beside it. */
+std::string with_furniture(std::string_view name, std::string_view furniture, bool smeared) {
+    const std::string titled = smeared ? std::format("{} lo smerdato", name) : std::string{name};
+    return furniture.empty() ? titled : std::format("{} ({})", titled, furniture);
 }
 
+/* Everything that changes how the names read: the emoji beside them, and who was hit by a 💩. */
+struct Looks {
+    Authors furniture;
+    std::vector<std::string> smeared;
+};
+
 /* The name as it is shown: the real one, plus whatever he hung beside it. */
-std::string dressed(const Authors &furniture, std::string_view key, std::string_view username) {
-    const auto mine = std::ranges::find_if(furniture, [key](const Authors::value_type &entry) {
+std::string dressed(const Looks &looks, std::string_view key, std::string_view username) {
+    const auto mine = std::ranges::find_if(looks.furniture, [key](const Authors::value_type &entry) {
         return text::equals_ignore_case(entry.first, key);
     });
-    return with_furniture(username, mine == furniture.end() ? std::string_view{} : std::string_view{mine->second});
+    const bool smeared = std::ranges::any_of(looks.smeared, [key](const std::string &player) {
+        return text::equals_ignore_case(player, key);
+    });
+    return with_furniture(username,
+                          mine == looks.furniture.end() ? std::string_view{} : std::string_view{mine->second}, smeared);
 }
 
 /* A percentage as a multiplier: 150 is x1.5, 200 is x2, 75 is x0.75. */
@@ -201,6 +208,10 @@ std::int64_t seconds_now() {
     return std::chrono::duration_cast<std::chrono::seconds>(
                std::chrono::system_clock::now().time_since_epoch()
     ).count();
+}
+
+Looks looks_of(Storage &storage) {
+    return Looks{.furniture = furniture_all(storage), .smeared = smeared_all(storage, seconds_now())};
 }
 
 /* A count of palle, in the singular when there is just one. */
@@ -454,7 +465,9 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
     if (context.username.empty()) {
         return missing_username_reply();
     }
-    switch (furniture_burn(context.storage, std::string{context.player_key}, std::string{emoji}).status) {
+    const FurnitureBurnResult burnt = furniture_burn(context.storage, std::string{context.player_key}, std::string{emoji},
+                                                     seconds_now(), context.config.smeared_seconds);
+    switch (burnt.status) {
     case FurnitureBurnStatus::travelling:
         return on_the_road(context, "🔥", "si brucia dal tuo pianeta o da @TheConquister37.");
     case FurnitureBurnStatus::not_owned:
@@ -463,7 +476,9 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
         break;
     }
     if (emoji == "💩") {
-        return poo_throw(own_name(context), conquister_place);
+        /* Whoever holds the place takes it full in the face. */
+        return poo_throw(own_name(context), burnt.hit.empty() ? std::string{conquister_place}
+            : std::format("{}{} in {}", burnt.hit_on_telegram ? "@" : "", burnt.hit, conquister_place));
     }
     return std::format("🔥 {} hai riportato {} in {}: è uscita dal gioco.", context.username, emoji, conquister_place);
 }
@@ -515,7 +530,7 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
     if (result.status == ClaimStatus::already_held) {
         return std::format("🪐 {} sei già in {}!", username, conquister_place);
     }
-    const Authors furniture = furniture_all(context.storage);
+    const Looks furniture = looks_of(context.storage);
     if (result.status == ClaimStatus::defended) {
         const std::string toll = failed_attempt_toll(result);
         return std::format(
@@ -570,7 +585,7 @@ std::string handle_leaderboard(const CommandContext &context, std::string_view) 
             conquister_place
         );
     }
-    const Authors furniture = furniture_all(context.storage);
+    const Looks furniture = looks_of(context.storage);
     std::string reply = std::format(
         "🏆 Classifica {}\nOggi è giorno di {}.\n",
         conquister_place,
@@ -754,7 +769,7 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
     }
     const Profile &profile = *found;
     /* The bare name at the top; his home below is written like everywhere else. */
-    std::string card = std::format("👤 {}\n", with_furniture(profile.name, profile.furniture));
+    std::string card = std::format("👤 {}\n", with_furniture(profile.name, profile.furniture, profile.smeared));
     card += profile.rank == 0 ? std::string{"💰 nessuna palla ancora\n"}
                               : std::format("💰 {}, {}° su {} in classifica\n", palle(profile.score), profile.rank,
                                             profile.players);
@@ -921,8 +936,8 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
     /* His planet, with the mention where it reaches him, as everywhere else. */
     const std::string home = std::format("{}{}", event.raider_on_telegram ? "@" : "", event.raider);
     /* The bare name for whoever is spoken to, the dressed one when somebody is named. */
-    const std::string raider = with_furniture(event.raider, event.raider_emoji);
-    const std::string target = with_furniture(event.target, event.target_emoji);
+    const std::string raider = with_furniture(event.raider, event.raider_emoji, event.raider_smeared);
+    const std::string target = with_furniture(event.target, event.target_emoji, event.target_smeared);
     if (event.kind == RaidEvent::Kind::returned) {
         if (!event.gift_emoji.empty()) {
             return std::format("🎁 {} torni in {} con {} ancora in tasca.", raider, home, event.gift_emoji);

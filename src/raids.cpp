@@ -71,6 +71,7 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
         .travel_divisor = config.travel_divisor,
         .signs = config.zodiac_signs,
         .furniture_limit = static_cast<std::size_t>(config.furniture_limit),
+        .smeared_seconds = config.smeared_seconds,
     };
     /* The news waits for the second round: by then IRC has had a tick to connect. */
     int rounds = 0;

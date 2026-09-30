@@ -158,6 +158,7 @@ ConquisterState parse_state(const Json &json) {
         parse_authors(json, "quote_authors"),
         parse_authors(json, "furniture"),
         parse_counters(json, "debugging"),
+        parse_counters(json, "smeared"),
     };
     return state;
 }
@@ -210,6 +211,7 @@ Json state_to_json(const ConquisterState &state) {
         {"quote_authors", state.quote_authors},
         {"furniture", state.furniture},
         {"debugging", state.debugging},
+        {"smeared", state.smeared},
     };
 }
 

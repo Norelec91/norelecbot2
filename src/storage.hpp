@@ -94,6 +94,8 @@ struct ConquisterState {
     Authors furniture;
     /* Players who turned the debug switch on for themselves: their purchases are free. */
     Counters debugging;
+    /* Players hit by a thrown 💩, mapped to the instant they stop being "lo smerdato". */
+    Counters smeared;
 
     bool operator==(const ConquisterState &) const = default;
 };

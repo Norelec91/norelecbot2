@@ -1002,11 +1002,21 @@ TEST_CASE("a pile of poo is thrown, not hung: a full name takes it and keeps not
     CHECK(arrival[0].gift_emoji == "💩");
     CHECK_FALSE(arrival[0].no_room);
     CHECK(furniture_all(storage).at("bob") == "🐝🐝🐝🐝🐝🐝🐝🐝🐝🐝");
+    /* Hit, bob is "lo smerdato" for a day from the splat; alice, who threw it, is not. */
+    CHECK(arrival[0].target_smeared);
+    CHECK_FALSE(arrival[0].raider_smeared);
+    CHECK(player_profile_of(storage, "bob", 5).smeared);
+    CHECK_FALSE(player_profile_of(storage, "alice", 5).smeared);
+    CHECK(smeared_all(storage, 5) == std::vector<std::string>{"bob"});
     /* Splattered: nothing comes back. */
     const std::vector<RaidEvent> home = raid_due(storage, 10, quick_rides());
     REQUIRE(home.size() == 1);
     CHECK(home[0].gift_emoji.empty());
+    CHECK(home[0].target_smeared);
     CHECK(furniture_all(storage).at("alice") == "[]🍕");
+    CHECK(player_profile_of(storage, "bob", 5 + 86399).smeared);
+    CHECK_FALSE(player_profile_of(storage, "bob", 5 + 86400).smeared);
+    CHECK(smeared_all(storage, 5 + 86400).empty());
 }
 
 TEST_CASE("an emoji on its way to somebody still counts for the price") {

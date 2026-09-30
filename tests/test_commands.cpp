@@ -726,14 +726,12 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
         session.state().scores.emplace("tg:1", 0);
         return 0;
     });
-    /* While it hangs there, she is "lo smerdato", and only that long. */
-    CHECK(command_dispatch(alice, "/profile").value_or("").starts_with("👤 Alice lo smerdato (🍕🎈💩)\n"));
-    CHECK(command_dispatch(alice, "/leaderboard").value_or("").contains(" Alice lo smerdato (🍕🎈💩) — "));
+    /* Owning a 💩 is not being hit by one. */
+    CHECK(command_dispatch(alice, "/profile").value_or("").starts_with("👤 Alice (🍕🎈💩)\n"));
     CHECK(command_dispatch(alice, "We @TheConquister37 💩") ==
           "@Alice, tiri una palla di cacca a @TheConquister37, bravo hai fatto centro, l'hai completamente smerdato!");
     CHECK(furniture_all(storage).at("tg:1") == "🍕🎈");
     CHECK(command_dispatch(alice, "We @TheConquister37 💩") == "🔥 Alice non hai 💩 nel pianeta.");
-    CHECK(command_dispatch(alice, "/profile").value_or("").starts_with("👤 Alice (🍕🎈)\n"));
 
     const std::string leaving = command_dispatch(alice, "We @Bob 🍕").value_or("");
     CHECK(leaving.starts_with("🚀 Alice parti per Bob con 🍕 da consegnare: arrivi tra "));
@@ -770,6 +768,14 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     poo.raider_on_telegram = true;
     CHECK(raid_event_reply(poo) ==
           "@Alice, tiri una palla di cacca a @Bob, bravo hai fatto centro, l'hai completamente smerdato!");
+    /* Hit, he is "lo smerdato" wherever he is named. */
+    RaidEvent robbed;
+    robbed.raider = "Carol";
+    robbed.target = "Bob";
+    robbed.target_smeared = true;
+    robbed.target_emoji = "🍕";
+    robbed.loot = 3;
+    CHECK(raid_event_reply(robbed).value_or("").contains("Bob lo smerdato (🍕)"));
     given.no_room = true;
     given.target_emoji = "🐝🐝";
     CHECK(raid_event_reply(given) ==
@@ -780,6 +786,47 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     home.raider = "Alice";
     home.gift_emoji = "🍕";
     CHECK(raid_event_reply(home) == "🎁 Alice torni in Alice con 🍕 ancora in tasca.");
+}
+
+TEST_CASE("a 💩 thrown at the place makes the holder \"lo smerdato\" for a day") {
+    const TestPaths paths{"smeared-command-test"};
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{config.conquister_path, config.quotes_path};
+    const CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
+    const CommandContext bob{.storage = storage, .config = config, .user_id = 2, .username = "Bob"};
+
+    REQUIRE(command_dispatch(bob, "We @TheConquister37"));
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["tg:1"] = "💩💩";
+        session.state().furniture["tg:2"] = "💩";
+        session.state().scores.emplace("tg:1", 0);
+        return 0;
+    });
+    /* Throwing one at the place from inside hits nobody. */
+    CHECK(command_dispatch(bob, "We @TheConquister37 💩") ==
+          "@Bob, tiri una palla di cacca a @TheConquister37, bravo hai fatto centro, l'hai completamente smerdato!");
+    CHECK(command_dispatch(bob, "/profile").value_or("").starts_with("👤 Bob\n"));
+
+    CHECK(command_dispatch(alice, "We @TheConquister37 💩") ==
+          "@Alice, tiri una palla di cacca a @Bob in @TheConquister37, bravo hai fatto centro, "
+          "l'hai completamente smerdato!");
+    CHECK(command_dispatch(bob, "/profile").value_or("").starts_with("👤 Bob lo smerdato\n"));
+    const std::string board = command_dispatch(alice, "/leaderboard").value_or("");
+    CHECK(board.contains("🪐 In @TheConquister37 ora: Bob lo smerdato"));
+    CHECK(board.contains(" Alice ([]💩) — "));
+
+    /* A day later he is clean, and the entry is gone. */
+    storage.transaction([](StorageSession &session) {
+        session.state().smeared["tg:2"] -= 86400;
+        return 0;
+    });
+    const std::int64_t now = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    CHECK(raid_due(storage, now, RaidRules{}).empty());
+    CHECK(command_dispatch(bob, "/profile").value_or("").starts_with("👤 Bob\n"));
+    CHECK(storage.transaction([](StorageSession &session) { return session.state().smeared.empty(); }));
 }
 
 TEST_CASE("the quotes are open to the admins as well as to the owner") {
