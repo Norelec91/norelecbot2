@@ -723,10 +723,12 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     /* A pile of poo is not just burnt: it is thrown. */
     storage.transaction([](StorageSession &session) {
         session.state().furniture["tg:1"] = "🍕🎈💩";
+        session.state().scores.emplace("tg:1", 0);
         return 0;
     });
     /* While it hangs there, she is "lo smerdato", and only that long. */
     CHECK(command_dispatch(alice, "/profile").value_or("").starts_with("👤 Alice lo smerdato (🍕🎈💩)\n"));
+    CHECK(command_dispatch(alice, "/leaderboard").value_or("").contains(" Alice lo smerdato (🍕🎈💩) — "));
     CHECK(command_dispatch(alice, "We @TheConquister37 💩") ==
           "@Alice, tiri una palla di cacca a @TheConquister37, bravo hai fatto centro, l'hai completamente smerdato!");
     CHECK(furniture_all(storage).at("tg:1") == "🍕🎈");
