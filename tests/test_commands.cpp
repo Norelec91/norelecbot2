@@ -776,6 +776,11 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     robbed.target_emoji = "🍕";
     robbed.loot = 3;
     CHECK(raid_event_reply(robbed).value_or("").contains("Bob lo smerdato (🍕)"));
+    robbed.target_emoji = "🥺🥺";
+    robbed.spared = 1;
+    robbed.pleaded_percent = 10;
+    CHECK(raid_event_reply(robbed).value_or("").ends_with(
+        "\n🥺 Bob lo smerdato (🥺🥺) ti ha impietosito: gli lasci 1 palla (10% in meno)."));
     given.no_room = true;
     given.target_emoji = "🐝🐝";
     CHECK(raid_event_reply(given) ==

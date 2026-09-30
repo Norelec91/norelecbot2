@@ -1344,8 +1344,15 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                     const std::int64_t walked =
                         rules.loot_divisor > 0 ? event.distance / rules.loot_divisor : event.distance;
                     const std::int64_t carried = walked * event.raider_percent / event.target_percent;
-                    /* The road says what can be taken, and nobody loses more than he has. */
-                    event.loot = std::min(theirs, carried);
+                    /* The road says what can be taken, and nobody loses more than he has; every 🥺
+                       on his name as the raider arrives makes him take a share less. */
+                    const std::int64_t taken = std::min(theirs, carried);
+                    const auto pleas = std::ranges::count_if(furniture_slots(event.target_emoji),
+                        [](const std::string &slot) { return !slot.empty() && same_emoji(slot, "🥺"); });
+                    event.pleaded_percent = std::min<std::int64_t>(100, pleas * std::max<std::int64_t>(
+                        rules.pleading_percent, 0));
+                    event.spared = taken * event.pleaded_percent / 100;
+                    event.loot = taken - event.spared;
                     if (event.loot > 0) {
                         state.scores[raid.target] = theirs - event.loot;
                     }

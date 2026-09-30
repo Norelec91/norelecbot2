@@ -1010,6 +1010,38 @@ TEST_CASE("every 🚀 on the name as he leaves makes both legs of the ride faste
     CHECK(both_legs);
 }
 
+TEST_CASE("every 🥺 on the target's name when the raider gets there talks him out of 5%") {
+    const TestPaths paths{"pleading-test"};
+    {
+        /* A long road and little to take: the raid could carry off everything. Their balloons already
+           took three attempts, so every raid gets through. */
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":0,"lucy":100,"bob":100},"quotes_added":{},)"
+             << R"("ids":{"alice":0,"lucy":90000,"bob":90001},"balloons":{"lucy":3,"bob":3},)"
+             << R"("furniture":{"lucy":"🥺🥺🥺🥺🥺🥺🥺🥺🥺🥺","bob":"🍕"}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    RaidRules rules = quick_rides();
+    rules.loot_divisor = 1;
+    rules.pleading_percent = 5;
+
+    REQUIRE(raid_start(storage, 0, "alice", "lucy", 0, rules).status == RaidStatus::started);
+    std::vector<RaidEvent> arrival = raid_due(storage, 5, rules);
+    REQUIRE(arrival.size() == 1);
+    /* Ten of them: half of it stays with her. */
+    CHECK(arrival[0].pleaded_percent == 50);
+    CHECK(arrival[0].spared == 50);
+    CHECK(arrival[0].loot == 50);
+    CHECK(conquister_user(storage, "lucy")->score == 50);
+    REQUIRE(raid_due(storage, 10, rules).size() == 1);
+
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 10, rules).status == RaidStatus::started);
+    arrival = raid_due(storage, 15, rules);
+    REQUIRE(arrival.size() == 1);
+    CHECK(arrival[0].spared == 0);
+    CHECK(arrival[0].loot == 100);
+}
+
 TEST_CASE("a pile of poo is thrown, not hung: a full name takes it and keeps nothing") {
     const TestPaths paths{"poo-throw-test"};
     {

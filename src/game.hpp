@@ -115,6 +115,9 @@ struct RaidRules {
     std::int64_t smeared_seconds = 86400;
     /* How much faster every 🚀 on the name as he sets off makes the ride, in percent: they add up. */
     std::int64_t rocket_percent = 0;
+    /* How much less a raider takes for every 🥺 on the target's name when he gets there, in percent:
+       they add up, to all of it at most. */
+    std::int64_t pleading_percent = 0;
 };
 
 struct RaidResult {
@@ -138,6 +141,9 @@ struct RaidEvent {
     std::string raider;
     std::string target;
     std::int64_t loot = 0;
+    /* stolen: what the 🥺 on the target's name talked the raider out of, and by how much in percent. */
+    std::int64_t spared = 0;
+    std::int64_t pleaded_percent = 0;
     /* The palle carried from home: handed to the target on delivery, brought back on a turnaround. */
     std::int64_t gift = 0;
     /* The emoji carried from home: hung on the target on delivery, or brought back. no_room: the

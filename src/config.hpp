@@ -28,6 +28,8 @@ struct AppConfig {
     static constexpr int default_smeared_seconds = 86400;
     /* How much faster every 🚀 on the name makes a ride, in percent. */
     static constexpr int default_rocket_percent = 25;
+    /* How much less a raider takes for every 🥺 on the target's name, in percent. */
+    static constexpr int default_pleading_percent = 5;
     static constexpr int default_api_port = 8000;
     static constexpr int default_irc_port = 6697;
     static constexpr std::string_view default_irc_nick = "NorelecBot";
@@ -55,6 +57,7 @@ struct AppConfig {
     int lightning_percent = default_lightning_percent;
     int smeared_seconds = default_smeared_seconds;
     int rocket_percent = default_rocket_percent;
+    int pleading_percent = default_pleading_percent;
     /* Players whose real sign the owner knows, instead of the one their name gives. */
     std::vector<zodiac::Override> zodiac_signs;
     std::int64_t conquister_chat_id = 0;

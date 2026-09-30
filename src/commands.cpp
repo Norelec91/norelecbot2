@@ -270,6 +270,7 @@ RaidRules raid_rules(const CommandContext &context) {
         .furniture_limit = static_cast<std::size_t>(context.config.furniture_limit),
         .smeared_seconds = context.config.smeared_seconds,
         .rocket_percent = context.config.rocket_percent,
+        .pleading_percent = context.config.pleading_percent,
     };
 }
 
@@ -995,6 +996,10 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
         reply += ", che non era sul suo pianeta";
     }
     reply += std::format("! Torni in {} tra {}.", home, format_wait(event.seconds));
+    if (event.spared > 0) {
+        reply += std::format("\n🥺 {} ti ha impietosito: gli lasci {} ({}% in meno).", target, palle(event.spared),
+                             event.pleaded_percent);
+    }
     return reply;
 }
 
