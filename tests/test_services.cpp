@@ -985,6 +985,31 @@ TEST_CASE("with a lower inflation every copy costs half again, not twice") {
     CHECK(furniture_buy(storage, "alice", "⚡", 0, 1000, 10, 0, {}, 50).charged == 7593);
 }
 
+TEST_CASE("every 🚀 on the name as he leaves makes both legs of the ride faster") {
+    const TestPaths paths{"rocket-test"};
+    {
+        /* A thousand units apart: a thousand seconds each way at one unit a second. */
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":0,"bob":0,"carol":0},"quotes_added":{},)"
+             << R"("ids":{"alice":0,"bob":1000,"carol":2000},)"
+             << R"("furniture":{"bob":"🚀🍕","carol":"🚀🚀🚀"}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    const RaidRules rules{.loot_divisor = 50, .travel_divisor = 1, .signs = {}, .rocket_percent = 25};
+
+    CHECK(raid_start(storage, 0, "alice", "bob", 0, rules).seconds == 1000);
+    /* One 🚀 is +25%: 1000 / 1.25. */
+    const RaidResult one = raid_start(storage, 0, "bob", "alice", 0, rules);
+    CHECK(one.seconds == 800);
+    /* Three add up to +75%: 2000 / 1.75. */
+    CHECK(raid_start(storage, 0, "carol", "alice", 0, rules).seconds == 1142);
+    const bool both_legs = storage.transaction([](StorageSession &session) {
+        const auto &raids = session.state().raids;
+        return raids[1].arrive == 800 && raids[1].back == 1600;
+    });
+    CHECK(both_legs);
+}
+
 TEST_CASE("a pile of poo is thrown, not hung: a full name takes it and keeps nothing") {
     const TestPaths paths{"poo-throw-test"};
     {

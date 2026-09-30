@@ -1227,6 +1227,14 @@ RaidResult raid_start(
         const position::Point home = position::coordinates_of(player_id(session, state, username));
         const position::Point theirs = position::coordinates_of(player_id(session, state, *known));
         outcome.seconds = position::travel_seconds(position::distance(home, theirs), rules.travel_divisor);
+        /* The 🚀 still on his name as he leaves speed up both legs; one carried as a gift does not. */
+        const auto rockets = std::ranges::count_if(slots_of(state, username), [](const std::string &slot) {
+            return !slot.empty() && same_emoji(slot, "🚀");
+        });
+        if (rockets > 0 && rules.rocket_percent > 0) {
+            outcome.seconds = std::max(position::shortest_travel,
+                                       outcome.seconds * 100 / (100 + rockets * rules.rocket_percent));
+        }
         state.raids.push_back(Raid{
             .raider = username,
             .target = *known,

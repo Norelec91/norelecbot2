@@ -113,6 +113,8 @@ struct RaidRules {
     std::size_t furniture_limit = 10;
     /* How long a player hit by a 💩 stays "lo smerdato". */
     std::int64_t smeared_seconds = 86400;
+    /* How much faster every 🚀 on the name as he sets off makes the ride, in percent: they add up. */
+    std::int64_t rocket_percent = 0;
 };
 
 struct RaidResult {

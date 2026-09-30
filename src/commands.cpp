@@ -268,6 +268,8 @@ RaidRules raid_rules(const CommandContext &context) {
         .travel_divisor = context.config.travel_divisor,
         .signs = context.config.zodiac_signs,
         .furniture_limit = static_cast<std::size_t>(context.config.furniture_limit),
+        .smeared_seconds = context.config.smeared_seconds,
+        .rocket_percent = context.config.rocket_percent,
     };
 }
 
