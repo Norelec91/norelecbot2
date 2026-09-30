@@ -146,15 +146,21 @@ int price(const CommandContext &context, int cost) {
     return debug_on(context.storage, std::string{context.player_key}) ? 0 : cost;
 }
 
+/* A name with what hangs beside it; a 💩 among them makes him "lo smerdato". */
+std::string with_furniture(std::string_view name, std::string_view furniture) {
+    if (furniture.empty()) {
+        return std::string{name};
+    }
+    const std::string_view title = furniture.contains("💩") ? " lo smerdato" : "";
+    return std::format("{}{} ({})", name, title, furniture);
+}
+
 /* The name as it is shown: the real one, plus whatever he hung beside it. */
 std::string dressed(const Authors &furniture, std::string_view key, std::string_view username) {
     const auto mine = std::ranges::find_if(furniture, [key](const Authors::value_type &entry) {
         return text::equals_ignore_case(entry.first, key);
     });
-    if (mine == furniture.end() || mine->second.empty()) {
-        return std::string{username};
-    }
-    return std::format("{} ({})", username, mine->second);
+    return with_furniture(username, mine == furniture.end() ? std::string_view{} : std::string_view{mine->second});
 }
 
 /* A percentage as a multiplier: 150 is x1.5, 200 is x2, 75 is x0.75. */
@@ -748,8 +754,7 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
     }
     const Profile &profile = *found;
     /* The bare name at the top; his home below is written like everywhere else. */
-    std::string card = profile.furniture.empty() ? std::format("👤 {}\n", profile.name)
-                                                 : std::format("👤 {} ({})\n", profile.name, profile.furniture);
+    std::string card = std::format("👤 {}\n", with_furniture(profile.name, profile.furniture));
     card += profile.rank == 0 ? std::string{"💰 nessuna palla ancora\n"}
                               : std::format("💰 {}, {}° su {} in classifica\n", palle(profile.score), profile.rank,
                                             profile.players);
@@ -916,11 +921,8 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
     /* His planet, with the mention where it reaches him, as everywhere else. */
     const std::string home = std::format("{}{}", event.raider_on_telegram ? "@" : "", event.raider);
     /* The bare name for whoever is spoken to, the dressed one when somebody is named. */
-    const auto with_emoji = [](std::string_view name, std::string_view emoji) {
-        return emoji.empty() ? std::string{name} : std::format("{} ({})", name, emoji);
-    };
-    const std::string raider = with_emoji(event.raider, event.raider_emoji);
-    const std::string target = with_emoji(event.target, event.target_emoji);
+    const std::string raider = with_furniture(event.raider, event.raider_emoji);
+    const std::string target = with_furniture(event.target, event.target_emoji);
     if (event.kind == RaidEvent::Kind::returned) {
         if (!event.gift_emoji.empty()) {
             return std::format("🎁 {} torni in {} con {} ancora in tasca.", raider, home, event.gift_emoji);

@@ -725,10 +725,13 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
         session.state().furniture["tg:1"] = "🍕🎈💩";
         return 0;
     });
+    /* While it hangs there, she is "lo smerdato", and only that long. */
+    CHECK(command_dispatch(alice, "/profile").value_or("").starts_with("👤 Alice lo smerdato (🍕🎈💩)\n"));
     CHECK(command_dispatch(alice, "We @TheConquister37 💩") ==
           "@Alice, tiri una palla di cacca a @TheConquister37, bravo hai fatto centro, l'hai completamente smerdato!");
     CHECK(furniture_all(storage).at("tg:1") == "🍕🎈");
     CHECK(command_dispatch(alice, "We @TheConquister37 💩") == "🔥 Alice non hai 💩 nel pianeta.");
+    CHECK(command_dispatch(alice, "/profile").value_or("").starts_with("👤 Alice (🍕🎈)\n"));
 
     const std::string leaving = command_dispatch(alice, "We @Bob 🍕").value_or("");
     CHECK(leaving.starts_with("🚀 Alice parti per Bob con 🍕 da consegnare: arrivi tra "));
