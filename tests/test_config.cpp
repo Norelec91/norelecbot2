@@ -71,6 +71,12 @@ TEST_CASE("an empty value falls back to the default") {
     CHECK(config->quote_cost == 1000);
     CHECK(config->conquister_chat_id == 0);
     CHECK(config->api_port == 8000);
+    CHECK(config->lightning_percent == 25);
+    CHECK(config->news_path.empty());
+
+    const auto news = file.load("NORELECBOT_NEWS_FILE=/home/norelec/news.txt\n");
+    REQUIRE(news);
+    CHECK(news->news_path == "/home/norelec/news.txt");
 }
 
 TEST_CASE("an invalid value is refused") {

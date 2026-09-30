@@ -23,7 +23,7 @@ struct AppConfig {
     static constexpr int default_furniture_limit = 10;
     static constexpr int default_cooldown_seconds = 300;
     static constexpr int default_travel_divisor = 350;
-    static constexpr int default_lightning_percent = 50;
+    static constexpr int default_lightning_percent = 25;
     static constexpr int default_api_port = 8000;
     static constexpr int default_irc_port = 6697;
     static constexpr std::string_view default_irc_nick = "NorelecBot";
@@ -56,6 +56,8 @@ struct AppConfig {
     int api_port = default_api_port;
     std::string conquister_path{default_conquister_path};
     std::string quotes_path{default_quotes_path};
+    /* What changed in the game, told once to both chats when the bot starts, then deleted; empty = never. */
+    std::string news_path;
     bool irc_enabled = false;
     std::string irc_server;
     int irc_port = default_irc_port;

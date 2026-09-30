@@ -166,6 +166,9 @@ constexpr std::array settings{
     Setting{"NORELECBOT_QUOTES_FILE", [](AppConfig &config, std::string_view value) {
         return set_text(config.quotes_path, value, AppConfig::default_quotes_path);
     }},
+    Setting{"NORELECBOT_NEWS_FILE", [](AppConfig &config, std::string_view value) {
+        return set_text(config.news_path, value, {});
+    }},
 };
 
 bool apply_setting(AppConfig &config, std::string_view name, std::string_view value) {
