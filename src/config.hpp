@@ -33,7 +33,7 @@ struct AppConfig {
     /* How often, in percent, a 💣 is a dud that goes off in the thrower's hand. */
     static constexpr int default_bomb_dud_percent = 10;
     /* What the ☢️ that starts the game over costs. */
-    static constexpr int default_nuke_cost = 1'000'000'000;
+    static constexpr int default_nuke_cost = 1'000'000;
     static constexpr int default_api_port = 8000;
     static constexpr int default_irc_port = 6697;
     static constexpr std::string_view default_irc_nick = "NorelecBot";

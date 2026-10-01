@@ -1217,30 +1217,65 @@ TEST_CASE("an emoji hung while its owner is out is at home, even of a kind he wo
     CHECK(storage.transaction([](StorageSession &session) { return session.state().stayed.count("bob") == 0; }));
 }
 
-TEST_CASE("a ☢️ on the place starts the game over, and only there") {
+TEST_CASE("a ☢️ starts over the player whose house it lands on, and on the place the whole game") {
     const TestPaths paths{"nuke-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":{"user_id":0,"username":"bob","since":0},)"
-             << R"("scores":{"alice":5,"bob":900,"carol":70},"quotes_added":{"bob":3},)"
-             << R"("balloons":{"bob":2},"cooldowns":{"carol":99999},"ids":{"alice":1,"bob":2,"carol":3},)"
+             << R"("scores":{"alice":5,"bob":900,"carol":70,"dave":40},"quotes_added":{"bob":3},)"
+             << R"("balloons":{"bob":2},"cooldowns":{"carol":99999},"ids":{"alice":1,"bob":2,"carol":3,"dave":4},)"
              << R"("telegram_ids":{"alice":11},"smeared":{"carol":99999},"stayed":{"bob":[0]},)"
              << R"("raids":[{"raider":"carol","target":"alice","arrive":50,"back":100,"arrived":false,)"
              << R"("loot":0,"gift":0,"gift_emoji":""}],)"
-             << R"("furniture":{"alice":"🍕☢️","bob":"⚡","carol":"🥺"}})";
+             << R"("furniture":{"alice":"☢️☢️","bob":"⚡","carol":"🥺","dave":"🍕"}})";
     }
     Storage storage{paths.conquister, paths.quotes};
-    /* It is not something to bring to a player: she keeps it. */
-    CHECK(raid_start(storage, 0, "alice", "bob", 10, quick_rides(), RaidTargetKind::any, 0, "☢️").status ==
-          RaidStatus::place_only);
-    CHECK(furniture_all(storage).at("alice") == "🍕☢️");
+    /* On a house it is the one who lives there who starts over: bob, out of the place unpaid. */
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 10, quick_rides(), RaidTargetKind::any, 0, "☢️").status ==
+            RaidStatus::started);
+    const std::vector<RaidEvent> landed = raid_due(storage, 15, quick_rides());
+    REQUIRE(landed.size() == 1);
+    CHECK(landed[0].reset);
+    {
+        const ConquisterState local = storage.transaction([](StorageSession &session) { return session.state(); });
+        CHECK(local.scores.at("bob") == 0);
+        CHECK(local.furniture.count("bob") == 0);
+        CHECK_FALSE(local.current);
+        CHECK(local.balloons.empty());
+        CHECK(local.stayed.empty());
+        /* Nobody else is touched. */
+        CHECK(local.scores.at("carol") == 70);
+        CHECK(local.furniture.at("carol") == "🥺");
+        CHECK(local.raids.size() == 2);
+        CHECK(read_json(paths.conquister + ".before-reset-15").at("scores").at("bob") == 900);
+        std::filesystem::remove(paths.conquister + ".before-reset-15");
+    }
+    /* carol, on the road, is sent home with nothing by one that lands on her house. */
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["dave"] = "☢️";
+        return 0;
+    });
+    REQUIRE(raid_start(storage, 0, "dave", "carol", 16, quick_rides(), RaidTargetKind::any, 0, "☢️").status ==
+            RaidStatus::started);
+    const std::vector<RaidEvent> second = raid_due(storage, 21, quick_rides());
+    CHECK(second.back().reset);
+    std::filesystem::remove(paths.conquister + ".before-reset-21");
+    static_cast<void>(raid_due(storage, 500, quick_rides()));
+    storage.transaction([](StorageSession &session) {
+        ConquisterState &state = session.state();
+        CHECK(state.raids.empty());
+        CHECK(state.scores.at("carol") == 0);
+        state.scores["bob"] = 900;
+        state.current = Holder{.user_id = 0, .username = "bob", .since = 0};
+        return 0;
+    });
 
     const FurnitureBurnResult dropped = furniture_burn(storage, "alice", "☢️", 500);
     CHECK(dropped.status == FurnitureBurnStatus::burned);
     CHECK(dropped.reset);
     const ConquisterState after = storage.transaction([](StorageSession &session) { return session.state(); });
     /* Everybody is still a player, at nothing. */
-    CHECK(after.scores == Counters{{"alice", 0}, {"bob", 0}, {"carol", 0}});
+    CHECK(after.scores == Counters{{"alice", 0}, {"bob", 0}, {"carol", 0}, {"dave", 0}});
     CHECK_FALSE(after.current);
     CHECK(after.furniture.empty());
     CHECK(after.raids.empty());
@@ -1249,7 +1284,7 @@ TEST_CASE("a ☢️ on the place starts the game over, and only there") {
     CHECK(after.smeared.empty());
     CHECK(after.stayed.empty());
     /* Who they are, where they live and what they quoted stay. */
-    CHECK(after.ids == Counters{{"alice", 1}, {"bob", 2}, {"carol", 3}});
+    CHECK(after.ids == Counters{{"alice", 1}, {"bob", 2}, {"carol", 3}, {"dave", 4}});
     CHECK(after.telegram_ids == Counters{{"alice", 11}});
     CHECK(after.quotes_added == Counters{{"bob", 3}});
     /* The game as it was is kept beside the state. */

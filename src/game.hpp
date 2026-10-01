@@ -43,8 +43,8 @@ inline constexpr Power lobster{"🦞", PowerKind::carried, "when he enters @TheC
 inline constexpr Power poo{"💩", PowerKind::thrown, "when it lands", "makes whoever it hits \"lo smerdato\" for a while"};
 inline constexpr Power bomb{"💣", PowerKind::thrown, "when it lands",
                             "takes one emoji with a power among those that are where it lands"};
-inline constexpr Power nuke{"☢️", PowerKind::thrown, "when it lands on @TheConquister37",
-                            "starts the game over: no palle, no emoji, nobody anywhere"};
+inline constexpr Power nuke{"☢️", PowerKind::thrown, "when it lands",
+                            "starts over: on @TheConquister37 the whole game, at a house the player who lives there"};
 
 }
 
@@ -133,9 +133,7 @@ enum class RaidStatus {
     invalid_amount,
     /* Only when an emoji is taken along: he has none like it, or the target has no empty slot. */
     no_such_emoji,
-    no_room,
-    /* Only when an emoji is taken along: it is one that can only be thrown at @TheConquister37. */
-    place_only
+    no_room
 };
 
 enum class RaidTargetKind { any, telegram, irc };
@@ -202,6 +200,8 @@ struct RaidEvent {
     std::vector<std::string> blown{};
     /* The 💣 was a dud: what it took is the raider's own, among what he had with him. */
     bool backfired = false;
+    /* delivered, with a ☢️: the target starts over. */
+    bool reset = false;
     /* The furniture hung beside the two names, to be shown along with them. */
     std::string raider_emoji;
     std::string target_emoji;

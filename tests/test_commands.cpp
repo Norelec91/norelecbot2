@@ -862,7 +862,7 @@ TEST_CASE("a 💩 thrown at the place makes the holder \"lo smerdato\" for a day
     CHECK(storage.transaction([](StorageSession &session) { return session.state().smeared.empty(); }));
 }
 
-TEST_CASE("the ☢️ costs a fortune, goes only to the place and starts the game over") {
+TEST_CASE("the ☢️ costs a million and starts the game over from the place") {
     const TestPaths paths{"nuke-command-test"};
     AppConfig config;
     config.conquister_path = paths.conquister;
@@ -873,22 +873,31 @@ TEST_CASE("the ☢️ costs a fortune, goes only to the place and starts the gam
     REQUIRE(command_dispatch(bob, "We @TheConquister37"));
     REQUIRE(command_dispatch(alice, "/profile"));
     storage.transaction([](StorageSession &session) {
-        session.state().scores["tg:1"] = 999'999'999;
+        session.state().scores["tg:1"] = 999'999;
         session.state().furniture["tg:2"] = "☢️";
         return 0;
     });
-    /* A palla short of a billion, whatever copies are around. */
-    CHECK(command_dispatch(alice, "We @Alice ☢️").value_or("").contains("1000000000"));
+    /* A palla short of a million, whatever copies are around. */
+    CHECK(command_dispatch(alice, "We @Alice ☢️").value_or("").contains("1000000"));
     CHECK(storage.transaction([](StorageSession &session) { return session.state().furniture.count("tg:1"); }) == 0);
     storage.transaction([](StorageSession &session) {
-        session.state().scores["tg:1"] = 1'000'000'007;
+        session.state().scores["tg:1"] = 1'000'007;
         return 0;
     });
     REQUIRE(command_dispatch(alice, "We @Alice ☢️"));
     CHECK(furniture_all(storage).at("tg:1") == "☢️");
     CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 7);
 
-    CHECK(command_dispatch(alice, "We @Bob ☢️") == "☢️ Alice la bomba nucleare si sgancia solo su @TheConquister37.");
+    RaidEvent landed;
+    landed.kind = RaidEvent::Kind::delivered;
+    landed.raider = "Alice";
+    landed.target = "Bob";
+    landed.target_on_telegram = true;
+    landed.gift_emoji = "☢️";
+    landed.reset = true;
+    landed.seconds = 5;
+    CHECK(raid_event_reply(landed) == "☢️ Alice ha sganciato la bomba nucleare su casa di @Bob: riparte da zero, senza "
+                                      "palle e senza emoji. Torni in Alice tra 5 secondi.");
     CHECK(command_dispatch(alice, "We @TheConquister37 ☢️") ==
           "☢️ Alice ha sganciato la bomba nucleare su @TheConquister37: il gioco riparte da zero. Tutti senza palle e "
           "senza emoji, il posto è vuoto e nessuno è in viaggio.");

@@ -30,6 +30,8 @@ struct Landing {
     bool smeared = false;
     /* A 💣 that was a dud went off in the thrower's hand: what is blown is his, not the victim's. */
     bool backfired = false;
+    /* A ☢️ made the victim start over. */
+    bool reset = false;
     std::vector<std::string> blown;
 };
 /* A thrown emoji lands where somebody is, his house or @TheConquister37, and works on what is there. */
@@ -1066,6 +1068,33 @@ void start_over(ConquisterState &state) {
     state.stayed.clear();
 }
 
+/* On a house it does the same to the one who lives there: no palle, no emoji, out of the place
+   unpaid, a new balloon. If he is on the road he is home at once, with nothing. */
+void start_over(ConquisterState &state, const std::string &player, std::int64_t now) {
+    if (const auto score = find_entry(state.scores, player); score != state.scores.end()) {
+        score->second = 0;
+    }
+    if (whereabouts(state, player) == Whereabouts::conquister) {
+        state.current.reset();
+    }
+    /* His ride is not taken off the list here, where the list may be being walked: it is over now and
+       the keeper settles it as a homecoming. */
+    for (Raid &raid : state.raids) {
+        if (raid.raider == player) {
+            raid.arrived = true;
+            raid.back = now;
+            raid.loot = 0;
+            raid.gift = 0;
+            raid.gift_emoji.clear();
+        }
+    }
+    state.furniture.erase(player);
+    state.balloons.erase(player);
+    state.cooldowns.erase(player);
+    state.smeared.erase(player);
+    state.stayed.erase(player);
+}
+
 }
 
 FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, const std::string &emoji,
@@ -1339,10 +1368,6 @@ RaidResult raid_start(
                 outcome.status = RaidStatus::no_such_emoji;
                 return outcome;
             }
-            if (is_power(gift_emoji, power::nuke)) {
-                outcome.status = RaidStatus::place_only;
-                return outcome;
-            }
             /* What is thrown is not hung: it needs no room on the target's name. */
             if (!is_thrown(gift_emoji) && !has_room(state, *known, rules.furniture_limit)) {
                 outcome.status = RaidStatus::no_room;
@@ -1458,6 +1483,10 @@ Landing land(StorageSession &session, ConquisterState &state, std::string_view t
         } else {
             landing.blown = blow_up(session, state, victim, site);
         }
+    } else if (is_power(thrown, power::nuke)) {
+        session.backup(std::format("before-reset-{}", now));
+        start_over(state, victim, now);
+        landing.reset = true;
     }
     return landing;
 }
@@ -1501,6 +1530,7 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                             raid.gift_emoji.clear();
                             event.target_smeared = event.target_smeared || landing.smeared;
                             event.backfired = landing.backfired;
+                            event.reset = landing.reset;
                             event.blown = std::move(landing.blown);
                             event.raider_emoji = shown_furniture(state, raid.raider);
                             event.target_emoji = shown_furniture(state, raid.target);
@@ -1591,6 +1621,10 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
         case RaidEvent::Kind::delivered:
             log_info("raid delivered user={} target={} gift={} emoji={} no_room={}", event.raider, event.target,
                      event.gift, event.gift_emoji, event.no_room ? 1 : 0);
+            if (event.reset) {
+                log_warning("PLAYER RESET of {} by user={}: the state before it is in the before-reset-{} backup",
+                            event.target, event.raider, now);
+            }
             break;
         case RaidEvent::Kind::returned:
             log_info("raid returned user={} target={} loot={} gift={} emoji={}", event.raider,

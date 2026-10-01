@@ -332,8 +332,6 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
         return std::format("🎁 {} non hai {} in casa.", username, gift_emoji);
     case RaidStatus::no_room:
         return std::format("🎁 {} {} non ha posti liberi per {}.", username, target, gift_emoji);
-    case RaidStatus::place_only:
-        return std::format("☢️ {} la bomba nucleare si sgancia solo su {}.", username, conquister_place);
     case RaidStatus::started:
         break;
     }
@@ -995,6 +993,11 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
         }
         if (is_power(event.gift_emoji, power::poo)) {
             return poo_throw(home, std::format("{}{}", mention, event.target));
+        }
+        if (is_power(event.gift_emoji, power::nuke)) {
+            return std::format("☢️ {} ha sganciato la bomba nucleare su casa di {}{}: riparte da zero, senza palle e "
+                               "senza emoji. Torni in {} tra {}.", raider, mention, event.target, home,
+                               format_wait(event.seconds));
         }
         if (is_power(event.gift_emoji, power::bomb)) {
             std::string blown;
