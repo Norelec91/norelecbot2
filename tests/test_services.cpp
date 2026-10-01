@@ -122,7 +122,9 @@ TEST_CASE("a balloon defends the holder until it pops") {
     const ClaimResult entered = conquister_claim(storage, 1, "alice", 0);
     CHECK(entered.status == ClaimStatus::taken);
     CHECK(entered.entered_lightning == 0);
-    /* Everybody has a balloon: a fresh one leaves no trace on file until something hits it. */
+    /* Everybody starts with a 🎈: a fresh one leaves no trace on file until something hits it. */
+    balloons_hand_out(storage, 10);
+    CHECK(furniture_all(storage).at("alice") == "🎈");
     CHECK_FALSE(read_json(paths.conquister).at("balloons").contains("alice"));
 
     int attempts = 0;
@@ -143,8 +145,9 @@ TEST_CASE("a balloon defends the holder until it pops") {
     CHECK(attack.status == ClaimStatus::taken);
     CHECK(attack.balloon_popped);
     CHECK(attack.previous_username == "alice");
-    /* Popped and kicked out, alice is back to a fresh balloon; bob brought his own, untouched. */
+    /* Popped, her 🎈 is gone from her name; bob brought his own, untouched. */
     CHECK(read_json(paths.conquister).at("balloons").empty());
+    CHECK(furniture_all(storage).count("alice") == 0);
 
     /* Worn at the place, the balloon goes home with him just as worn: it is the same one. */
     storage.transaction([](StorageSession &session) {
@@ -184,6 +187,7 @@ TEST_CASE("a failed balloon attempt hands out the penalty") {
     Storage storage{paths.conquister, paths.quotes};
 
     CHECK(conquister_claim(storage, 1, "alice", 0).status == ClaimStatus::taken);
+    balloons_hand_out(storage, 10);
 
     const ClaimResult attack = conquister_claim(storage, 2, "bob", 3000, ClaimRules{.cooldown_seconds = 300, .signs = {}});
     if (attack.status == ClaimStatus::defended) {
@@ -202,13 +206,19 @@ TEST_CASE("the fourth attempt pops the balloon for certain") {
     {
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":{"user_id":1,"username":"alice","since":0},"scores":{},)"
-             << R"("quotes_added":{},"balloons":{"alice":3}})";
+             << R"("quotes_added":{},"balloons":{"alice":3},"furniture":{"alice":"🍕🎈"}})";
     }
     Storage storage{paths.conquister, paths.quotes};
 
     const ClaimResult attack = conquister_claim(storage, 2, "bob", 10);
     CHECK(attack.status == ClaimStatus::taken);
     CHECK(attack.balloon_popped);
+    /* Popped, the 🎈 is off her name, and with it the defence: the next one walks in. */
+    CHECK(furniture_all(storage).at("alice") == "🍕");
+    CHECK(conquister_claim(storage, 1, "alice", 20).status == ClaimStatus::taken);
+    const ClaimResult unguarded = conquister_claim(storage, 2, "bob", 30);
+    CHECK(unguarded.status == ClaimStatus::taken);
+    CHECK_FALSE(unguarded.balloon_popped);
     const auto winner = conquister_user(storage, "bob");
     REQUIRE(winner);
     CHECK(winner->in_conquister);
@@ -244,6 +254,7 @@ TEST_CASE("active legacy timed balloons become ordinary balloons") {
     CHECK(read_json(paths.conquister).at("balloons").at("alice") == 0);
     CHECK_FALSE(read_json(paths.conquister).at("balloons").contains("bob"));
     CHECK_FALSE(read_json(paths.conquister).at("balloons").contains("bob"));
+    balloons_hand_out(storage, 10);
     storage.transaction([](StorageSession &session) {
         session.state().balloons["alice"] = 3;
         return 0;
@@ -327,7 +338,8 @@ TEST_CASE("a 🦞 comes in as what the kicked holder has in the same slot, and l
         CHECK(entered.entered_lightning == 150);
         CHECK(player_profile_of(storage, "bob", 100).furniture == "⚡🦞🍕🦞");
         CHECK(furniture_all(storage).at("bob") == "⚡🦞🍕🦞");
-        CHECK(furniture_all(storage).at("alice") == "⚡[]🎈🦞");
+        /* alice's 🎈 popped as bob came in. */
+        CHECK(furniture_all(storage).at("alice") == "⚡[][]🦞");
     }
     /* The copy survives a restart, and what is saved on the name is still the 🦞. */
     const Json saved = read_json(paths.conquister);
@@ -416,7 +428,7 @@ TEST_CASE("the balloon guards only where its owner is, and follows him home") {
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":{"user_id":1,"username":"alice","since":0},)"
              << R"("scores":{"alice":2000,"bob":0},"quotes_added":{},)"
-             << R"("balloons":{"alice":3},"ids":{"alice":0,"bob":5000}})";
+             << R"("balloons":{"alice":3},"ids":{"alice":0,"bob":5000},"furniture":{"alice":"🎈"}})";
     }
     Storage storage{paths.conquister, paths.quotes};
     /* She is in @TheConquister37 with it, so her house is empty. */
@@ -598,7 +610,7 @@ TEST_CASE("a balloon at home holds off raids until it pops") {
     {
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":null,"scores":{"alice":1000,"bob":500},"quotes_added":{},)"
-             << R"("balloons":{"alice":0}})";
+             << R"("balloons":{"alice":0},"furniture":{"alice":"🎈"}})";
     }
     Storage storage{paths.conquister, paths.quotes};
     /* Kept across a restart: a balloon at home is no longer a leftover. */
@@ -1062,6 +1074,7 @@ TEST_CASE("every emoji with a power is listed once, with its kind") {
     CHECK(power::nuke.kind == PowerKind::thrown);
     CHECK(power_of("☢") == &powers[6]);
     CHECK(power::dog.kind == PowerKind::home);
+    CHECK(power::balloon.kind == PowerKind::carried);
     CHECK(power_of("💣") == &powers[5]);
     CHECK(power_of("🍕") == nullptr);
     /* Drawn in colour or not, it is the same emoji. */
@@ -1240,7 +1253,8 @@ TEST_CASE("a ☢️ starts over the player whose house it lands on, and on the p
     {
         const ConquisterState local = storage.transaction([](StorageSession &session) { return session.state(); });
         CHECK(local.scores.at("bob") == 0);
-        CHECK(local.furniture.count("bob") == 0);
+        /* He starts again as everybody starts: with a 🎈. */
+        CHECK(local.furniture.at("bob") == "🎈");
         CHECK_FALSE(local.current);
         CHECK(local.balloons.empty());
         CHECK(local.stayed.empty());
@@ -1278,7 +1292,10 @@ TEST_CASE("a ☢️ starts over the player whose house it lands on, and on the p
     /* Everybody is still a player, at nothing. */
     CHECK(after.scores == Counters{{"alice", 0}, {"bob", 0}, {"carol", 0}, {"dave", 0}});
     CHECK_FALSE(after.current);
-    CHECK(after.furniture.empty());
+    CHECK(after.furniture.size() == 4);
+    for (const char *player : {"alice", "bob", "carol", "dave"}) {
+        CHECK(after.furniture.at(player) == "🎈");
+    }
     CHECK(after.raids.empty());
     CHECK(after.balloons.empty());
     CHECK(after.cooldowns.empty());

@@ -47,12 +47,15 @@ inline constexpr Power nuke{"☢️", PowerKind::thrown, "when it lands",
                             "starts over: on @TheConquister37 the whole game, at a house the player who lives there"};
 inline constexpr Power dog{"🐶", PowerKind::home, "when a raider reaches the house",
                            "each is a chance of sending him away with nothing"};
+inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries to get past it, where its owner is",
+                               "holds off whoever comes for his place or his house until it pops, and is gone"};
 
 }
 
 /* Every emoji with a power: a new one is a row here, of a declared kind, plus what it does. */
 inline constexpr std::array powers{power::pleading, power::rocket, power::bolt, power::lobster,
-                                   power::poo,      power::bomb,   power::nuke, power::dog};
+                                   power::poo,      power::bomb,   power::nuke, power::dog,
+                                   power::balloon};
 
 /* Whether an emoji is that power's, drawn in colour or not. */
 [[nodiscard]] bool is_power(std::string_view emoji, const Power &power);
@@ -333,7 +336,11 @@ struct Profile {
                                 RaidTargetKind platform);
 /* Bind a verified platform account to its player, recording its current public name. */
 [[nodiscard]] std::string player_seen(Storage &storage, std::int64_t user_id, const std::string &username,
-                                      std::string_view account_name = {});
+                                      std::string_view account_name = {},
+                                      /* A player seen for the first time is handed his 🎈, if it fits. */
+                                      std::size_t furniture_limit = 10);
+/* Everybody starts with a 🎈: hands one, once, to every known player who has none and a free slot. */
+void balloons_hand_out(Storage &storage, std::size_t furniture_limit);
 enum class LinkStatus { pending, linked, unknown_account, conflict, self, already_linked };
 [[nodiscard]] LinkStatus player_link(Storage &storage, std::int64_t user_id, const std::string &username,
                                      std::string_view other_name, std::string_view account_name = {});

@@ -182,6 +182,7 @@ ConquisterState parse_state(const Json &json) {
         parse_counters(json, "debugging"),
         parse_counters(json, "smeared"),
         parse_slots(json, "stayed"),
+        parse_counters(json, "welcomed"),
     };
     return state;
 }
@@ -239,6 +240,7 @@ Json state_to_json(const ConquisterState &state) {
         {"debugging", state.debugging},
         {"smeared", state.smeared},
         {"stayed", state.stayed},
+        {"welcomed", state.welcomed},
     };
 }
 

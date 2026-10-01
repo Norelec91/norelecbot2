@@ -1,4 +1,5 @@
 #include "config.hpp"
+#include "game.hpp"
 #include "http_server.hpp"
 #include "irc.hpp"
 #include "logging.hpp"
@@ -29,6 +30,9 @@ int run() {
         return EXIT_FAILURE;
     }
     norelecbot::Storage storage{config->conquister_path, config->quotes_path};
+    if (config->starter_balloon) {
+        norelecbot::balloons_hand_out(storage, static_cast<std::size_t>(config->furniture_limit));
+    }
 
     std::signal(SIGINT, request_stop);
     std::signal(SIGTERM, request_stop);

@@ -76,8 +76,8 @@ struct ConquisterState {
     std::optional<Holder> current;
     Counters scores;
     Counters quotes_added;
-    /* The attempts each player's balloon already survived. Everybody has one, which guards
-       @TheConquister37 while he holds it and his home while he is there; a fresh one has no entry. */
+    /* The attempts each player's 🎈 already survived, where it guards him: @TheConquister37 while he
+       holds it, his home while he is there. A fresh one has no entry; one that pops leaves his name. */
     Counters balloons;
     /* Users mapped to the instant their claim penalty expires. */
     Counters cooldowns;
@@ -109,6 +109,8 @@ struct ConquisterState {
     /* The slots filled while the player was away: what was hung there is at home, even of a kind he
        would carry, until he next leaves from home. */
     Slots stayed;
+    /* The players who were handed the 🎈 everybody starts with: nobody gets it twice. */
+    Counters welcomed;
 
     bool operator==(const ConquisterState &) const = default;
 };

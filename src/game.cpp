@@ -39,6 +39,12 @@ Landing land(StorageSession &session, ConquisterState &state, std::string_view t
              const std::string &victim, Whereabouts site, std::int64_t now, const RaidRules &rules);
 /* Hit by a 💩 and not clean yet. */
 bool is_smeared(const ConquisterState &state, const std::string &player, std::int64_t now);
+/* Where the emoji with a power in a slot is. */
+Whereabouts site_of(const ConquisterState &state, const std::string &player, std::size_t slot, const Power &power);
+/* Empties one slot of a name. */
+void clear_slot(ConquisterState &state, const std::string &player, std::size_t slot);
+/* Hands a player the 🎈 everybody starts with, once, if he has none and a free slot. */
+void welcome(ConquisterState &state, const std::string &player, std::size_t limit);
 /* How many copies of a power's emoji hang on a name as the group sees it. */
 std::int64_t copies_of(const ConquisterState &state, const std::string &player, const Power &power);
 /* For every 🦞 on the claimer's name, the emoji the kicked holder has in that same slot. */
@@ -99,12 +105,29 @@ namespace {
 
 enum class BalloonRoll : std::uint8_t { none, held, popped };
 
-/* Everybody always has a balloon. The file keeps how many attempts it has survived; one that pops is
-   replaced by a fresh one at once, and a fresh one has no entry. */
-BalloonRoll balloon_attempt(StorageSession &session, ConquisterState &state, const std::string &player) {
+/* The slot of the 🎈 a player has in a place, the one he is in or his house; nothing without one there. */
+std::optional<std::size_t> balloon_slot(const ConquisterState &state, const std::string &player, Whereabouts site) {
+    const std::vector<std::string> slots = furniture_slots(shown_furniture(state, player));
+    for (std::size_t slot = 0; slot < slots.size(); ++slot) {
+        if (is_power(slots[slot], power::balloon) && site_of(state, player, slot, power::balloon) == site) {
+            return slot;
+        }
+    }
+    return std::nullopt;
+}
+
+/* The 🎈 is an emoji like the others: no 🎈 there, no defence. The file keeps how many attempts his has
+   survived; one that pops leaves his name, and the next one starts fresh. */
+BalloonRoll balloon_attempt(StorageSession &session, ConquisterState &state, const std::string &player,
+                            Whereabouts site) {
+    const std::optional<std::size_t> slot = balloon_slot(state, player, site);
+    if (!slot) {
+        return BalloonRoll::none;
+    }
     const std::int64_t attempt = counter(state.balloons, player) + 1;
     if (static_cast<std::int64_t>(session.random_index(balloon_attempts)) < attempt) {
         state.balloons.erase(player);
+        clear_slot(state, player, *slot);
         return BalloonRoll::popped;
     }
     state.balloons[player] = attempt;
@@ -365,8 +388,47 @@ std::optional<std::string> player_by_name(const ConquisterState &state, std::str
 
 }
 
+namespace {
+
+/* Everybody the game has anything on file about. */
+std::vector<std::string> known_players(const ConquisterState &state) {
+    std::vector<std::string> players;
+    const auto add = [&players](const std::string &player) {
+        if (std::ranges::find(players, player) == players.end()) {
+            players.push_back(player);
+        }
+    };
+    if (state.current && !state.current->username.empty()) {
+        add(state.current->username);
+    }
+    for (const Counters *known : {&state.scores, &state.ids, &state.balloons, &state.telegram_ids,
+                                  &state.irc_names}) {
+        for (const auto &[player, value] : *known) {
+            add(player);
+        }
+    }
+    for (const Authors *known : {&state.furniture, &state.display_names}) {
+        for (const auto &[player, value] : *known) {
+            add(player);
+        }
+    }
+    return players;
+}
+
+}
+
+void balloons_hand_out(Storage &storage, std::size_t furniture_limit) {
+    storage.transaction([furniture_limit](StorageSession &session) {
+        ConquisterState &state = session.state();
+        for (const std::string &player : known_players(state)) {
+            welcome(state, player, furniture_limit);
+        }
+        return 0;
+    });
+}
+
 std::string player_seen(Storage &storage, std::int64_t user_id, const std::string &username,
-                        std::string_view account_name) {
+                        std::string_view account_name, std::size_t furniture_limit) {
     return storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         const std::string account = platform_key(user_id, username, account_name);
@@ -390,6 +452,7 @@ std::string player_seen(Storage &storage, std::int64_t user_id, const std::strin
             state.display_names[key] = username;
         }
         remember_platform(state, key, user_id);
+        welcome(state, key, furniture_limit);
         return key;
     });
 }
@@ -534,7 +597,7 @@ ClaimResult conquister_claim(
             outcome.previous_user_id = !ambiguous_legacy(state, holder) &&
                 counter(state.telegram_ids, holder) != 0
                 ? counter(state.telegram_ids, holder) : state.current->user_id;
-            const BalloonRoll balloon = balloon_attempt(session, state, holder);
+            const BalloonRoll balloon = balloon_attempt(session, state, holder, Whereabouts::conquister);
             if (balloon == BalloonRoll::held) {
                 if (rules.cooldown_seconds > 0) {
                     state.cooldowns[username] = now + rules.cooldown_seconds;
@@ -547,7 +610,7 @@ ClaimResult conquister_claim(
                 return outcome;
             }
             outcome.balloon_popped = balloon == BalloonRoll::popped;
-            /* Kicked out, he gets a fresh balloon. */
+            /* Whatever 🎈 he has next starts fresh. */
             state.balloons.erase(holder);
             outcome.previous_username = display_name(state, holder);
             outcome.previous_key = holder;
@@ -977,6 +1040,33 @@ bool give_emoji(ConquisterState &state, const std::string &player, const std::st
     return true;
 }
 
+void clear_slot(ConquisterState &state, const std::string &player, std::size_t slot) {
+    std::vector<std::string> slots = slots_of(state, player);
+    if (slot < slots.size()) {
+        slots[slot].clear();
+        hang(state, player, std::move(slots));
+    }
+}
+
+void welcome(ConquisterState &state, const std::string &player, std::size_t limit) {
+    if (counter(state.welcomed, player) != 0) {
+        return;
+    }
+    state.welcomed[player] = 1;
+    std::vector<std::string> slots = slots_of(state, player);
+    if (std::ranges::any_of(slots, [](const std::string &slot) { return is_power(slot, power::balloon); })) {
+        return;
+    }
+    /* It is his from the start, wherever he is now: it is with him, not left at home. */
+    if (const std::optional<std::size_t> slot = free_slot(slots, limit)) {
+        if (*slot >= slots.size()) {
+            slots.resize(*slot + 1);
+        }
+        slots[*slot] = std::string{power::balloon.emoji};
+        hang(state, player, std::move(slots));
+    }
+}
+
 }
 
 FurnitureMoveResult furniture_move(Storage &storage, const std::string &username,
@@ -1059,8 +1149,13 @@ void start_over(ConquisterState &state) {
     for (auto &[player, score] : state.scores) {
         score = 0;
     }
+    /* Everybody starts again as he first started: with a 🎈. */
+    const std::vector<std::string> players = known_players(state);
     state.current.reset();
     state.furniture.clear();
+    for (const std::string &player : players) {
+        state.furniture[player] = std::string{power::balloon.emoji};
+    }
     state.raids.clear();
     state.balloons.clear();
     state.cooldowns.clear();
@@ -1088,7 +1183,7 @@ void start_over(ConquisterState &state, const std::string &player, std::int64_t 
             raid.gift_emoji.clear();
         }
     }
-    state.furniture.erase(player);
+    state.furniture[player] = std::string{power::balloon.emoji};
     state.balloons.erase(player);
     state.cooldowns.erase(player);
     state.smeared.erase(player);
@@ -1414,13 +1509,11 @@ RaidResult raid_start(
 
 namespace {
 
-/* A raid on a player at home meets his balloon first; while he is away it guards nothing. */
+/* A raid meets the 🎈 that is at the house first: the one of a player at home, since he carries it with
+   him when he goes out. */
 bool defended_at_home(StorageSession &session, ConquisterState &state, const std::string &target,
                       RaidEvent &event) {
-    if (!at_home(state, target)) {
-        return false;
-    }
-    switch (balloon_attempt(session, state, target)) {
+    switch (balloon_attempt(session, state, target, Whereabouts::home)) {
     case BalloonRoll::held:
         event.balloon_held = true;
         event.next_chance = balloon_pop_chance(state, target);

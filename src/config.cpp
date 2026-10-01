@@ -144,6 +144,13 @@ constexpr std::array settings{
     Setting{"NORELECBOT_DOG_PERCENT", [](AppConfig &config, std::string_view value) {
         return set_number(config.dog_percent, value, AppConfig::default_dog_percent, 0, 100);
     }},
+    Setting{"NORELECBOT_BALLOON_COST", [](AppConfig &config, std::string_view value) {
+        return set_number(config.balloon_cost, value, AppConfig::default_balloon_cost, 0);
+    }},
+    Setting{"NORELECBOT_STARTER_BALLOON", [](AppConfig &config, std::string_view value) {
+        config.starter_balloon = value.empty() || (value != "0" && !text::equals_ignore_case(value, "false"));
+        return true;
+    }},
     Setting{"NORELECBOT_CONQUISTER_CHAT_ID", [](AppConfig &config, std::string_view value) {
         return set_number(config.conquister_chat_id, value, std::int64_t{0});
     }},

@@ -490,7 +490,7 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
     }
     if (burnt.reset) {
         return std::format("☢️ {} ha sganciato la bomba nucleare su {}: il gioco riparte da zero. Tutti senza palle e "
-                           "senza emoji, il posto è vuoto e nessuno è in viaggio.", context.username, conquister_place);
+                           "con il solo 🎈 di partenza, il posto è vuoto e nessuno è in viaggio.", context.username, conquister_place);
     }
     if (is_power(emoji, power::poo)) {
         /* Whoever holds the place takes it full in the face. */
@@ -694,10 +694,12 @@ std::string handle_furniture(const CommandContext &context, std::string_view wan
         return missing_username_reply();
     }
     const std::string username{context.username};
-    /* The ☢️ has a price of its own, which does not grow with the copies in the game. */
+    /* The ☢️ and the 🎈 have prices of their own, which do not grow with the copies in the game. */
     const bool nuke = is_power(wanted, power::nuke);
-    const int cost = price(context, nuke ? context.config.nuke_cost : context.config.furniture_cost);
-    const int inflation = nuke ? 0 : context.config.furniture_inflation;
+    const bool balloon = is_power(wanted, power::balloon);
+    const int cost = price(context, nuke ? context.config.nuke_cost
+                                    : balloon ? context.config.balloon_cost : context.config.furniture_cost);
+    const int inflation = nuke || balloon ? 0 : context.config.furniture_inflation;
     const auto limit = static_cast<std::size_t>(context.config.furniture_limit);
     if (slot && (*slot < 1 || static_cast<std::uint64_t>(*slot) > limit)) {
         return std::format("🛋️ {} i posti vanno da 1 a {}: nessun addebito.", username, limit);
@@ -997,7 +999,7 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
         }
         if (is_power(event.gift_emoji, power::nuke)) {
             return std::format("☢️ {} ha sganciato la bomba nucleare su casa di {}{}: riparte da zero, senza palle e "
-                               "senza emoji. Torni in {} tra {}.", raider, mention, event.target, home,
+                               "con il solo 🎈 di partenza. Torni in {} tra {}.", raider, mention, event.target, home,
                                format_wait(event.seconds));
         }
         if (is_power(event.gift_emoji, power::bomb)) {
@@ -1066,7 +1068,10 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
         const auto remember_sender = [&] {
             if (!context.username.empty()) {
                 bound_key = player_seen(context.storage, context.user_id, std::string{context.username},
-                                        context.account_name);
+                                        context.account_name,
+                                        /* No room at all is how nobody is handed one. */
+                                        context.config.starter_balloon
+                                            ? static_cast<std::size_t>(context.config.furniture_limit) : 0);
                 bound.player_key = bound_key;
             }
         };
