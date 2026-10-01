@@ -1066,14 +1066,14 @@ TEST_CASE("every emoji with a power is listed once, with its kind") {
     CHECK_FALSE(is_power("🍕", power::bolt));
 }
 
-TEST_CASE("a 💣 takes two neighbouring emoji with a power that are at home, or one") {
+TEST_CASE("a 💣 takes one emoji with a power among those that are where it lands") {
     const TestPaths paths{"bomb-test"};
     {
         /* dave holds the place: the ⚡ and the 🚀 he carries are with him, only his 🥺 is at home. */
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":{"user_id":0,"username":"dave","since":0},)"
              << R"("scores":{"alice":0,"bob":0,"carol":0,"dave":0},"quotes_added":{},)"
-             << R"("furniture":{"alice":"💣💣💣","bob":"🍕🥺⚡🍕🚀","carol":"🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕",)"
+             << R"("furniture":{"alice":"💣💣💣","bob":"🍕🥺🍕","carol":"🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕",)"
              << R"("dave":"⚡🚀🍕🥺"}})";
     }
     Storage storage{paths.conquister, paths.quotes};
@@ -1091,11 +1091,11 @@ TEST_CASE("a 💣 takes two neighbouring emoji with a power that are at home, or
         return arrival[0];
     };
 
-    /* At home, the only two side by side are the 🥺 and the ⚡; the 🚀 stands alone, the 🍕 have no power. */
+    /* The 🥺 is the only one with a power: the 🍕 are never touched. */
     const RaidEvent pair = thrown_at("bob", 0);
-    CHECK(pair.blown == std::vector<std::string>{"🥺", "⚡"});
-    CHECK(pair.target_emoji == "🍕[][]🍕🚀");
-    CHECK(furniture_all(storage).at("bob") == "🍕[][]🍕🚀");
+    CHECK(pair.blown == std::vector<std::string>{"🥺"});
+    CHECK(pair.target_emoji == "🍕[]🍕");
+    CHECK(furniture_all(storage).at("bob") == "🍕[]🍕");
 
     /* A full name of plain emoji takes the hit and loses nothing. */
     const RaidEvent nothing = thrown_at("carol", 20);
@@ -1109,12 +1109,12 @@ TEST_CASE("a 💣 takes two neighbouring emoji with a power that are at home, or
     /* All three bombs are spent. */
     CHECK(furniture_all(storage).count("alice") == 0);
 
-    /* Thrown at the place it lands on the holder, and there it is what he carries that goes: the ⚡ and
-       the 🚀 side by side, not the 🍕. Losing the ⚡ he came in with, the hold is worth less from then
+    /* Thrown at the place it lands on the holder, and there it is what he carries that goes: the ⚡,
+       not the 🍕. Losing the ⚡ he came in with, the hold is worth less from then
        on, and what it made so far is put aside. */
     storage.transaction([](StorageSession &session) {
         session.state().furniture["alice"] = "💣💣";
-        session.state().furniture["dave"] = "⚡🚀🍕🥺💩";
+        session.state().furniture["dave"] = "⚡🍕🥺💩";
         session.state().current->lightning_percent = 125;
         session.state().current->bolts = 1;
         return 0;
@@ -1122,8 +1122,8 @@ TEST_CASE("a 💣 takes two neighbouring emoji with a power that are at home, or
     const FurnitureBurnResult onto = furniture_burn(storage, "alice", "💣", 100, 86400);
     CHECK(onto.status == FurnitureBurnStatus::burned);
     CHECK(onto.hit == "dave");
-    CHECK(onto.blown == std::vector<std::string>{"⚡", "🚀"});
-    CHECK(onto.hit_furniture == "[][]🍕🥺💩");
+    CHECK(onto.blown == std::vector<std::string>{"⚡"});
+    CHECK(onto.hit_furniture == "[]🍕🥺💩");
     CHECK(player_profile_of(storage, "dave", 100).lightning_percent == 0);
     const Holder after = storage.transaction([](StorageSession &session) { return *session.state().current; });
     CHECK(after.bolts == 0);
@@ -1134,7 +1134,7 @@ TEST_CASE("a 💣 takes two neighbouring emoji with a power that are at home, or
     const FurnitureBurnResult again = furniture_burn(storage, "alice", "💣", 100, 86400);
     CHECK(again.hit == "dave");
     CHECK(again.blown.empty());
-    CHECK(furniture_all(storage).at("dave") == "[][]🍕🥺💩");
+    CHECK(furniture_all(storage).at("dave") == "[]🍕🥺💩");
     /* The holder who throws one at his own place hits nobody. */
     storage.transaction([](StorageSession &session) {
         session.state().furniture["dave"] = "⚡💣";

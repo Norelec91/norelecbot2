@@ -42,7 +42,7 @@ inline constexpr Power lobster{"🦞", PowerKind::carried, "when he enters @TheC
                                "becomes what the kicked holder has in the same slot until he leaves"};
 inline constexpr Power poo{"💩", PowerKind::thrown, "when it lands", "makes whoever it hits \"lo smerdato\" for a while"};
 inline constexpr Power bomb{"💣", PowerKind::thrown, "when it lands",
-                            "takes two neighbouring emoji with a power that are where it lands, or one"};
+                            "takes one emoji with a power among those that are where it lands"};
 
 }
 
@@ -192,7 +192,7 @@ struct RaidEvent {
        target's name was full on arrival. */
     std::string gift_emoji;
     bool no_room = false;
-    /* delivered, with a 💣: the emoji it took off the target's name, none when it found nothing to take. */
+    /* delivered, with a 💣: the emoji it took off the target's name, empty when it found nothing to take. */
     std::vector<std::string> blown{};
     /* The furniture hung beside the two names, to be shown along with them. */
     std::string raider_emoji;

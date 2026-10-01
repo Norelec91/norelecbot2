@@ -1378,9 +1378,8 @@ Whereabouts site_of(const ConquisterState &state, const std::string &player, std
                                                                               : Whereabouts::home;
 }
 
-/* A 💣 going off takes two emoji with a power from neighbouring slots, or one when no two are side by
-   side. Only what is there can go: at his house what he left at home, in @TheConquister37 what he
-   carries. */
+/* A 💣 going off takes one emoji with a power, drawn among those that are there: at his house what he
+   left at home, in @TheConquister37 what he carries. */
 std::vector<std::string> blow_up(StorageSession &session, ConquisterState &state, const std::string &target,
                                  Whereabouts site) {
     std::vector<std::string> slots = slots_of(state, target);
@@ -1388,30 +1387,18 @@ std::vector<std::string> blow_up(StorageSession &session, ConquisterState &state
         const Power *power = slots[slot].empty() ? nullptr : power_of(slots[slot]);
         return power != nullptr && site_of(state, target, slot, *power) == site;
     };
-    std::vector<std::size_t> pairs;
-    std::vector<std::size_t> singles;
+    std::vector<std::size_t> there;
     for (std::size_t slot = 0; slot < slots.size(); ++slot) {
-        if (!exposed(slot)) {
-            continue;
-        }
-        singles.push_back(slot);
-        if (slot + 1 < slots.size() && exposed(slot + 1)) {
-            pairs.push_back(slot);
+        if (exposed(slot)) {
+            there.push_back(slot);
         }
     }
-    std::vector<std::string> blown;
-    if (!pairs.empty()) {
-        const std::size_t first = pairs[session.random_index(pairs.size())];
-        blown = {slots[first], slots[first + 1]};
-        slots[first].clear();
-        slots[first + 1].clear();
-    } else if (!singles.empty()) {
-        const std::size_t only = singles[session.random_index(singles.size())];
-        blown = {slots[only]};
-        slots[only].clear();
-    } else {
-        return blown;
+    if (there.empty()) {
+        return {};
     }
+    const std::size_t hit = there[session.random_index(there.size())];
+    std::vector<std::string> blown{slots[hit]};
+    slots[hit].clear();
     hang(state, target, std::move(slots));
     return blown;
 }
