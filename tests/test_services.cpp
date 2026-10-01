@@ -1078,6 +1078,7 @@ TEST_CASE("every emoji with a power is listed once, with its kind") {
     CHECK(power::balloon.kind == PowerKind::carried);
     CHECK(power::mailbox.kind == PowerKind::home);
     CHECK(power::ninja.kind == PowerKind::carried);
+    CHECK(power::alarm.kind == PowerKind::home);
     /* Whatever the tone of its skin, it is the same emoji. */
     CHECK(is_power("🥷🏿", power::ninja));
     CHECK(is_power("🥷", power::ninja));
@@ -1443,27 +1444,44 @@ TEST_CASE("a 🥷 with the raider may take him past the 🎈 and the 🐶 of the
     CHECK(read_json(paths.conquister).at("balloons").empty());
     REQUIRE(raid_due(storage, 10, rules).size() == 1);
 
+    /* Two 🔊 at the house take all of that chance away: the alarm gives her away, and the dogs do the rest. */
+    storage.transaction([](StorageSession &session) {
+        session.state().scores["bob"] = 100;
+        session.state().furniture["bob"] = "🐶🐶🔊🔊";
+        return 0;
+    });
+    rules.alarm_percent = 50;
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 10, rules).status == RaidStatus::started);
+    arrival = raid_due(storage, 15, rules);
+    REQUIRE(arrival.size() == 1);
+    CHECK_FALSE(arrival[0].sneaked);
+    CHECK(arrival[0].alarmed);
+    CHECK(arrival[0].intercepted);
+    REQUIRE(raid_due(storage, 20, rules).size() == 1);
+    rules.alarm_percent = 0;
+
     /* Without one, the dogs are there for her. */
     storage.transaction([](StorageSession &session) {
         session.state().scores["bob"] = 100;
         session.state().furniture["bob"] = "🐶🐶";
         return 0;
     });
-    REQUIRE(raid_start(storage, 0, "carol", "bob", 10, rules).status == RaidStatus::started);
-    arrival = raid_due(storage, 15, rules);
+    REQUIRE(raid_start(storage, 0, "carol", "bob", 20, rules).status == RaidStatus::started);
+    arrival = raid_due(storage, 25, rules);
     REQUIRE(arrival.size() == 1);
     CHECK_FALSE(arrival[0].sneaked);
+    CHECK_FALSE(arrival[0].alarmed);
     CHECK(arrival[0].intercepted);
-    REQUIRE(raid_due(storage, 20, rules).size() == 1);
+    REQUIRE(raid_due(storage, 30, rules).size() == 1);
 
     /* The same at the place: past the holder's 🎈, which stays as worn as it was. */
     storage.transaction([](StorageSession &session) {
         session.state().furniture["bob"] = "🎈";
         session.state().balloons["bob"] = 2;
-        session.state().current = Holder{.user_id = 0, .username = "bob", .since = 20};
+        session.state().current = Holder{.user_id = 0, .username = "bob", .since = 30};
         return 0;
     });
-    const ClaimResult quiet = conquister_claim(storage, 0, "alice", 20,
+    const ClaimResult quiet = conquister_claim(storage, 0, "alice", 30,
                                                ClaimRules{.cooldown_seconds = 0, .signs = {}, .ninja = 50});
     CHECK(quiet.status == ClaimStatus::taken);
     CHECK(quiet.sneaked);
@@ -1477,8 +1495,8 @@ TEST_CASE("a 🥷 with the raider may take him past the 🎈 and the 🐶 of the
     });
 
     /* Where nothing guards the house there is nothing to slip past. */
-    REQUIRE(raid_start(storage, 0, "alice", "dave", 20, rules).status == RaidStatus::started);
-    arrival = raid_due(storage, 25, rules);
+    REQUIRE(raid_start(storage, 0, "alice", "dave", 30, rules).status == RaidStatus::started);
+    arrival = raid_due(storage, 35, rules);
     REQUIRE(arrival.size() == 1);
     CHECK_FALSE(arrival[0].sneaked);
     CHECK(arrival[0].loot == 100);

@@ -1578,7 +1578,16 @@ bool sneaks(StorageSession &session, const ConquisterState &state, const Raid &r
         copies_of(state, raid.target, power::dog) > 0;
     const std::int64_t ninjas = carried_copies(state, raid.raider, power::ninja);
     const std::int64_t chance = std::min<std::int64_t>(100, ninjas * std::max<std::int64_t>(rules.ninja_percent, 0));
-    event.sneaked = guarded && chance > 0 && static_cast<std::int64_t>(session.random_index(100)) < chance;
+    if (!guarded || chance <= 0) {
+        return false;
+    }
+    /* The 🔊 at the house stay there and take their share off it, whether the owner is in or out. */
+    const std::int64_t quiet = std::max<std::int64_t>(
+        0, chance - copies_of(state, raid.target, power::alarm) * std::max<std::int64_t>(rules.alarm_percent, 0));
+    const auto roll = static_cast<std::int64_t>(session.random_index(100));
+    event.sneaked = roll < quiet;
+    /* A roll his 🥷 alone would have won: it is the alarm that gave him away. */
+    event.alarmed = !event.sneaked && roll < chance;
     return event.sneaked;
 }
 

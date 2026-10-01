@@ -275,6 +275,7 @@ RaidRules raid_rules(const CommandContext &context) {
         .dog_percent = context.config.dog_percent,
         .mailbox_percent = context.config.mailbox_percent,
         .ninja_percent = context.config.ninja_percent,
+        .alarm_percent = context.config.alarm_percent,
     };
 }
 
@@ -1073,8 +1074,11 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
             format_wait(event.seconds)
         );
     }
+    const std::string alarm = event.alarmed
+        ? std::format("L'allarme di {}{} ti scopre: devi vedertela con le sue difese.\n", mention, event.target)
+        : std::string{};
     if (event.balloon_held) {
-        return std::format(
+        return alarm + std::format(
             "{} il palloncino di {}{} ha resistito: niente bottino. "
             "Ora il palloncino ha il {}% di probabilità di essere bucato. Torni in {} tra {}.",
             raider,
@@ -1086,10 +1090,11 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
         );
     }
     if (event.intercepted) {
-        return std::format("{} il cane di {}{} ti ha intercettato: niente bottino. Torni in {} tra {}.", raider,
+        return alarm + std::format("{} il cane di {}{} ti ha intercettato: niente bottino. Torni in {} tra {}.", raider,
                            mention, target, home, format_wait(event.seconds));
     }
-    std::string reply = event.sneaked
+    std::string reply = alarm;
+    reply += event.sneaked
         ? std::format("{} scivoli di nascosto oltre le difese di {}{} e rubi {}", raider, mention, target,
                       palle(event.loot))
         : event.balloon_popped

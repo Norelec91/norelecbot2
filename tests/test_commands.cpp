@@ -825,6 +825,11 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     quiet.seconds = 5;
     CHECK(raid_event_reply(quiet) == "Carol scivoli di nascosto oltre le difese di Bob lo smerdato (🍕) e rubi 3 palle! "
                                      "Torni in Carol tra 5 secondi.");
+    RaidEvent found = robbed;
+    found.alarmed = true;
+    found.seconds = 5;
+    CHECK(raid_event_reply(found).value_or("").starts_with(
+        "L'allarme di Bob ti scopre: devi vedertela con le sue difese.\nCarol hai rubato 3 palle a Bob lo smerdato"));
     RaidEvent caught = robbed;
     caught.loot = 0;
     caught.intercepted = true;

@@ -51,6 +51,8 @@ inline constexpr Power mailbox{"📮", PowerKind::home, "when something thrown l
                                "each is a chance of sending it back to whoever threw it"};
 inline constexpr Power ninja{"🥷", PowerKind::carried, "when he reaches a house to rob it, or comes for the place",
                              "each is a chance of slipping past the 🎈 and the 🐶 that guard it"};
+inline constexpr Power alarm{"🔊", PowerKind::home, "when a raider with a 🥷 reaches the house",
+                             "each takes a share off his chance of slipping past unnoticed"};
 inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries to get past it, where its owner is",
                                "holds off whoever comes for his place or his house until it pops, then is as good as new"};
 
@@ -59,7 +61,7 @@ inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries 
 /* Every emoji with a power: a new one is a row here, of a declared kind, plus what it does. */
 inline constexpr std::array powers{power::pleading, power::rocket, power::bolt, power::lobster,
                                    power::poo,      power::bomb,   power::nuke, power::dog,
-                                   power::balloon,  power::mailbox, power::ninja};
+                                   power::balloon,  power::mailbox, power::ninja, power::alarm};
 
 /* Whether an emoji is that power's, drawn in colour or not and whatever the tone of its skin. */
 [[nodiscard]] bool is_power(std::string_view emoji, const Power &power);
@@ -183,6 +185,8 @@ struct RaidRules {
     /* The chance, in percent, that each 🥷 the raider has with him gives of slipping past the 🎈 and the
        🐶 at the house: they add up. */
     std::int64_t ninja_percent = 0;
+    /* What each 🔊 at the house takes off that chance, in percent points: they add up. */
+    std::int64_t alarm_percent = 0;
 };
 
 struct RaidResult {
@@ -210,6 +214,8 @@ struct RaidEvent {
     bool intercepted = false;
     /* stolen: a 🥷 took the raider past the 🎈 or the 🐶 that were there, unnoticed. */
     bool sneaked = false;
+    /* stolen: his 🥷 would have done it, but a 🔊 at the house gave him away. */
+    bool alarmed = false;
     /* stolen: what the 🥺 on the target's name talked the raider out of, and by how much in percent. */
     std::int64_t spared = 0;
     std::int64_t pleaded_percent = 0;
