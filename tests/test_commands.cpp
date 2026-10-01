@@ -107,7 +107,7 @@ TEST_CASE("the bot answers the commands it knows and ignores the rest") {
 
         /* The retired purchases are gone: the bot does not answer them any more. */
         context.owner = false;
-        for (const std::string_view retired : {"/buyballoon", "/buyboost", "/buyshield", "/buyfurniture"}) {
+        for (const std::string_view retired : {"/buyboost", "/buyshield", "/buyfurniture"}) {
             CHECK_FALSE(command_is_for_bot(retired));
             CHECK_FALSE(command_dispatch(context, retired));
         }
@@ -1004,6 +1004,35 @@ TEST_CASE("a popped 🎈 stays on the name, and a player is handed only one") {
     Storage storage{config.conquister_path, config.quotes_path};
     balloons_hand_out(storage, 10);
     CHECK(furniture_of_alice(storage).empty());
+}
+
+TEST_CASE("/buyballoon hands the free 🎈 once, and a full name can try again") {
+    const TestPaths paths{"balloon-port-test"};
+    AppConfig config;
+    config.starter_balloon = false;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    config.furniture_limit = 3;
+    Storage storage{config.conquister_path, config.quotes_path};
+    const CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
+
+    CHECK(command_is_for_bot("/buyballoon"));
+    REQUIRE(command_dispatch(alice, "/profile"));
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["tg:1"] = "⚡⚡⚡";
+        return 0;
+    });
+    /* A full name does not use the one time up. */
+    CHECK(command_dispatch(alice, "/buyballoon") ==
+          "🎈 Alice (⚡⚡⚡) non hai un posto libero: liberane uno e riprova, il palloncino gratis ti aspetta.");
+    REQUIRE(command_dispatch(alice, "We @TheConquister37 ⚡"));
+    CHECK(command_dispatch(alice, "/buyballoon") == "🎈 Alice (🎈⚡⚡) ecco il tuo palloncino, gratis.");
+    CHECK(command_dispatch(alice, "/buyballoon") == "🎈 Alice (🎈⚡⚡) hai già un palloncino.");
+    /* Once it is gone, the next one is paid for. */
+    REQUIRE(command_dispatch(alice, "We @TheConquister37 🎈"));
+    CHECK(command_dispatch(alice, "/buyballoon") ==
+          "🎈 Alice il palloncino gratis l'hai già preso: uno nuovo costa 1000 palle, con We @Alice 🎈.");
+    CHECK(furniture_all(storage).at("tg:1") == "[]⚡⚡");
 }
 
 TEST_CASE("the quotes are open to the admins as well as to the owner") {

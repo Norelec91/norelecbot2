@@ -339,6 +339,17 @@ struct Profile {
                                       std::string_view account_name = {},
                                       /* A player seen for the first time is handed his 🎈, if it fits. */
                                       std::size_t furniture_limit = 10);
+enum class BalloonPortStatus { given, has_one, taken_already, full };
+
+struct BalloonPortResult {
+    BalloonPortStatus status = BalloonPortStatus::given;
+    /* How his name reads now. */
+    std::string shown;
+};
+
+/* The free 🎈 for whoever was left without one when balloons became emoji: once per player, and only
+   a try that hangs it counts. One with a full name can make room and ask again. */
+[[nodiscard]] BalloonPortResult balloon_port(Storage &storage, const std::string &player, std::size_t furniture_limit);
 /* Everybody starts with a 🎈: hands one, once, to every known player who has none and a free slot. */
 void balloons_hand_out(Storage &storage, std::size_t furniture_limit);
 enum class LinkStatus { pending, linked, unknown_account, conflict, self, already_linked };

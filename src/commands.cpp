@@ -900,6 +900,28 @@ std::string handle_debug(const CommandContext &context, std::string_view argumen
               : "🔧 Debug spento: i tuoi acquisti tornano a costare.";
 }
 
+/* "/buyballoon": temporary. The free 🎈 for whoever had no room for one when balloons became emoji. */
+std::string handle_buy_balloon(const CommandContext &context, std::string_view) {
+    if (context.username.empty()) {
+        return missing_username_reply();
+    }
+    const BalloonPortResult result = balloon_port(context.storage, std::string{context.player_key},
+                                                  static_cast<std::size_t>(context.config.furniture_limit));
+    switch (result.status) {
+    case BalloonPortStatus::has_one:
+        return std::format("🎈 {} ({}) hai già un palloncino.", context.username, result.shown);
+    case BalloonPortStatus::taken_already:
+        return std::format("🎈 {} il palloncino gratis l'hai già preso: uno nuovo costa {}, con We {} 🎈.",
+                           context.username, palle(context.config.balloon_cost), own_name(context));
+    case BalloonPortStatus::full:
+        return std::format("🎈 {} ({}) non hai un posto libero: liberane uno e riprova, il palloncino gratis ti aspetta.",
+                           context.username, result.shown);
+    case BalloonPortStatus::given:
+        break;
+    }
+    return std::format("🎈 {} ({}) ecco il tuo palloncino, gratis.", context.username, result.shown);
+}
+
 std::string handle_delete_quote(const CommandContext &context, std::string_view argument) {
     if (!trusted(context)) {
         return "Solo gli amministratori possono eliminare le citazioni.";
@@ -950,6 +972,7 @@ constexpr std::array commands{
     CommandDefinition{"/quotes", handle_quotes},
     CommandDefinition{"/delquote", handle_delete_quote},
     CommandDefinition{"/debug", handle_debug},
+    CommandDefinition{"/buyballoon", handle_buy_balloon},
 };
 
 const CommandDefinition *find_command(std::string_view name) {

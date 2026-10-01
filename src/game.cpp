@@ -43,6 +43,8 @@ bool is_smeared(const ConquisterState &state, const std::string &player, std::in
 Whereabouts site_of(const ConquisterState &state, const std::string &player, std::size_t slot, const Power &power);
 /* Hands a player the 🎈 everybody starts with, once, if he has none and a free slot. */
 void welcome(ConquisterState &state, const std::string &player, std::size_t limit);
+bool has_balloon(const ConquisterState &state, const std::string &player);
+bool hang_balloon(ConquisterState &state, const std::string &player, std::size_t limit);
 /* How many copies of a power's emoji hang on a name as the group sees it. */
 std::int64_t copies_of(const ConquisterState &state, const std::string &player, const Power &power);
 /* For every 🦞 on the claimer's name, the emoji the kicked holder has in that same slot. */
@@ -412,6 +414,26 @@ std::vector<std::string> known_players(const ConquisterState &state) {
     return players;
 }
 
+}
+
+BalloonPortResult balloon_port(Storage &storage, const std::string &player, std::size_t furniture_limit) {
+    const BalloonPortResult result = storage.transaction([&](StorageSession &session) {
+        ConquisterState &state = session.state();
+        BalloonPortResult outcome;
+        if (has_balloon(state, player)) {
+            outcome.status = BalloonPortStatus::has_one;
+        } else if (counter(state.balloon_ported, player) != 0) {
+            outcome.status = BalloonPortStatus::taken_already;
+        } else if (!hang_balloon(state, player, furniture_limit)) {
+            outcome.status = BalloonPortStatus::full;
+        } else {
+            state.balloon_ported[player] = 1;
+        }
+        outcome.shown = shown_furniture(state, player);
+        return outcome;
+    });
+    log_info("balloon port user={} status={}", player, static_cast<int>(result.status));
+    return result;
 }
 
 void balloons_hand_out(Storage &storage, std::size_t furniture_limit) {
@@ -1037,22 +1059,35 @@ bool give_emoji(ConquisterState &state, const std::string &player, const std::st
     return true;
 }
 
+bool has_balloon(const ConquisterState &state, const std::string &player) {
+    return std::ranges::any_of(slots_of(state, player), [](const std::string &slot) {
+        return is_power(slot, power::balloon);
+    });
+}
+
+/* Hangs a 🎈 in his first empty slot; false when there is none. It is his wherever he is now: it is
+   with him, not left at home. */
+bool hang_balloon(ConquisterState &state, const std::string &player, std::size_t limit) {
+    std::vector<std::string> slots = slots_of(state, player);
+    const std::optional<std::size_t> slot = free_slot(slots, limit);
+    if (!slot) {
+        return false;
+    }
+    if (*slot >= slots.size()) {
+        slots.resize(*slot + 1);
+    }
+    slots[*slot] = std::string{power::balloon.emoji};
+    hang(state, player, std::move(slots));
+    return true;
+}
+
 void welcome(ConquisterState &state, const std::string &player, std::size_t limit) {
     if (counter(state.welcomed, player) != 0) {
         return;
     }
     state.welcomed[player] = 1;
-    std::vector<std::string> slots = slots_of(state, player);
-    if (std::ranges::any_of(slots, [](const std::string &slot) { return is_power(slot, power::balloon); })) {
-        return;
-    }
-    /* It is his from the start, wherever he is now: it is with him, not left at home. */
-    if (const std::optional<std::size_t> slot = free_slot(slots, limit)) {
-        if (*slot >= slots.size()) {
-            slots.resize(*slot + 1);
-        }
-        slots[*slot] = std::string{power::balloon.emoji};
-        hang(state, player, std::move(slots));
+    if (!has_balloon(state, player)) {
+        static_cast<void>(hang_balloon(state, player, limit));
     }
 }
 

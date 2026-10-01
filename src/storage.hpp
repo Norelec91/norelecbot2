@@ -111,6 +111,8 @@ struct ConquisterState {
     Slots stayed;
     /* The players who were handed the 🎈 everybody starts with: nobody gets it twice. */
     Counters welcomed;
+    /* The players who took the free 🎈 of /buyballoon: it is given once. */
+    Counters balloon_ported;
 
     bool operator==(const ConquisterState &) const = default;
 };
