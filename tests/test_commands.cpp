@@ -438,7 +438,7 @@ TEST_CASE("We @someone sends the player out to rob them") {
         return command_dispatch(context, text).value_or("<nessuna risposta>");
     };
 
-    CHECK(reply("We @alice") == "🚀 bob parti per alice: arrivi tra 5 secondi. Il tuo pianeta resta scoperto.");
+    CHECK(reply("We @alice") == "🚀 bob parti per alice: arrivi tra 5 secondi. Casa tua resta scoperta.");
     CHECK(reply("We @alice") == "🚀 bob sei già in viaggio, torni tra 10 secondi.");
     /* Another player, who is at home and can therefore get an answer of his own. */
     context.username = "carol";
@@ -469,7 +469,7 @@ TEST_CASE("We @someone sends the player out to rob them") {
     context.username = "erin";
     context.user_id = 9;
     CHECK(reply("We @alice") ==
-          "🚀 erin razzie e consegne partono dal tuo pianeta: esci prima da @TheConquister37 con We @erin.");
+          "🚀 erin razzie e consegne partono da casa tua: esci prima da @TheConquister37 con We @erin.");
     context.username = "bob";
     context.user_id = 2;
 
@@ -543,7 +543,7 @@ TEST_CASE("the raids tell what happened") {
     event.target_on_telegram = true;
     event.undefended = true;
     CHECK(raid_event_reply(event) ==
-          "💰 bob hai rubato 250 palle a @alice, che non era sul suo pianeta! Torni in bob tra 52 secondi.");
+          "💰 bob hai rubato 250 palle a @alice, che non era a casa! Torni in bob tra 52 secondi.");
 
     event.undefended = false;
     event.balloon_held = true;
@@ -654,13 +654,13 @@ TEST_CASE("the help lists every We line with the asker's own name") {
     CHECK(help.starts_with("📖 Come si gioca\n\n"));
     CHECK(help.contains("\nWe @Alice 🍕 3 — appendi 🍕 nel posto 3\n"));
     CHECK_FALSE(help.contains("⚡"));
-    CHECK(help.contains("\nWe @Alice — torni sul tuo pianeta, dal posto o dal viaggio\n"));
+    CHECK(help.contains("\nWe @Alice — torni a casa tua, dal posto o dal viaggio\n"));
     CHECK(help.ends_with("\n/link <nome> — collega account Telegram e nick IRC Azzurra registrato"));
     CHECK(help.contains("\nWe @giocatore 500 — gli porti 500 palle\n"));
     CHECK(help.contains("\nWe @TheConquister37 🍕 — bruci una 🍕\n"));
     CHECK(help.contains("\n/leaderboard — classifica\n"));
     CHECK(help.contains("\n/profile [nome] — il tuo profilo o quello di un altro\n"));
-    CHECK(help.contains("Razzie e consegne partono solo dal tuo pianeta: da @TheConquister37 esci prima con We @Alice. "));
+    CHECK(help.contains("Razzie e consegne partono solo da casa tua: da @TheConquister37 esci prima con We @Alice. "));
 
     /* On IRC: bare nicks and the bang instead of the slash; the place keeps its @. */
     const std::string on_irc = command_dispatch(irc, "/help").value_or("");
@@ -699,14 +699,14 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     CHECK(command_dispatch(alice, "We @Bob 🍕🎈") == "🛋️ Alice una emoji per volta.");
     CHECK(command_dispatch(alice, "We @Bob 🍕 2") ==
           "🛋️ Alice la posizione si sceglie solo sul tuo nome: scrivi We @Bob 🍕.");
-    CHECK(command_dispatch(alice, "We @Bob 🚀") == "🎁 Alice non hai 🚀 nel pianeta.");
+    CHECK(command_dispatch(alice, "We @Bob 🚀") == "🎁 Alice non hai 🚀 in casa.");
     /* On her own name it is a purchase: one copy already hangs there, so the price doubles. */
     CHECK(command_dispatch(alice, "We @Alice 🍕")->contains("ce ne sono già 1 in giro"));
     CHECK(command_dispatch(alice, "We @Nessuno 🍕") == "🚀 Alice non conosco nessun giocatore di nome @Nessuno.");
 
     CHECK(command_dispatch(alice, "We @TheConquister37 🐟") ==
           "🔥 Alice hai riportato 🐟 in @TheConquister37: è uscita dal gioco.");
-    CHECK(command_dispatch(alice, "We @TheConquister37 🐟") == "🔥 Alice non hai 🐟 nel pianeta.");
+    CHECK(command_dispatch(alice, "We @TheConquister37 🐟") == "🔥 Alice non hai 🐟 in casa.");
     /* Two slots on her own name: the emoji change places. */
     CHECK(command_is_for_bot("We @Alice 1 2"));
     CHECK(command_dispatch(alice, "We @Alice 1 2") ==
@@ -731,27 +731,27 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     CHECK(command_dispatch(alice, "We @TheConquister37 💩") ==
           "@Alice, tiri una palla di cacca a @TheConquister37, bravo hai fatto centro, l'hai completamente smerdato!");
     CHECK(furniture_all(storage).at("tg:1") == "🍕🎈");
-    CHECK(command_dispatch(alice, "We @TheConquister37 💩") == "🔥 Alice non hai 💩 nel pianeta.");
+    CHECK(command_dispatch(alice, "We @TheConquister37 💩") == "🔥 Alice non hai 💩 in casa.");
 
     const std::string leaving = command_dispatch(alice, "We @Bob 🍕").value_or("");
     CHECK(leaving.starts_with("🚀 Alice parti per Bob con 🍕 da consegnare: arrivi tra "));
     CHECK(furniture_all(storage).at("tg:1") == "[]🎈");
     /* On the road she cannot buy, and the old command only points to the new way. */
     CHECK(command_dispatch(alice, "We @Alice 🚀") ==
-          "🛋️ Alice sei in viaggio: le emoji si appendono al nome dal tuo pianeta. Per tornare indietro scrivi We @Alice.");
+          "🛋️ Alice sei in viaggio: le emoji si appendono al nome da casa tua. Per tornare indietro scrivi We @Alice.");
     CHECK(command_dispatch(alice, "We @Alice 1 2") ==
-          "🛋️ Alice sei in viaggio: le emoji si spostano dal tuo pianeta. Per tornare indietro scrivi We @Alice.");
+          "🛋️ Alice sei in viaggio: le emoji si spostano da casa tua. Per tornare indietro scrivi We @Alice.");
     CHECK(command_dispatch(alice, "We @TheConquister37 🎈") ==
-          "🔥 Alice sei in viaggio: si brucia dal tuo pianeta o da @TheConquister37. Per tornare indietro scrivi We @Alice.");
+          "🔥 Alice sei in viaggio: si brucia da casa tua o da @TheConquister37. Per tornare indietro scrivi We @Alice.");
     CHECK(command_dispatch(alice, "We @TheConquister37 1") ==
-          "🔥 Alice sei in viaggio: si brucia dal tuo pianeta o da @TheConquister37. Per tornare indietro scrivi We @Alice.");
+          "🔥 Alice sei in viaggio: si brucia da casa tua o da @TheConquister37. Per tornare indietro scrivi We @Alice.");
 
     /* Once the pizza is handed over she is on her way back: nothing to turn around, just when she is home. */
     const std::int64_t later = std::chrono::duration_cast<std::chrono::seconds>(
         std::chrono::system_clock::now().time_since_epoch()).count() + 6;
     REQUIRE(raid_due(storage, later, RaidRules{}).size() == 1);
     const std::string back = command_dispatch(alice, "We @Alice 1 2").value_or("");
-    CHECK(back.starts_with("🛋️ Alice sei sulla via del ritorno: le emoji si spostano dal tuo pianeta. Rientri tra "));
+    CHECK(back.starts_with("🛋️ Alice sei sulla via del ritorno: le emoji si spostano da casa tua. Rientri tra "));
 
     RaidEvent given;
     given.kind = RaidEvent::Kind::delivered;
@@ -784,7 +784,7 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     given.no_room = true;
     given.target_emoji = "🐝🐝";
     CHECK(raid_event_reply(given) ==
-          "🎁 Alice @Bob (🐝🐝) non ha più posto per 🍕: te la riporti sul tuo pianeta. Torni in Alice tra 5 secondi.");
+          "🎁 Alice @Bob (🐝🐝) non ha più posto per 🍕: te la riporti a casa tua. Torni in Alice tra 5 secondi.");
 
     RaidEvent home;
     home.kind = RaidEvent::Kind::returned;
@@ -933,7 +933,7 @@ TEST_CASE("We with a number for somebody else sends the palle to them") {
 
     const std::string leaving = command_dispatch(alice, "We @Bob 400").value_or("");
     CHECK(leaving.contains("🚀 Alice parti per Bob con 400 palle da consegnare"));
-    CHECK(leaving.contains("Il tuo pianeta resta scoperto"));
+    CHECK(leaving.contains("Casa tua resta scoperta"));
     CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 600);
     /* Handed over only when he gets there, not when he sets off. */
     CHECK(conquister_user(storage, "Bob", RaidTargetKind::telegram)->score == 50);

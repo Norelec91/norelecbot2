@@ -301,7 +301,7 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
         return std::format("🚀 {} sei già in viaggio, torni tra {}.", username, format_wait(result.seconds));
     case RaidStatus::holding_place:
         /* Journeys are measured between planets, and the place is not on the map. */
-        return std::format("🚀 {} razzie e consegne partono dal tuo pianeta: esci prima da {} con We {}.",
+        return std::format("🚀 {} razzie e consegne partono da casa tua: esci prima da {} con We {}.",
                            username, conquister_place, home);
     case RaidStatus::unknown_target:
         return std::format("🚀 {} non conosco nessun giocatore di nome {}.", username, target);
@@ -328,7 +328,7 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
     case RaidStatus::invalid_amount:
         return std::format("🎁 {} indica un numero di palle maggiore di zero.", username);
     case RaidStatus::no_such_emoji:
-        return std::format("🎁 {} non hai {} nel pianeta.", username, gift_emoji);
+        return std::format("🎁 {} non hai {} in casa.", username, gift_emoji);
     case RaidStatus::no_room:
         return std::format("🎁 {} {} non ha posti liberi per {}.", username, target, gift_emoji);
     case RaidStatus::started:
@@ -336,7 +336,7 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
     }
     if (!gift_emoji.empty()) {
         return std::format(
-            "🚀 {} parti per {} con {} da consegnare: arrivi tra {}. Il tuo pianeta resta scoperto.",
+            "🚀 {} parti per {} con {} da consegnare: arrivi tra {}. Casa tua resta scoperta.",
             username,
             result.target,
             gift_emoji,
@@ -345,7 +345,7 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
     }
     if (gift > 0) {
         return std::format(
-            "🚀 {} parti per {} con {} da consegnare: arrivi tra {}. Il tuo pianeta resta scoperto.",
+            "🚀 {} parti per {} con {} da consegnare: arrivi tra {}. Casa tua resta scoperta.",
             username,
             result.target,
             palle(gift),
@@ -353,7 +353,7 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
         );
     }
     return std::format(
-        "🚀 {} parti per {}: arrivi tra {}. Il tuo pianeta resta scoperto.",
+        "🚀 {} parti per {}: arrivi tra {}. Casa tua resta scoperta.",
         username,
         result.target,
         format_wait(result.seconds)
@@ -415,7 +415,7 @@ std::string handle_burn(const CommandContext &context, std::int64_t amount) {
     case BurnStatus::insufficient_score:
         return std::format("🔥 {} hai solo {} a disposizione.", context.username, palle(result.score));
     case BurnStatus::travelling:
-        return on_the_road(context, "🔥", "si brucia dal tuo pianeta o da @TheConquister37.");
+        return on_the_road(context, "🔥", "si brucia da casa tua o da @TheConquister37.");
     case BurnStatus::burned:
         break;
     }
@@ -449,7 +449,7 @@ std::string handle_furniture_move(const CommandContext &context, const ParsedMov
     case FurnitureMoveStatus::same_position:
         return departure + std::format("🛋️ {} il posto di partenza e quello di arrivo sono lo stesso.", username);
     case FurnitureMoveStatus::not_home:
-        return on_the_road(context, "🛋️", "le emoji si spostano dal tuo pianeta.");
+        return on_the_road(context, "🛋️", "le emoji si spostano da casa tua.");
     case FurnitureMoveStatus::empty_slot:
         return departure + std::format("🛋️ {} nel posto {} non c'è nessuna emoji.", username, move.from);
     case FurnitureMoveStatus::swapped:
@@ -472,9 +472,9 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
                                                      seconds_now(), context.config.smeared_seconds);
     switch (burnt.status) {
     case FurnitureBurnStatus::travelling:
-        return on_the_road(context, "🔥", "si brucia dal tuo pianeta o da @TheConquister37.");
+        return on_the_road(context, "🔥", "si brucia da casa tua o da @TheConquister37.");
     case FurnitureBurnStatus::not_owned:
-        return std::format("🔥 {} non hai {} nel pianeta.", context.username, emoji);
+        return std::format("🔥 {} non hai {} in casa.", context.username, emoji);
     case FurnitureBurnStatus::burned:
         break;
     }
@@ -678,7 +678,7 @@ std::string handle_furniture(const CommandContext &context, std::string_view wan
     const std::string departure = departure_line(context, result.departure, now);
     switch (result.status) {
     case FurnitureStatus::not_home:
-        return on_the_road(context, "🛋️", "le emoji si appendono al nome dal tuo pianeta.");
+        return on_the_road(context, "🛋️", "le emoji si appendono al nome da casa tua.");
     case FurnitureStatus::full:
         return departure + std::format(
             "🛋️ {} hai già tutti i {} posti pieni: scegli quale sostituire con We {} <emoji> <posizione>. "
@@ -733,8 +733,8 @@ std::string handle_help(const CommandContext &context, std::string_view) {
         help += std::format("{} — {}\n", example, meaning);
     };
     line(std::format("We {}", conquister_place), "entri nel posto: 1 palla al secondo finché lo tieni");
-    line(std::format("We {}", me), "torni sul tuo pianeta, dal posto o dal viaggio");
-    line(std::format("We {} 🍕", me), "appendi 🍕 al nome nel primo posto libero, dal tuo pianeta");
+    line(std::format("We {}", me), "torni a casa tua, dal posto o dal viaggio");
+    line(std::format("We {} 🍕", me), "appendi 🍕 al nome nel primo posto libero, da casa tua");
     line(std::format("We {} 🍕 3", me), "appendi 🍕 nel posto 3");
     line(std::format("We {} 1 2", me), "sposti l'emoji dal posto 1 al posto 2");
     line(std::format("We {}", other), "parti per razziarlo");
@@ -742,8 +742,8 @@ std::string handle_help(const CommandContext &context, std::string_view) {
     line(std::format("We {} 🍕", other), "gli porti una 🍕");
     line(std::format("We {} 500", conquister_place), "bruci 500 palle");
     line(std::format("We {} 🍕", conquister_place), "bruci una 🍕");
-    help += std::format("\nDa {0} le righe col tuo nome ti riportano prima sul tuo pianeta. "
-                        "Razzie e consegne partono solo dal tuo pianeta: da {0} esci prima con We {1}. "
+    help += std::format("\nDa {0} le righe col tuo nome ti riportano prima a casa tua. "
+                        "Razzie e consegne partono solo da casa tua: da {0} esci prima con We {1}. "
                         "In viaggio si può solo tornare indietro: We {1}.\n", conquister_place, me);
     help += std::format("\n{0}leaderboard — classifica\n{0}profile [nome] — il tuo profilo o quello di un altro\n"
                         "{0}addquote <testo> — aggiungi una citazione\n"
@@ -957,7 +957,7 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
     }
     if (event.kind == RaidEvent::Kind::delivered && !event.gift_emoji.empty()) {
         if (event.no_room) {
-            return std::format("🎁 {} {}{} non ha più posto per {}: te la riporti sul tuo pianeta. Torni in {} tra {}.",
+            return std::format("🎁 {} {}{} non ha più posto per {}: te la riporti a casa tua. Torni in {} tra {}.",
                                raider, mention, target, event.gift_emoji, home, format_wait(event.seconds));
         }
         if (event.gift_emoji == "💩") {
@@ -993,7 +993,7 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
         ? std::format("💰 {} hai bucato il palloncino di {}{} e rubato {}", raider, mention, target, palle(event.loot))
         : std::format("💰 {} hai rubato {} a {}{}", raider, palle(event.loot), mention, target);
     if (event.undefended) {
-        reply += ", che non era sul suo pianeta";
+        reply += ", che non era a casa";
     }
     reply += std::format("! Torni in {} tra {}.", home, format_wait(event.seconds));
     if (event.spared > 0) {
