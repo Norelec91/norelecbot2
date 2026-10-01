@@ -360,6 +360,20 @@ std::size_t StorageSession::random_index(std::size_t count) {
     return distribution(storage_.random_);
 }
 
+void StorageSession::backup(std::string_view tag) const {
+    const std::string &path = storage_.conquister_path_;
+    if (file_missing(path, "Conquister state")) {
+        return;
+    }
+    std::error_code error;
+    std::filesystem::copy_file(path, std::format("{}.{}", path, tag),
+                               std::filesystem::copy_options::overwrite_existing, error);
+    if (error) {
+        log_error("Could not back up {}: {}", path, error.message());
+        throw StorageError("Conquister state backup failed");
+    }
+}
+
 void StorageSession::save() const {
     bool quotes_saved = false;
     if (quotes_ && quotes_->current != quotes_->original) {

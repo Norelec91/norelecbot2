@@ -43,12 +43,14 @@ inline constexpr Power lobster{"🦞", PowerKind::carried, "when he enters @TheC
 inline constexpr Power poo{"💩", PowerKind::thrown, "when it lands", "makes whoever it hits \"lo smerdato\" for a while"};
 inline constexpr Power bomb{"💣", PowerKind::thrown, "when it lands",
                             "takes one emoji with a power among those that are where it lands"};
+inline constexpr Power nuke{"☢️", PowerKind::thrown, "when it lands on @TheConquister37",
+                            "starts the game over: no palle, no emoji, nobody anywhere"};
 
 }
 
 /* Every emoji with a power: a new one is a row here, of a declared kind, plus what it does. */
-inline constexpr std::array powers{power::pleading, power::rocket, power::bolt,
-                                   power::lobster,  power::poo,    power::bomb};
+inline constexpr std::array powers{power::pleading, power::rocket, power::bolt, power::lobster,
+                                   power::poo,      power::bomb,   power::nuke};
 
 /* Whether an emoji is that power's, drawn in colour or not. */
 [[nodiscard]] bool is_power(std::string_view emoji, const Power &power);
@@ -131,7 +133,9 @@ enum class RaidStatus {
     invalid_amount,
     /* Only when an emoji is taken along: he has none like it, or the target has no empty slot. */
     no_such_emoji,
-    no_room
+    no_room,
+    /* Only when an emoji is taken along: it is one that can only be thrown at @TheConquister37. */
+    place_only
 };
 
 enum class RaidTargetKind { any, telegram, irc };
@@ -375,6 +379,8 @@ struct FurnitureBurnResult {
     std::vector<std::string> blown{};
     /* The 💣 was a dud: what it took is the thrower's own, among what he had with him. */
     bool backfired = false;
+    /* It was a ☢️: the game started over. */
+    bool reset = false;
 };
 
 /* An emoji brought back to @TheConquister37 leaves the game too: the first slot that holds it is

@@ -862,6 +862,46 @@ TEST_CASE("a 💩 thrown at the place makes the holder \"lo smerdato\" for a day
     CHECK(storage.transaction([](StorageSession &session) { return session.state().smeared.empty(); }));
 }
 
+TEST_CASE("the ☢️ costs a fortune, goes only to the place and starts the game over") {
+    const TestPaths paths{"nuke-command-test"};
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{config.conquister_path, config.quotes_path};
+    const CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
+    const CommandContext bob{.storage = storage, .config = config, .user_id = 2, .username = "Bob"};
+    REQUIRE(command_dispatch(bob, "We @TheConquister37"));
+    REQUIRE(command_dispatch(alice, "/profile"));
+    storage.transaction([](StorageSession &session) {
+        session.state().scores["tg:1"] = 999'999'999;
+        session.state().furniture["tg:2"] = "☢️";
+        return 0;
+    });
+    /* A palla short of a billion, whatever copies are around. */
+    CHECK(command_dispatch(alice, "We @Alice ☢️").value_or("").contains("1000000000"));
+    CHECK(storage.transaction([](StorageSession &session) { return session.state().furniture.count("tg:1"); }) == 0);
+    storage.transaction([](StorageSession &session) {
+        session.state().scores["tg:1"] = 1'000'000'007;
+        return 0;
+    });
+    REQUIRE(command_dispatch(alice, "We @Alice ☢️"));
+    CHECK(furniture_all(storage).at("tg:1") == "☢️");
+    CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 7);
+
+    CHECK(command_dispatch(alice, "We @Bob ☢️") == "☢️ Alice la bomba nucleare si sgancia solo su @TheConquister37.");
+    CHECK(command_dispatch(alice, "We @TheConquister37 ☢️") ==
+          "☢️ Alice ha sganciato la bomba nucleare su @TheConquister37: il gioco riparte da zero. Tutti senza palle e "
+          "senza emoji, il posto è vuoto e nessuno è in viaggio.");
+    CHECK(furniture_all(storage).empty());
+    CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 0);
+    CHECK_FALSE(conquister_user(storage, "Bob", RaidTargetKind::telegram)->in_conquister);
+    for (const auto &entry : std::filesystem::directory_iterator{"."}) {
+        if (entry.path().filename().string().starts_with(paths.conquister + ".before-reset-")) {
+            std::filesystem::remove(entry.path());
+        }
+    }
+}
+
 TEST_CASE("the quotes are open to the admins as well as to the owner") {
     const TestPaths paths{"admin-command-test"};
     AppConfig config;

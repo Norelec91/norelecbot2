@@ -9,6 +9,7 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <format>
 #include <iterator>
 #include <limits>
 #include <map>
@@ -1048,6 +1049,25 @@ void lose_bolts(ConquisterState &state, std::int64_t now, zodiac::Overrides sign
 
 }
 
+namespace {
+
+/* A ☢️ on @TheConquister37 starts the game over: everybody back to no palle and no emoji, nobody in
+   the place or on the road, every balloon new. Who the players are, where they live and the quotes stay. */
+void start_over(ConquisterState &state) {
+    for (auto &[player, score] : state.scores) {
+        score = 0;
+    }
+    state.current.reset();
+    state.furniture.clear();
+    state.raids.clear();
+    state.balloons.clear();
+    state.cooldowns.clear();
+    state.smeared.clear();
+    state.stayed.clear();
+}
+
+}
+
 FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, const std::string &emoji,
                                    std::int64_t now, const RaidRules &rules) {
     const FurnitureBurnResult result = storage.transaction([&](StorageSession &session) {
@@ -1059,6 +1079,12 @@ FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, 
         }
         if (!take_emoji(state, player, emoji)) {
             outcome.status = FurnitureBurnStatus::not_owned;
+            return outcome;
+        }
+        if (is_power(emoji, power::nuke)) {
+            session.backup(std::format("before-reset-{}", now));
+            start_over(state);
+            outcome.reset = true;
             return outcome;
         }
         outcome.shown = shown_furniture(state, player);
@@ -1077,7 +1103,10 @@ FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, 
         lose_bolts(state, now, rules.signs);
         return outcome;
     });
-    if (result.status == FurnitureBurnStatus::burned) {
+    if (result.reset) {
+        log_warning("GAME RESET by user={} with {}: the state before it is in the before-reset-{} backup", player,
+                    emoji, now);
+    } else if (result.status == FurnitureBurnStatus::burned) {
         log_info("emoji burned user={} emoji={} hit={}", player, emoji, result.hit);
     }
     return result;
@@ -1308,6 +1337,10 @@ RaidResult raid_start(
         if (!gift_emoji.empty()) {
             if (!has_emoji(state, username, gift_emoji)) {
                 outcome.status = RaidStatus::no_such_emoji;
+                return outcome;
+            }
+            if (is_power(gift_emoji, power::nuke)) {
+                outcome.status = RaidStatus::place_only;
                 return outcome;
             }
             /* What is thrown is not hung: it needs no room on the target's name. */

@@ -8,6 +8,7 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
 
+#include <filesystem>
 #include <fstream>
 #include <chrono>
 
@@ -1058,6 +1059,8 @@ TEST_CASE("every emoji with a power is listed once, with its kind") {
     CHECK(power::lobster.kind == PowerKind::carried);
     CHECK(power::poo.kind == PowerKind::thrown);
     CHECK(power::bomb.kind == PowerKind::thrown);
+    CHECK(power::nuke.kind == PowerKind::thrown);
+    CHECK(power_of("☢") == &powers[6]);
     CHECK(power_of("💣") == &powers[5]);
     CHECK(power_of("🍕") == nullptr);
     /* Drawn in colour or not, it is the same emoji. */
@@ -1212,6 +1215,47 @@ TEST_CASE("an emoji hung while its owner is out is at home, even of a kind he wo
     REQUIRE(raid_start(storage, 2, "bob", "bob", 30, quick_rides()).status == RaidStatus::left_place);
     REQUIRE(raid_start(storage, 2, "bob", "alice", 30, quick_rides()).status == RaidStatus::started);
     CHECK(storage.transaction([](StorageSession &session) { return session.state().stayed.count("bob") == 0; }));
+}
+
+TEST_CASE("a ☢️ on the place starts the game over, and only there") {
+    const TestPaths paths{"nuke-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":0,"username":"bob","since":0},)"
+             << R"("scores":{"alice":5,"bob":900,"carol":70},"quotes_added":{"bob":3},)"
+             << R"("balloons":{"bob":2},"cooldowns":{"carol":99999},"ids":{"alice":1,"bob":2,"carol":3},)"
+             << R"("telegram_ids":{"alice":11},"smeared":{"carol":99999},"stayed":{"bob":[0]},)"
+             << R"("raids":[{"raider":"carol","target":"alice","arrive":50,"back":100,"arrived":false,)"
+             << R"("loot":0,"gift":0,"gift_emoji":""}],)"
+             << R"("furniture":{"alice":"🍕☢️","bob":"⚡","carol":"🥺"}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    /* It is not something to bring to a player: she keeps it. */
+    CHECK(raid_start(storage, 0, "alice", "bob", 10, quick_rides(), RaidTargetKind::any, 0, "☢️").status ==
+          RaidStatus::place_only);
+    CHECK(furniture_all(storage).at("alice") == "🍕☢️");
+
+    const FurnitureBurnResult dropped = furniture_burn(storage, "alice", "☢️", 500);
+    CHECK(dropped.status == FurnitureBurnStatus::burned);
+    CHECK(dropped.reset);
+    const ConquisterState after = storage.transaction([](StorageSession &session) { return session.state(); });
+    /* Everybody is still a player, at nothing. */
+    CHECK(after.scores == Counters{{"alice", 0}, {"bob", 0}, {"carol", 0}});
+    CHECK_FALSE(after.current);
+    CHECK(after.furniture.empty());
+    CHECK(after.raids.empty());
+    CHECK(after.balloons.empty());
+    CHECK(after.cooldowns.empty());
+    CHECK(after.smeared.empty());
+    CHECK(after.stayed.empty());
+    /* Who they are, where they live and what they quoted stay. */
+    CHECK(after.ids == Counters{{"alice", 1}, {"bob", 2}, {"carol", 3}});
+    CHECK(after.telegram_ids == Counters{{"alice", 11}});
+    CHECK(after.quotes_added == Counters{{"bob", 3}});
+    /* The game as it was is kept beside the state. */
+    const std::string backup = paths.conquister + ".before-reset-500";
+    CHECK(read_json(backup).at("scores").at("bob") == 900);
+    std::filesystem::remove(backup);
 }
 
 TEST_CASE("a pile of poo is thrown, not hung: a full name takes it and keeps nothing") {

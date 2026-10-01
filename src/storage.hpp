@@ -11,6 +11,7 @@
 #include <random>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -122,6 +123,9 @@ public:
     ConquisterState &state();
     Quotes &quotes();
     [[nodiscard]] std::size_t random_index(std::size_t count);
+    /* Copies the state as it is on disk, before this transaction, beside it under a name ending in the
+       tag; throws if it cannot. A state never saved has nothing to copy. */
+    void backup(std::string_view tag) const;
 
 private:
     friend class Storage;

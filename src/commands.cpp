@@ -332,6 +332,8 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
         return std::format("🎁 {} non hai {} in casa.", username, gift_emoji);
     case RaidStatus::no_room:
         return std::format("🎁 {} {} non ha posti liberi per {}.", username, target, gift_emoji);
+    case RaidStatus::place_only:
+        return std::format("☢️ {} la bomba nucleare si sgancia solo su {}.", username, conquister_place);
     case RaidStatus::started:
         break;
     }
@@ -486,6 +488,10 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
         return std::format("🔥 {} non hai {} in casa.", context.username, emoji);
     case FurnitureBurnStatus::burned:
         break;
+    }
+    if (burnt.reset) {
+        return std::format("☢️ {} ha sganciato la bomba nucleare su {}: il gioco riparte da zero. Tutti senza palle e "
+                           "senza emoji, il posto è vuoto e nessuno è in viaggio.", context.username, conquister_place);
     }
     if (is_power(emoji, power::poo)) {
         /* Whoever holds the place takes it full in the face. */
@@ -689,7 +695,10 @@ std::string handle_furniture(const CommandContext &context, std::string_view wan
         return missing_username_reply();
     }
     const std::string username{context.username};
-    const int cost = price(context, context.config.furniture_cost);
+    /* The ☢️ has a price of its own, which does not grow with the copies in the game. */
+    const bool nuke = is_power(wanted, power::nuke);
+    const int cost = price(context, nuke ? context.config.nuke_cost : context.config.furniture_cost);
+    const int inflation = nuke ? 0 : context.config.furniture_inflation;
     const auto limit = static_cast<std::size_t>(context.config.furniture_limit);
     if (slot && (*slot < 1 || static_cast<std::uint64_t>(*slot) > limit)) {
         return std::format("🛋️ {} i posti vanno da 1 a {}: nessun addebito.", username, limit);
@@ -698,8 +707,7 @@ std::string handle_furniture(const CommandContext &context, std::string_view wan
     const std::string emoji{wanted};
     const std::int64_t now = seconds_now();
     const FurnitureResult result = furniture_buy(context.storage, std::string{context.player_key}, emoji, position,
-                                                 cost, limit, now, context.config.zodiac_signs,
-                                                 context.config.furniture_inflation);
+                                                 cost, limit, now, context.config.zodiac_signs, inflation);
     const std::string departure = departure_line(context, result.departure, now);
     switch (result.status) {
     case FurnitureStatus::not_home:
