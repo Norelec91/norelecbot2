@@ -160,6 +160,9 @@ constexpr std::array settings{
     Setting{"NORELECBOT_ALARM_PERCENT", [](AppConfig &config, std::string_view value) {
         return set_number(config.alarm_percent, value, AppConfig::default_alarm_percent, 0, 100);
     }},
+    Setting{"NORELECBOT_VORTEX_COST", [](AppConfig &config, std::string_view value) {
+        return set_number(config.vortex_cost, value, AppConfig::default_vortex_cost, 0);
+    }},
     Setting{"NORELECBOT_CONQUISTER_CHAT_ID", [](AppConfig &config, std::string_view value) {
         return set_number(config.conquister_chat_id, value, std::int64_t{0});
     }},

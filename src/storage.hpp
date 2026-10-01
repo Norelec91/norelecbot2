@@ -113,6 +113,8 @@ struct ConquisterState {
     Counters welcomed;
     /* The players who took the free 🎈 of /buyballoon: it is given once. */
     Counters balloon_ported;
+    /* The players a 🌀 flung far away, and when: a year of road from everybody and from @TheConquister37. */
+    Counters flung;
 
     bool operator==(const ConquisterState &) const = default;
 };

@@ -184,6 +184,7 @@ ConquisterState parse_state(const Json &json) {
         parse_slots(json, "stayed"),
         parse_counters(json, "welcomed"),
         parse_counters(json, "balloon_ported"),
+        parse_counters(json, "flung"),
     };
     return state;
 }
@@ -243,6 +244,7 @@ Json state_to_json(const ConquisterState &state) {
         {"stayed", state.stayed},
         {"welcomed", state.welcomed},
         {"balloon_ported", state.balloon_ported},
+        {"flung", state.flung},
     };
 }
 

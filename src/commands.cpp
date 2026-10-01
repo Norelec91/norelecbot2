@@ -221,10 +221,14 @@ std::string palle(std::int64_t count) {
 
 std::string format_wait(std::int64_t seconds) {
     /* Exact, largest unit first, the empty ones left out: "1 ora e 5 secondi", "23 ore, 59 minuti e 30 secondi". */
-    const std::int64_t hours = seconds / 3600;
+    const std::int64_t days = seconds / 86400;
+    const std::int64_t hours = seconds % 86400 / 3600;
     const std::int64_t minutes = seconds % 3600 / 60;
     const std::int64_t rest = seconds % 60;
     std::vector<std::string> parts;
+    if (days > 0) {
+        parts.push_back(std::format("{} giorn{}", days, days == 1 ? "o" : "i"));
+    }
     if (hours > 0) {
         parts.push_back(std::format("{} or{}", hours, hours == 1 ? "a" : "e"));
     }
@@ -239,6 +243,12 @@ std::string format_wait(std::int64_t seconds) {
         text += (index + 1 == parts.size() ? " e " : ", ") + parts[index];
     }
     return text;
+}
+
+/* What whoever a 🌀 flung away is told when he tries for the place. */
+std::string too_far_reply(std::string_view username) {
+    return std::format("{} una 🌀 ti ha scaraventato lontano: {} è a un anno di viaggio, da lì non ci arrivi.", username,
+                       conquister_place);
 }
 
 std::string missing_username_reply() {
@@ -429,6 +439,8 @@ std::string handle_burn(const CommandContext &context, std::int64_t amount) {
         return std::format("{} hai solo {} a disposizione.", context.username, palle(result.score));
     case BurnStatus::travelling:
         return on_the_road(context, "si brucia da casa tua o da @TheConquister37.");
+    case BurnStatus::too_far:
+        return too_far_reply(context.username);
     case BurnStatus::burned:
         break;
     }
@@ -488,6 +500,8 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
         return on_the_road(context, "si brucia da casa tua o da @TheConquister37.");
     case FurnitureBurnStatus::not_owned:
         return std::format("{} non hai {} in casa.", context.username, emoji);
+    case FurnitureBurnStatus::too_far:
+        return too_far_reply(context.username);
     case FurnitureBurnStatus::burned:
         break;
     }
@@ -499,6 +513,10 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
         /* Whoever holds the place takes it full in the face. */
         return poo_throw(own_name(context), burnt.hit.empty() ? std::string{conquister_place}
             : std::format("{}{} in {}", burnt.hit_on_telegram ? "@" : "", burnt.hit, conquister_place));
+    }
+    if (burnt.flung) {
+        return std::format("{} scaraventi {}{} fuori da {} e lontanissimo: ora è a un anno di viaggio da tutti e dal "
+                           "posto.", context.username, burnt.hit_on_telegram ? "@" : "", burnt.hit, conquister_place);
     }
     if (is_power(emoji, power::bomb) && !burnt.hit.empty()) {
         std::string blown;
@@ -551,6 +569,9 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
         );
     /* A name that came from IRC must not be written as a mention: on Telegram it would tag a stranger. */
     const std::string_view mention = result.previous_user_id != 0 ? "@" : "";
+    if (result.status == ClaimStatus::too_far) {
+        return too_far_reply(username);
+    }
     if (result.status == ClaimStatus::travelling) {
         return std::format(
             "{} sei per strada: non puoi entrare in {} prima di tornare in {}{}, tra {}.",
@@ -703,12 +724,12 @@ std::string handle_furniture(const CommandContext &context, std::string_view wan
         return missing_username_reply();
     }
     const std::string username{context.username};
-    /* The ☢️ and the 🎈 have prices of their own, which do not grow with the copies in the game. */
-    const bool nuke = is_power(wanted, power::nuke);
-    const bool balloon = is_power(wanted, power::balloon);
-    const int cost = price(context, nuke ? context.config.nuke_cost
-                                    : balloon ? context.config.balloon_cost : context.config.furniture_cost);
-    const int inflation = nuke || balloon ? 0 : context.config.furniture_inflation;
+    /* The ☢️, the 🌀 and the 🎈 have prices of their own, which do not grow with the copies in the game. */
+    const std::optional<int> fixed = is_power(wanted, power::nuke) ? std::optional{context.config.nuke_cost}
+        : is_power(wanted, power::vortex) ? std::optional{context.config.vortex_cost}
+        : is_power(wanted, power::balloon) ? std::optional{context.config.balloon_cost} : std::nullopt;
+    const int cost = price(context, fixed.value_or(context.config.furniture_cost));
+    const int inflation = fixed ? 0 : context.config.furniture_inflation;
     const auto limit = static_cast<std::size_t>(context.config.furniture_limit);
     if (slot && (*slot < 1 || static_cast<std::uint64_t>(*slot) > limit)) {
         return std::format("{} i posti vanno da 1 a {}: nessun addebito.", username, limit);
@@ -824,6 +845,9 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
     card += std::format("{} {}: oggi è giorno di {}, {}\n", sign.symbol, sign.name,
                         zodiac::element_name(zodiac::element_of_day(now)),
                         multiplier_text(percent));
+    if (profile.flung) {
+        card += "scaraventato lontano da una 🌀: a un anno di viaggio da tutti\n";
+    }
     switch (profile.place) {
     case Whereabouts::home:
         card += std::format("a casa, in {}{}\n", profile.on_telegram ? "@" : "", profile.name);
@@ -1031,7 +1055,9 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
             for (const std::string &emoji : event.blown) {
                 blown += emoji;
             }
-            const std::string what = is_power(event.gift_emoji, power::poo) ? "ora lo smerdato sei tu"
+            const std::string what = is_power(event.gift_emoji, power::vortex)
+                ? "vieni scaraventato lontanissimo, a un anno di viaggio da tutti e dal posto"
+                : is_power(event.gift_emoji, power::poo) ? "ora lo smerdato sei tu"
                 : is_power(event.gift_emoji, power::nuke) ? "riparti da zero, senza palle e con il solo 🎈 di partenza"
                 : blown.empty() ? "esplode a casa tua ma non trova niente da portarsi via"
                 : std::format("esplode a casa tua e si porta via {}", blown);
@@ -1040,6 +1066,11 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
         }
         if (is_power(event.gift_emoji, power::poo)) {
             return poo_throw(home, std::format("{}{}", mention, event.target));
+        }
+        if (event.flung) {
+            return std::format("{} scaraventi {}{} lontanissimo: ora è a un anno di viaggio da tutti e da {}. Torni "
+                               "in {} tra {}.", raider, mention, event.target, conquister_place, home,
+                               format_wait(event.seconds));
         }
         if (is_power(event.gift_emoji, power::nuke)) {
             return std::format("{} ha sganciato la bomba nucleare su casa di {}{}: riparte da zero, senza palle e "

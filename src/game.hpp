@@ -53,6 +53,8 @@ inline constexpr Power ninja{"🥷", PowerKind::carried, "when he reaches a hous
                              "each is a chance of slipping past the 🎈 and the 🐶 that guard it"};
 inline constexpr Power alarm{"🔊", PowerKind::home, "when a raider with a 🥷 reaches the house",
                              "each takes a share off his chance of slipping past unnoticed"};
+inline constexpr Power vortex{"🌀", PowerKind::thrown, "when it lands",
+                              "flings whoever it hits a year of road away from everybody and from the place"};
 inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries to get past it, where its owner is",
                                "holds off whoever comes for his place or his house until it pops, then is as good as new"};
 
@@ -61,14 +63,19 @@ inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries 
 /* Every emoji with a power: a new one is a row here, of a declared kind, plus what it does. */
 inline constexpr std::array powers{power::pleading, power::rocket, power::bolt, power::lobster,
                                    power::poo,      power::bomb,   power::nuke, power::dog,
-                                   power::balloon,  power::mailbox, power::ninja, power::alarm};
+                                   power::balloon,  power::mailbox, power::ninja, power::alarm,
+                                   power::vortex};
 
 /* Whether an emoji is that power's, drawn in colour or not and whatever the tone of its skin. */
 [[nodiscard]] bool is_power(std::string_view emoji, const Power &power);
 /* The power an emoji has, or nothing for one that only hangs there. */
 [[nodiscard]] const Power *power_of(std::string_view emoji);
 
-enum class ClaimStatus { taken, already_held, defended, cooldown, travelling };
+/* too_far: a 🌀 flung him a year of road away from the place. */
+enum class ClaimStatus { taken, already_held, defended, cooldown, travelling, too_far };
+
+/* How far a 🌀 flings a player from everything: every ride to or from him takes this long. */
+inline constexpr std::int64_t flung_seconds = std::int64_t{365} * 24 * 60 * 60;
 
 struct ClaimResult {
     ClaimStatus status = ClaimStatus::taken;
@@ -151,7 +158,7 @@ enum class RaidStatus {
 
 enum class RaidTargetKind { any, telegram, irc };
 
-enum class BurnStatus { burned, invalid_amount, insufficient_score, travelling };
+enum class BurnStatus { burned, invalid_amount, insufficient_score, travelling, too_far };
 
 struct BurnResult {
     BurnStatus status = BurnStatus::burned;
@@ -231,6 +238,8 @@ struct RaidEvent {
     bool backfired = false;
     /* delivered, with a ☢️: the target starts over. */
     bool reset = false;
+    /* delivered, with a 🌀: the target was flung far away. */
+    bool flung = false;
     /* delivered, with something thrown: a 📮 sent it back, and what it did it did to the raider, at his
        own house. */
     bool sent_back = false;
@@ -327,6 +336,8 @@ struct Profile {
     std::string furniture;
     /* Hit by a 💩 not long ago: he is "lo smerdato". */
     bool smeared = false;
+    /* Flung by a 🌀: a year of road from everything. */
+    bool flung = false;
     /* Whether he plays from Telegram, where his home is written with the mention. */
     bool on_telegram = false;
     std::int64_t score = 0;
@@ -414,7 +425,7 @@ void debug_set(Storage &storage, const std::string &username, bool wanted);
 
 /* Palle brought back to @TheConquister37 leave the game: nobody receives them. Not from the road. */
 [[nodiscard]] BurnResult palle_burn(Storage &storage, const std::string &player, std::int64_t amount);
-enum class FurnitureBurnStatus { burned, not_owned, travelling };
+enum class FurnitureBurnStatus { burned, not_owned, travelling, too_far };
 
 struct FurnitureBurnResult {
     FurnitureBurnStatus status = FurnitureBurnStatus::burned;
@@ -430,6 +441,8 @@ struct FurnitureBurnResult {
     bool backfired = false;
     /* It was a ☢️: the game started over. */
     bool reset = false;
+    /* It was a 🌀: whoever held the place was flung far away. */
+    bool flung = false;
 };
 
 /* An emoji brought back to @TheConquister37 leaves the game too: the first slot that holds it is
