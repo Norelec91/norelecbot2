@@ -1076,6 +1076,7 @@ TEST_CASE("every emoji with a power is listed once, with its kind") {
     CHECK(power_of("☢") == &powers[6]);
     CHECK(power::dog.kind == PowerKind::home);
     CHECK(power::balloon.kind == PowerKind::carried);
+    CHECK(power::mailbox.kind == PowerKind::home);
     CHECK(power_of("💣") == &powers[5]);
     CHECK(power_of("🍕") == nullptr);
     /* Drawn in colour or not, it is the same emoji. */
@@ -1359,6 +1360,56 @@ TEST_CASE("a 🐶 at home may catch a raider, who then takes nothing") {
     REQUIRE(arrival.size() == 1);
     CHECK_FALSE(arrival[0].intercepted);
     CHECK(arrival[0].loot == 100);
+}
+
+TEST_CASE("a 📮 at home may send back what is thrown at the house") {
+    const TestPaths paths{"mailbox-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":50,"bob":50},"quotes_added":{},)"
+             << R"("furniture":{"alice":"🥺💩💣☢️🍕","bob":"📮📮🍕"}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    RaidRules rules = quick_rides();
+    /* Two of them at fifty each never miss. */
+    rules.mailbox_percent = 50;
+    const auto thrown = [&](const char *emoji, std::int64_t now) {
+        REQUIRE(raid_start(storage, 0, "alice", "bob", now, rules, RaidTargetKind::any, 0, emoji).status ==
+                RaidStatus::started);
+        const std::vector<RaidEvent> arrival = raid_due(storage, now + 5, rules);
+        REQUIRE_FALSE(arrival.empty());
+        static_cast<void>(raid_due(storage, now + 10, rules));
+        return arrival[0];
+    };
+
+    /* The 💩 comes back: it is alice who is "lo smerdato", bob is clean. */
+    const RaidEvent poo = thrown("💩", 0);
+    CHECK(poo.sent_back);
+    CHECK(poo.raider_smeared);
+    CHECK_FALSE(poo.target_smeared);
+    CHECK(smeared_all(storage, 5) == std::vector<std::string>{"alice"});
+
+    /* The 💣 goes off at her house, among what she left there, and takes nothing of his. */
+    const RaidEvent bomb = thrown("💣", 20);
+    CHECK(bomb.sent_back);
+    REQUIRE(bomb.blown.size() == 1);
+    CHECK((bomb.blown[0] == "🥺" || bomb.blown[0] == "☢️"));
+    CHECK(furniture_all(storage).at("bob") == "📮📮🍕");
+
+    /* A present is not something thrown: it is delivered as ever. */
+    const RaidEvent present = thrown("🍕", 40);
+    CHECK_FALSE(present.sent_back);
+    CHECK(furniture_all(storage).at("bob") == "📮📮🍕🍕");
+
+    /* With no chance to give, a 📮 is only an emoji. */
+    rules.mailbox_percent = 0;
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["alice"] = "💩";
+        return 0;
+    });
+    const RaidEvent plain = thrown("💩", 60);
+    CHECK_FALSE(plain.sent_back);
+    CHECK(plain.target_smeared);
 }
 
 TEST_CASE("a pile of poo is thrown, not hung: a full name takes it and keeps nothing") {

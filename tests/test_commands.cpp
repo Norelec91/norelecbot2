@@ -799,6 +799,13 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     bomb.blown = {"🥺", "⚡"};
     CHECK(raid_event_reply(bomb) ==
           "💣 Alice la tua bomba esplode in casa di @Bob (🍕) e si porta via 🥺⚡! Torni in Alice tra 5 secondi.");
+    RaidEvent bounced = bomb;
+    bounced.sent_back = true;
+    CHECK(raid_event_reply(bounced) == "📮 La cassetta di @Bob rispedisce 💣 al mittente: Alice esplode a casa tua e si "
+                                       "porta via 🥺⚡! Torni in Alice tra 5 secondi.");
+    bounced.gift_emoji = "💩";
+    CHECK(raid_event_reply(bounced) == "📮 La cassetta di @Bob rispedisce 💩 al mittente: Alice ora lo smerdato sei tu! "
+                                       "Torni in Alice tra 5 secondi.");
     bomb.backfired = true;
     CHECK(raid_event_reply(bomb) ==
           "💣 Alice la bomba era difettosa: ti esplode in mano e si porta via 🥺⚡! Torni in Alice tra 5 secondi.");

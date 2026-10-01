@@ -273,6 +273,7 @@ RaidRules raid_rules(const CommandContext &context) {
         .pleading_percent = context.config.pleading_percent,
         .bomb_dud_percent = context.config.bomb_dud_percent,
         .dog_percent = context.config.dog_percent,
+        .mailbox_percent = context.config.mailbox_percent,
     };
 }
 
@@ -1016,6 +1017,18 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
         if (event.no_room) {
             return std::format("🎁 {} {}{} non ha più posto per {}: te la riporti a casa tua. Torni in {} tra {}.",
                                raider, mention, target, event.gift_emoji, home, format_wait(event.seconds));
+        }
+        if (event.sent_back) {
+            std::string blown;
+            for (const std::string &emoji : event.blown) {
+                blown += emoji;
+            }
+            const std::string what = is_power(event.gift_emoji, power::poo) ? "ora lo smerdato sei tu"
+                : is_power(event.gift_emoji, power::nuke) ? "riparti da zero, senza palle e con il solo 🎈 di partenza"
+                : blown.empty() ? "esplode a casa tua ma non trova niente da portarsi via"
+                : std::format("esplode a casa tua e si porta via {}", blown);
+            return std::format("📮 La cassetta di {}{} rispedisce {} al mittente: {} {}! Torni in {} tra {}.", mention,
+                               event.target, event.gift_emoji, event.raider, what, home, format_wait(event.seconds));
         }
         if (is_power(event.gift_emoji, power::poo)) {
             return poo_throw(home, std::format("{}{}", mention, event.target));

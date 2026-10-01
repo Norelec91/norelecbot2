@@ -38,6 +38,8 @@ struct AppConfig {
     static constexpr int default_dog_percent = 10;
     /* What a new 🎈 costs once the one everybody starts with has popped. */
     static constexpr int default_balloon_cost = 1000;
+    /* The chance, in percent, that each 📮 on a name gives of sending back what is thrown at the house. */
+    static constexpr int default_mailbox_percent = 10;
     static constexpr int default_api_port = 8000;
     static constexpr int default_irc_port = 6697;
     static constexpr std::string_view default_irc_nick = "NorelecBot";
@@ -70,6 +72,7 @@ struct AppConfig {
     int nuke_cost = default_nuke_cost;
     int dog_percent = default_dog_percent;
     int balloon_cost = default_balloon_cost;
+    int mailbox_percent = default_mailbox_percent;
     /* Whether a player seen for the first time is handed a 🎈. */
     bool starter_balloon = true;
     /* Players whose real sign the owner knows, instead of the one their name gives. */

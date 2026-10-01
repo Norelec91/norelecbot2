@@ -47,6 +47,8 @@ inline constexpr Power nuke{"☢️", PowerKind::thrown, "when it lands",
                             "starts over: on @TheConquister37 the whole game, at a house the player who lives there"};
 inline constexpr Power dog{"🐶", PowerKind::home, "when a raider reaches the house",
                            "each is a chance of sending him away with nothing"};
+inline constexpr Power mailbox{"📮", PowerKind::home, "when something thrown lands on the house",
+                               "each is a chance of sending it back to whoever threw it"};
 inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries to get past it, where its owner is",
                                "holds off whoever comes for his place or his house until it pops, then is as good as new"};
 
@@ -55,7 +57,7 @@ inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries 
 /* Every emoji with a power: a new one is a row here, of a declared kind, plus what it does. */
 inline constexpr std::array powers{power::pleading, power::rocket, power::bolt, power::lobster,
                                    power::poo,      power::bomb,   power::nuke, power::dog,
-                                   power::balloon};
+                                   power::balloon,  power::mailbox};
 
 /* Whether an emoji is that power's, drawn in colour or not. */
 [[nodiscard]] bool is_power(std::string_view emoji, const Power &power);
@@ -171,6 +173,9 @@ struct RaidRules {
     std::int64_t bomb_dud_percent = 0;
     /* The chance, in percent, that each 🐶 on the target's name gives of stopping a raid: they add up. */
     std::int64_t dog_percent = 0;
+    /* The chance, in percent, that each 📮 on the target's name gives of sending back what is thrown at
+       the house: they add up. */
+    std::int64_t mailbox_percent = 0;
 };
 
 struct RaidResult {
@@ -211,6 +216,9 @@ struct RaidEvent {
     bool backfired = false;
     /* delivered, with a ☢️: the target starts over. */
     bool reset = false;
+    /* delivered, with something thrown: a 📮 sent it back, and what it did it did to the raider, at his
+       own house. */
+    bool sent_back = false;
     /* The furniture hung beside the two names, to be shown along with them. */
     std::string raider_emoji;
     std::string target_emoji;

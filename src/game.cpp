@@ -1643,10 +1643,27 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                            other emoji is hung, and a name that filled up meanwhile sends it back the
                            way it came. */
                         if (is_thrown(raid.gift_emoji)) {
-                            Landing landing = land(session, state, raid.gift_emoji, raid.raider, raid.target,
-                                                   Whereabouts::home, now, rules);
+                            const std::string thrown = raid.gift_emoji;
+                            /* The 📮 at the house may send it back: it then lands on the raider's own
+                               house, as it is, and no 📮 of his sends it on again. */
+                            const std::int64_t chance = std::min<std::int64_t>(
+                                100, copies_of(state, raid.target, power::mailbox) *
+                                         std::max<std::int64_t>(rules.mailbox_percent, 0));
+                            event.sent_back = chance > 0 &&
+                                static_cast<std::int64_t>(session.random_index(100)) < chance;
+                            Landing landing;
+                            if (event.sent_back) {
+                                RaidRules as_it_is = rules;
+                                as_it_is.bomb_dud_percent = 0;
+                                landing = land(session, state, thrown, raid.target, raid.raider, Whereabouts::home,
+                                               now, as_it_is);
+                                event.raider_smeared = event.raider_smeared || landing.smeared;
+                            } else {
+                                landing = land(session, state, thrown, raid.raider, raid.target, Whereabouts::home,
+                                               now, rules);
+                                event.target_smeared = event.target_smeared || landing.smeared;
+                            }
                             raid.gift_emoji.clear();
-                            event.target_smeared = event.target_smeared || landing.smeared;
                             event.backfired = landing.backfired;
                             event.reset = landing.reset;
                             event.blown = std::move(landing.blown);
