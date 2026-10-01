@@ -1544,6 +1544,12 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                     }
                 } else if (defended_at_home(session, state, raid.target, event)) {
                     raid.loot = 0;
+                } else if (const std::int64_t chance = std::min<std::int64_t>(
+                               100, copies_of(state, raid.target, power::dog) * std::max<std::int64_t>(rules.dog_percent, 0));
+                           chance > 0 && static_cast<std::int64_t>(session.random_index(100)) < chance) {
+                    /* The dogs stay at home and guard it whether he is in or out: one of them caught him. */
+                    event.intercepted = true;
+                    raid.loot = 0;
                 } else {
                     event.undefended = !at_home(state, raid.target);
                     const std::int64_t theirs = counter(state.scores, raid.target);

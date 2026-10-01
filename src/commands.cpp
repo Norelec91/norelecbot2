@@ -272,6 +272,7 @@ RaidRules raid_rules(const CommandContext &context) {
         .rocket_percent = context.config.rocket_percent,
         .pleading_percent = context.config.pleading_percent,
         .bomb_dud_percent = context.config.bomb_dud_percent,
+        .dog_percent = context.config.dog_percent,
     };
 }
 
@@ -1038,6 +1039,10 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
             home,
             format_wait(event.seconds)
         );
+    }
+    if (event.intercepted) {
+        return std::format("🐶 {} il cane di {}{} ti ha intercettato: niente bottino. Torni in {} tra {}.", raider,
+                           mention, target, home, format_wait(event.seconds));
     }
     std::string reply = event.balloon_popped
         ? std::format("💰 {} hai bucato il palloncino di {}{} e rubato {}", raider, mention, target, palle(event.loot))

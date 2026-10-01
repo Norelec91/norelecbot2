@@ -45,12 +45,14 @@ inline constexpr Power bomb{"💣", PowerKind::thrown, "when it lands",
                             "takes one emoji with a power among those that are where it lands"};
 inline constexpr Power nuke{"☢️", PowerKind::thrown, "when it lands",
                             "starts over: on @TheConquister37 the whole game, at a house the player who lives there"};
+inline constexpr Power dog{"🐶", PowerKind::home, "when a raider reaches the house",
+                           "each is a chance of sending him away with nothing"};
 
 }
 
 /* Every emoji with a power: a new one is a row here, of a declared kind, plus what it does. */
 inline constexpr std::array powers{power::pleading, power::rocket, power::bolt, power::lobster,
-                                   power::poo,      power::bomb,   power::nuke};
+                                   power::poo,      power::bomb,   power::nuke, power::dog};
 
 /* Whether an emoji is that power's, drawn in colour or not. */
 [[nodiscard]] bool is_power(std::string_view emoji, const Power &power);
@@ -164,6 +166,8 @@ struct RaidRules {
     std::int64_t pleading_percent = 0;
     /* How often, in percent, a 💣 is a dud that goes off in the thrower's hand. */
     std::int64_t bomb_dud_percent = 0;
+    /* The chance, in percent, that each 🐶 on the target's name gives of stopping a raid: they add up. */
+    std::int64_t dog_percent = 0;
 };
 
 struct RaidResult {
@@ -187,6 +191,8 @@ struct RaidEvent {
     std::string raider;
     std::string target;
     std::int64_t loot = 0;
+    /* stolen: a 🐶 at the house caught the raider, who takes nothing. */
+    bool intercepted = false;
     /* stolen: what the 🥺 on the target's name talked the raider out of, and by how much in percent. */
     std::int64_t spared = 0;
     std::int64_t pleaded_percent = 0;

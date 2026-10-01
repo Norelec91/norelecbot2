@@ -1061,6 +1061,7 @@ TEST_CASE("every emoji with a power is listed once, with its kind") {
     CHECK(power::bomb.kind == PowerKind::thrown);
     CHECK(power::nuke.kind == PowerKind::thrown);
     CHECK(power_of("☢") == &powers[6]);
+    CHECK(power::dog.kind == PowerKind::home);
     CHECK(power_of("💣") == &powers[5]);
     CHECK(power_of("🍕") == nullptr);
     /* Drawn in colour or not, it is the same emoji. */
@@ -1291,6 +1292,41 @@ TEST_CASE("a ☢️ starts over the player whose house it lands on, and on the p
     const std::string backup = paths.conquister + ".before-reset-500";
     CHECK(read_json(backup).at("scores").at("bob") == 900);
     std::filesystem::remove(backup);
+}
+
+TEST_CASE("a 🐶 at home may catch a raider, who then takes nothing") {
+    const TestPaths paths{"dog-test"};
+    {
+        /* bob is out, in the place: his dogs guard the house all the same. The balloons are worn out. */
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":0,"username":"bob","since":0},)"
+             << R"("scores":{"alice":0,"bob":100,"carol":100},"quotes_added":{},)"
+             << R"("ids":{"alice":0,"bob":90000,"carol":90001},"balloons":{"bob":3,"carol":3},)"
+             << R"("furniture":{"bob":"🐶🐶","carol":"🐶"}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    RaidRules rules = quick_rides();
+    rules.loot_divisor = 1;
+    /* Two dogs at fifty each never miss. */
+    rules.dog_percent = 50;
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 0, rules).status == RaidStatus::started);
+    std::vector<RaidEvent> arrival = raid_due(storage, 5, rules);
+    REQUIRE(arrival.size() == 1);
+    CHECK(arrival[0].kind == RaidEvent::Kind::stolen);
+    CHECK(arrival[0].intercepted);
+    CHECK(arrival[0].loot == 0);
+    CHECK(conquister_user(storage, "bob")->score == 100);
+    /* The dogs are still there. */
+    CHECK(furniture_all(storage).at("bob") == "🐶🐶");
+    REQUIRE(raid_due(storage, 10, rules).size() == 1);
+
+    /* With no chance to give, a dog is only an emoji. */
+    rules.dog_percent = 0;
+    REQUIRE(raid_start(storage, 0, "alice", "carol", 10, rules).status == RaidStatus::started);
+    arrival = raid_due(storage, 15, rules);
+    REQUIRE(arrival.size() == 1);
+    CHECK_FALSE(arrival[0].intercepted);
+    CHECK(arrival[0].loot == 100);
 }
 
 TEST_CASE("a pile of poo is thrown, not hung: a full name takes it and keeps nothing") {

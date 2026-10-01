@@ -34,6 +34,8 @@ struct AppConfig {
     static constexpr int default_bomb_dud_percent = 10;
     /* What the ☢️ that starts the game over costs. */
     static constexpr int default_nuke_cost = 1'000'000;
+    /* The chance, in percent, that each 🐶 on a name gives of stopping a raid on the house. */
+    static constexpr int default_dog_percent = 10;
     static constexpr int default_api_port = 8000;
     static constexpr int default_irc_port = 6697;
     static constexpr std::string_view default_irc_nick = "NorelecBot";
@@ -64,6 +66,7 @@ struct AppConfig {
     int pleading_percent = default_pleading_percent;
     int bomb_dud_percent = default_bomb_dud_percent;
     int nuke_cost = default_nuke_cost;
+    int dog_percent = default_dog_percent;
     /* Players whose real sign the owner knows, instead of the one their name gives. */
     std::vector<zodiac::Override> zodiac_signs;
     std::int64_t conquister_chat_id = 0;

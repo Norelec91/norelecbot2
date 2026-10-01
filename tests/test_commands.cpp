@@ -791,6 +791,12 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     robbed.target_emoji = "🍕";
     robbed.loot = 3;
     CHECK(raid_event_reply(robbed).value_or("").contains("Bob lo smerdato (🍕)"));
+    RaidEvent caught = robbed;
+    caught.loot = 0;
+    caught.intercepted = true;
+    caught.seconds = 5;
+    CHECK(raid_event_reply(caught) ==
+          "🐶 Carol il cane di Bob lo smerdato (🍕) ti ha intercettato: niente bottino. Torni in Carol tra 5 secondi.");
     robbed.target_emoji = "🥺🥺";
     robbed.spared = 1;
     robbed.pleaded_percent = 10;
