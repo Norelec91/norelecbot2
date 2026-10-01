@@ -1939,7 +1939,10 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                         /* Poo splatters on arrival, making the target "lo smerdato", and is gone; any
                            other emoji is hung, and a name that filled up meanwhile sends it back the
                            way it came. */
-                        if (is_thrown(raid.gift_emoji)) {
+                        if (is_power(raid.gift_emoji, power::seed) && !at_home(state, raid.target)) {
+                            /* It takes somebody to land on: with the owner out, it goes back as it came. */
+                            event.nobody_home = true;
+                        } else if (is_thrown(raid.gift_emoji)) {
                             const std::string thrown = raid.gift_emoji;
                             /* The 📮 at the house may send it back: it then lands on the raider's own
                                house, as it is, and no 📮 of his sends it on again. */

@@ -57,7 +57,7 @@ inline constexpr Power vortex{"🌀", PowerKind::thrown, "when it lands",
                               "flings whoever it hits a year of road away from everybody and from the place"};
 inline constexpr Power pirate{"🏴‍☠️", PowerKind::carried, "when a raid of his gets through",
                               "each is a chance of carrying off one emoji that is at the house too"};
-inline constexpr Power seed{"💦", PowerKind::thrown, "when it lands",
+inline constexpr Power seed{"💦", PowerKind::thrown, "when it lands on somebody who is there",
                             "in time a child is born on the name of whoever it hits, taking a slot"};
 inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries to get past it, where its owner is",
                                "holds off whoever comes for his place or his house until it pops, then is as good as new"};
@@ -267,6 +267,8 @@ struct RaidEvent {
     bool flung = false;
     /* delivered, with a 💦: a child is on the way, born after this many seconds. */
     std::int64_t expecting = 0;
+    /* delivered, with a 💦: nobody was home to receive it, and the raider takes it back with him. */
+    bool nobody_home = false;
     /* delivered, with something thrown: a 📮 sent it back, and what it did it did to the raider, at his
        own house. */
     bool sent_back = false;

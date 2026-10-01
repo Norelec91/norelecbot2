@@ -816,6 +816,11 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     seeded.expecting = 32400;
     CHECK(raid_event_reply(seeded) ==
           "Alice la tua 💦 è arrivata a casa di @Bob: tra 9 ore si vedrà. Torni in Alice tra 5 secondi.");
+    RaidEvent empty_house = given;
+    empty_house.gift_emoji = "💦";
+    empty_house.nobody_home = true;
+    CHECK(raid_event_reply(empty_house) ==
+          "Alice a casa di @Bob (🍕) non c'è nessuno: la 💦 te la riporti a casa. Torni in Alice tra 5 secondi.");
     RaidEvent birth;
     birth.kind = RaidEvent::Kind::born;
     birth.raider = "Alice";

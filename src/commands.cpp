@@ -1137,6 +1137,10 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
         if (is_power(event.gift_emoji, power::poo)) {
             return poo_throw(home, std::format("{}{}", mention, event.target));
         }
+        if (event.nobody_home) {
+            return std::format("{} a casa di {}{} non c'è nessuno: la {} te la riporti a casa. Torni in {} tra {}.",
+                               raider, mention, target, event.gift_emoji, home, format_wait(event.seconds));
+        }
         if (event.expecting > 0 && !event.sent_back) {
             return std::format("{} la tua 💦 è arrivata a casa di {}{}: tra {} si vedrà. Torni in {} tra {}.", raider,
                                mention, event.target, format_wait(event.expecting), home, format_wait(event.seconds));

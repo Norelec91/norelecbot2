@@ -1642,6 +1642,25 @@ TEST_CASE("a 💦 leaves a child on the way, born on the name it landed on") {
     CHECK(events[0].blown == std::vector<std::string>{"🍕"});
     CHECK(furniture_all(storage).at("bob") == "👶👶");
 
+    /* With the owner out there is nobody for it to land on: the raider takes it back home. */
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["alice"] = "💦💦";
+        return 0;
+    });
+    REQUIRE(raid_start(storage, 0, "alice", "carol", 310, rules, RaidTargetKind::any, 0, "💦").status ==
+            RaidStatus::started);
+    events = raid_due(storage, 315, rules);
+    REQUIRE(events.size() == 1);
+    CHECK(events[0].nobody_home);
+    CHECK(events[0].expecting == 0);
+    CHECK(furniture_all(storage).at("alice") == "[]💦");
+    events = raid_due(storage, 320, rules);
+    REQUIRE(events.size() == 1);
+    CHECK(events[0].kind == RaidEvent::Kind::returned);
+    CHECK(events[0].gift_emoji == "💦");
+    CHECK(furniture_all(storage).at("alice") == "💦💦");
+    CHECK(storage.transaction([](StorageSession &session) { return session.state().pregnancies.empty(); }));
+
     /* Thrown at the place it is the holder who is expecting; her 🎈 is never the slot taken. */
     const FurnitureBurnResult onto = furniture_burn(storage, "alice", "💦", 400, rules);
     CHECK(onto.hit == "carol");
