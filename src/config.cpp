@@ -172,6 +172,9 @@ constexpr std::array settings{
     Setting{"NORELECBOT_CHILD_STAGE_SECONDS", [](AppConfig &config, std::string_view value) {
         return set_number(config.child_stage_seconds, value, AppConfig::default_child_stage_seconds, 1);
     }},
+    Setting{"NORELECBOT_HEN_PER_MINUTE", [](AppConfig &config, std::string_view value) {
+        return set_number(config.hen_per_minute, value, AppConfig::default_hen_per_minute, 0);
+    }},
     Setting{"NORELECBOT_CONQUISTER_CHAT_ID", [](AppConfig &config, std::string_view value) {
         return set_number(config.conquister_chat_id, value, std::int64_t{0});
     }},

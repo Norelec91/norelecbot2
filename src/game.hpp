@@ -59,6 +59,7 @@ inline constexpr Power pirate{"🏴‍☠️", PowerKind::carried, "when a raid 
                               "each is a chance of carrying off one emoji that is at the house too"};
 inline constexpr Power seed{"💦", PowerKind::thrown, "when it lands on somebody who is there",
                             "in time a child is born on the name of whoever it hits, taking a slot"};
+inline constexpr Power hen{"🐔", PowerKind::home, "every minute", "each lays palle for its owner, whether he is in or out"};
 inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries to get past it, where its owner is",
                                "holds off whoever comes for his place or his house until it pops, then is as good as new"};
 
@@ -68,7 +69,7 @@ inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries 
 inline constexpr std::array powers{power::pleading, power::rocket, power::bolt, power::lobster,
                                    power::poo,      power::bomb,   power::nuke, power::dog,
                                    power::balloon,  power::mailbox, power::ninja, power::alarm,
-                                   power::vortex,   power::pirate,  power::seed};
+                                   power::vortex,   power::pirate,  power::seed,  power::hen};
 
 /* Whether an emoji is that power's, drawn in colour or not and whatever the tone of its skin. */
 [[nodiscard]] bool is_power(std::string_view emoji, const Power &power);
@@ -214,6 +215,8 @@ struct RaidRules {
     std::int64_t pregnancy_seconds = 9 * 60 * 60;
     /* How long a child stays in each of its four ages before it moves on, and at last leaves. */
     std::int64_t child_stage_seconds = 24 * 60 * 60;
+    /* The palle each 🐔 on a name lays for its owner every minute. */
+    std::int64_t hen_per_minute = 0;
 };
 
 struct RaidResult {
@@ -367,6 +370,8 @@ struct Profile {
     bool smeared = false;
     /* Flung by a 🌀: a year of road from everything. */
     bool flung = false;
+    /* How many 🐔 lay for him. */
+    std::int64_t hens = 0;
     /* Whether he plays from Telegram, where his home is written with the mention. */
     bool on_telegram = false;
     std::int64_t score = 0;

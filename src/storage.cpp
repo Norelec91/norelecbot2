@@ -226,6 +226,7 @@ ConquisterState parse_state(const Json &json) {
         parse_counters(json, "flung"),
         parse_pregnancies(json),
         parse_children(json),
+        json.contains("eggs_at") ? integer(json.at("eggs_at")) : 0,
     };
     return state;
 }
@@ -296,6 +297,7 @@ Json state_to_json(const ConquisterState &state) {
         {"flung", state.flung},
         {"pregnancies", std::move(pregnancies)},
         {"children", std::move(children)},
+        {"eggs_at", state.eggs_at},
     };
 }
 

@@ -753,6 +753,7 @@ Profile profile_from(ConquisterState &state, const std::string &key, std::int64_
     profile.furniture = shown_furniture(state, key);
     profile.smeared = is_smeared(state, key, now);
     profile.flung = is_flung(state, key);
+    profile.hens = copies_of(state, key, power::hen);
     profile.on_telegram = counter(state.telegram_ids, key) != 0;
     profile.players = state.scores.size();
     if (const Counters::value_type *score = find_ignore_case(state.scores, key); score != nullptr) {
@@ -1698,6 +1699,32 @@ std::string board(StorageSession &session, ConquisterState &state, const Raid &r
     return emoji;
 }
 
+/* The 🐔 stay at home and lay for their owner minute after minute, whether he is in or out: whole
+   minutes only, the rest waits for the next round. */
+void lay_eggs(ConquisterState &state, std::int64_t now, const RaidRules &rules) {
+    if (rules.hen_per_minute <= 0) {
+        return;
+    }
+    if (state.eggs_at <= 0 || state.eggs_at > now) {
+        state.eggs_at = now;
+        return;
+    }
+    const std::int64_t minutes = (now - state.eggs_at) / 60;
+    if (minutes <= 0) {
+        return;
+    }
+    state.eggs_at += minutes * 60;
+    std::vector<std::pair<std::string, std::int64_t>> laid;
+    for (const auto &[player, hung] : state.furniture) {
+        if (const std::int64_t hens = copies_of(state, player, power::hen); hens > 0) {
+            laid.emplace_back(player, hens * rules.hen_per_minute * minutes);
+        }
+    }
+    for (const auto &[player, palle] : laid) {
+        state.scores[player] = counter(state.scores, player) + palle;
+    }
+}
+
 /* What a child looks like at each of its ages; nothing once it has lived them all. */
 std::string child_emoji(bool male, std::int64_t age) {
     constexpr std::array<std::string_view, 4> boy{"👶", "👦", "👨", "👴"};
@@ -1910,6 +1937,7 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
     const std::vector<RaidEvent> events = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         wash(state, now);
+        lay_eggs(state, now, rules);
         std::vector<RaidEvent> settled = grow(state, now, rules);
         std::ranges::move(births(session, state, now, rules), std::back_inserter(settled));
         for (Raid &raid : state.raids) {

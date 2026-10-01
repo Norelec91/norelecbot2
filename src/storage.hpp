@@ -138,6 +138,8 @@ struct ConquisterState {
     /* The children on the way, in the order they were conceived. */
     std::vector<Pregnancy> pregnancies;
     std::vector<Child> children;
+    /* Up to when the 🐔 have been paid for their eggs; 0 before the first time. */
+    std::int64_t eggs_at = 0;
 
     bool operator==(const ConquisterState &) const = default;
 };

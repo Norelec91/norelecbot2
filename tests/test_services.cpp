@@ -1082,6 +1082,7 @@ TEST_CASE("every emoji with a power is listed once, with its kind") {
     CHECK(power::vortex.kind == PowerKind::thrown);
     CHECK(power::pirate.kind == PowerKind::carried);
     CHECK(power::seed.kind == PowerKind::thrown);
+    CHECK(power::hen.kind == PowerKind::home);
     /* Whatever the tone of its skin, it is the same emoji. */
     CHECK(is_power("🥷🏿", power::ninja));
     CHECK(is_power("🥷", power::ninja));
@@ -1715,6 +1716,43 @@ TEST_CASE("a child grows through its ages where it was born, then leaves, and no
     CHECK(events[0].gift_emoji == "👴");
     CHECK(furniture_all(storage).count("bob") == 0);
     CHECK(storage.transaction([](StorageSession &session) { return session.state().children.empty(); }));
+}
+
+TEST_CASE("every 🐔 on a name lays palle for its owner minute after minute") {
+    const TestPaths paths{"hen-test"};
+    {
+        /* alice holds the place: her hens lay at home all the same. */
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":0,"username":"alice","since":1000},)"
+             << R"("scores":{"alice":0,"bob":5,"carol":7},"quotes_added":{},)"
+             << R"("furniture":{"alice":"🐔🐔🐔","bob":"🍕🐔","carol":"🍕"}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    RaidRules rules = quick_rides();
+    rules.hen_per_minute = 2;
+    const auto score = [&storage](const char *player) {
+        return storage.transaction([player](StorageSession &session) { return session.state().scores.at(player); });
+    };
+    /* The first round only starts the clock. */
+    CHECK(raid_due(storage, 1000, rules).empty());
+    CHECK(score("alice") == 0);
+    /* Whole minutes only: the fifty-nine seconds wait. */
+    static_cast<void>(raid_due(storage, 1059, rules));
+    CHECK(score("bob") == 5);
+    static_cast<void>(raid_due(storage, 1060, rules));
+    CHECK(score("alice") == 6);
+    CHECK(score("bob") == 7);
+    CHECK(score("carol") == 7);
+    /* Time the bot missed is made up for, and the seconds left over are not lost. */
+    static_cast<void>(raid_due(storage, 1330, rules));
+    CHECK(score("alice") == 6 + 4 * 6);
+    static_cast<void>(raid_due(storage, 1360, rules));
+    CHECK(score("alice") == 6 + 5 * 6);
+    CHECK(player_profile_of(storage, "alice", 1360).hens == 3);
+    /* With nothing to lay, a 🐔 is only an emoji. */
+    rules.hen_per_minute = 0;
+    static_cast<void>(raid_due(storage, 5000, rules));
+    CHECK(score("bob") == 5 + 6 * 2);
 }
 
 TEST_CASE("a pile of poo is thrown, not hung: a full name takes it and keeps nothing") {

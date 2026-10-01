@@ -299,6 +299,7 @@ RaidRules raid_rules(const CommandContext &context) {
         .pirate_percent = context.config.pirate_percent,
         .pregnancy_seconds = context.config.pregnancy_seconds,
         .child_stage_seconds = context.config.child_stage_seconds,
+        .hen_per_minute = context.config.hen_per_minute,
     };
 }
 
@@ -877,6 +878,9 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
                         multiplier_text(percent));
     if (profile.flung) {
         card += "scaraventato lontano da una 🌀: a un anno di viaggio da tutti\n";
+    }
+    if (profile.hens > 0 && context.config.hen_per_minute > 0) {
+        card += std::format("{} 🐔: {} all'ora\n", profile.hens, palle(profile.hens * context.config.hen_per_minute * 60));
     }
     switch (profile.place) {
     case Whereabouts::home:
