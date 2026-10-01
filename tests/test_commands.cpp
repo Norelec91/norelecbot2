@@ -140,7 +140,7 @@ TEST_CASE("Telegram ID keeps its player after a rename and namesakes stay separa
     CHECK(command_dispatch(alice, "We @Alice 🍕")->contains("Alice (🍕) hai speso"));
     alice.username = "AliceNuova";
     CHECK(command_dispatch(alice, "We @AliceNuova 🎈")->contains("AliceNuova (🍕🎈) hai speso"));
-    CHECK(command_dispatch(alice, "We @AliceNuova") == "🪐 AliceNuova sei già in @AliceNuova!");
+    CHECK(command_dispatch(alice, "We @AliceNuova") == "🏠 AliceNuova sei già in @AliceNuova!");
     CHECK(command_dispatch(alice, "We @Alice") ==
           "🚀 AliceNuova non conosco nessun giocatore di nome @Alice.");
 
@@ -151,7 +151,7 @@ TEST_CASE("Telegram ID keeps its player after a rename and namesakes stay separa
     const CommandContext irc{.storage = storage, .config = config, .user_id = 0, .username = "AliceNuova"};
     CHECK(command_dispatch(irc, "We AliceNuova 🧀")->contains("AliceNuova (🧀) hai speso"));
     CHECK(command_dispatch(alice, "We AliceNuova")->contains("parti per AliceNuova"));
-    CHECK(command_dispatch(irc, "We AliceNuova") == "🪐 AliceNuova sei già in AliceNuova!");
+    CHECK(command_dispatch(irc, "We AliceNuova") == "🏠 AliceNuova sei già in AliceNuova!");
 
     const Json state = Json::parse(std::ifstream{paths.conquister});
     CHECK(state.at("accounts").at("tg:11") != state.at("accounts").at("tg:22"));
@@ -443,8 +443,8 @@ TEST_CASE("We @someone sends the player out to rob them") {
     /* Another player, who is at home and can therefore get an answer of his own. */
     context.username = "carol";
     context.user_id = 3;
-    CHECK(reply("We @carol") == "🪐 carol sei già in @carol!");
-    CHECK(reply("We @CAROL") == "🪐 carol sei già in @carol!");
+    CHECK(reply("We @carol") == "🏠 carol sei già in @carol!");
+    CHECK(reply("We @CAROL") == "🏠 carol sei già in @carol!");
     CHECK(reply("We @nessuno") == "🚀 carol non conosco nessun giocatore di nome @nessuno.");
     context.username = "bob";
     context.user_id = 2;
@@ -498,11 +498,11 @@ TEST_CASE("the @ prefix selects Telegram names and bare names select IRC nicks")
     /* The same spelling on IRC and Telegram denotes two accounts until they link. */
     context.user_id = 0;
     context.username = "Lucy";
-    CHECK(command_dispatch(context, "We Lucy") == "🪐 Lucy sei già in Lucy!");
+    CHECK(command_dispatch(context, "We Lucy") == "🏠 Lucy sei già in Lucy!");
     context.user_id = 9;
     context.username = "Lucy";
     CHECK(command_dispatch(context, "/leaderboard").has_value());
-    CHECK(command_dispatch(context, "We @Lucy") == "🪐 Lucy sei già in @Lucy!");
+    CHECK(command_dispatch(context, "We @Lucy") == "🏠 Lucy sei già in @Lucy!");
     CHECK(command_dispatch(context, "We Lucy")->contains("parti per Lucy"));
     const Json saved = Json::parse(std::ifstream{paths.conquister});
     CHECK(saved.at("telegram_ids").at("tg:9") == 9);
@@ -567,7 +567,7 @@ TEST_CASE("the raids tell what happened") {
     home.raider = "bob";
     home.target = "alice";
     home.loot = 250;
-    CHECK(raid_event_reply(home) == "🪐 bob torni in bob con 250 palle.");
+    CHECK(raid_event_reply(home) == "🏠 bob torni in bob con 250 palle.");
     home.loot = 0;
     CHECK_FALSE(raid_event_reply(home));
 
@@ -620,7 +620,7 @@ TEST_CASE("the profile shows where a player stands") {
     /* Carol has no palle yet, so the ranking has two players. */
     CHECK(mine.starts_with("👤 Alice (🍕[]⚡)\n💰 5000 palle, 2° su 2 in classifica\n"));
     CHECK(mine.contains(": oggi è giorno di "));
-    CHECK(mine.contains("\n🪐 in @Alice\n"));
+    CHECK(mine.contains("\n🏠 in @Alice\n"));
     /* The balloon stays out of it, worn or not. */
     CHECK_FALSE(mine.contains("🎈"));
     CHECK(mine.ends_with("\n📜 3 citazioni"));
@@ -631,7 +631,7 @@ TEST_CASE("the profile shows where a player stands") {
     const std::string irc = command_dispatch(bob, "/profile Carol").value_or("");
     CHECK(irc.starts_with("👤 Carol\n💰 nessuna palla ancora\n"));
     CHECK_FALSE(irc.contains("🎈"));
-    CHECK(irc.contains("\n🪐 in Carol"));
+    CHECK(irc.contains("\n🏠 in Carol"));
 
     /* In the place with a ⚡, and on the road. */
     REQUIRE(command_dispatch(alice, "We @TheConquister37"));
@@ -1021,7 +1021,7 @@ TEST_CASE("a bought emoji follows the name everywhere") {
     /* From the place the purchase takes her home first; a keycap is an emoji like any other and fills
        the hole. */
     const std::string keycap = reply("We @alice 3️⃣");
-    CHECK(keycap.starts_with("🪐 alice torni da @TheConquister37 in @alice con "));
+    CHECK(keycap.starts_with("🏠 alice torni da @TheConquister37 in @alice con "));
     CHECK(keycap.contains("\n🛋️ alice (🎈3️⃣🐟) hai speso "));
     CHECK_FALSE(conquister_user(storage, "alice")->in_conquister);
 }

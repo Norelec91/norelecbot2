@@ -307,7 +307,7 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
         return std::format("🚀 {} non conosco nessun giocatore di nome {}.", username, target);
     case RaidStatus::left_place:
         return std::format(
-            "🪐 {} torni da {} in {} con {}{}.",
+            "🏠 {} torni da {} in {} con {}{}.",
             username,
             conquister_place,
             home,
@@ -322,7 +322,7 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
             format_wait(result.seconds)
         );
     case RaidStatus::home_already:
-        return std::format("🪐 {} sei già in {}!", username, home);
+        return std::format("🏠 {} sei già in {}!", username, home);
     case RaidStatus::insufficient_score:
         return std::format("🎁 {} hai solo {} a disposizione.", username, palle(result.score));
     case RaidStatus::invalid_amount:
@@ -371,7 +371,7 @@ std::string departure_line(const CommandContext &context, const Departure &depar
         return {};
     }
     return std::format(
-        "🪐 {} torni da {} in {} con {}{}.\n",
+        "🏠 {} torni da {} in {} con {}{}.\n",
         context.username,
         conquister_place,
         own_name(context),
@@ -783,7 +783,7 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
                         multiplier_text(percent));
     switch (profile.place) {
     case ProfilePlace::home:
-        card += std::format("🪐 in {}{}\n", profile.on_telegram ? "@" : "", profile.name);
+        card += std::format("🏠 in {}{}\n", profile.on_telegram ? "@" : "", profile.name);
         break;
     case ProfilePlace::conquister:
         card += std::format("🪐 in {} da {}{}\n", conquister_place, format_wait(std::max<std::int64_t>(now - profile.since, 0)),
@@ -950,7 +950,7 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
                                event.gift == 1 ? std::string{"la tua palla"} : std::format("le tue {} palle", event.gift));
         }
         if (event.loot > 0) {
-            return std::format("🪐 {} torni in {} con {}.", raider, home, palle(event.loot));
+            return std::format("🏠 {} torni in {} con {}.", raider, home, palle(event.loot));
         }
         /* Coming home with nothing is not news. */
         return std::nullopt;
