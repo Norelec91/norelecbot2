@@ -1077,6 +1077,10 @@ TEST_CASE("every emoji with a power is listed once, with its kind") {
     CHECK(power::dog.kind == PowerKind::home);
     CHECK(power::balloon.kind == PowerKind::carried);
     CHECK(power::mailbox.kind == PowerKind::home);
+    CHECK(power::ninja.kind == PowerKind::carried);
+    /* Whatever the tone of its skin, it is the same emoji. */
+    CHECK(is_power("🥷🏿", power::ninja));
+    CHECK(is_power("🥷", power::ninja));
     CHECK(power_of("💣") == &powers[5]);
     CHECK(power_of("🍕") == nullptr);
     /* Drawn in colour or not, it is the same emoji. */
@@ -1410,6 +1414,54 @@ TEST_CASE("a 📮 at home may send back what is thrown at the house") {
     const RaidEvent plain = thrown("💩", 60);
     CHECK_FALSE(plain.sent_back);
     CHECK(plain.target_smeared);
+}
+
+TEST_CASE("a 🥷 with the raider may take him past the 🎈 and the 🐶 of the house") {
+    const TestPaths paths{"ninja-test"};
+    {
+        /* bob is at home behind a fresh 🎈 and two dogs that never miss. */
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":0,"bob":100,"carol":0,"dave":100},"quotes_added":{},)"
+             << R"("ids":{"alice":0,"bob":90000,"carol":1,"dave":90001},)"
+             << R"("furniture":{"alice":"🥷🏿🥷","bob":"🎈🐶🐶","dave":"🍕"}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    RaidRules rules = quick_rides();
+    rules.loot_divisor = 1;
+    rules.dog_percent = 50;
+    /* Two of them at fifty each never fail. */
+    rules.ninja_percent = 50;
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 0, rules).status == RaidStatus::started);
+    std::vector<RaidEvent> arrival = raid_due(storage, 5, rules);
+    REQUIRE(arrival.size() == 1);
+    CHECK(arrival[0].sneaked);
+    CHECK_FALSE(arrival[0].balloon_held);
+    CHECK_FALSE(arrival[0].balloon_popped);
+    CHECK_FALSE(arrival[0].intercepted);
+    CHECK(arrival[0].loot == 100);
+    /* The 🎈 was not even touched. */
+    CHECK(read_json(paths.conquister).at("balloons").empty());
+    REQUIRE(raid_due(storage, 10, rules).size() == 1);
+
+    /* Without one, the dogs are there for her. */
+    storage.transaction([](StorageSession &session) {
+        session.state().scores["bob"] = 100;
+        session.state().furniture["bob"] = "🐶🐶";
+        return 0;
+    });
+    REQUIRE(raid_start(storage, 0, "carol", "bob", 10, rules).status == RaidStatus::started);
+    arrival = raid_due(storage, 15, rules);
+    REQUIRE(arrival.size() == 1);
+    CHECK_FALSE(arrival[0].sneaked);
+    CHECK(arrival[0].intercepted);
+    REQUIRE(raid_due(storage, 20, rules).size() == 1);
+
+    /* Where nothing guards the house there is nothing to slip past. */
+    REQUIRE(raid_start(storage, 0, "alice", "dave", 20, rules).status == RaidStatus::started);
+    arrival = raid_due(storage, 25, rules);
+    REQUIRE(arrival.size() == 1);
+    CHECK_FALSE(arrival[0].sneaked);
+    CHECK(arrival[0].loot == 100);
 }
 
 TEST_CASE("a pile of poo is thrown, not hung: a full name takes it and keeps nothing") {

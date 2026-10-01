@@ -820,6 +820,11 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     robbed.target_emoji = "🍕";
     robbed.loot = 3;
     CHECK(raid_event_reply(robbed).value_or("").contains("Bob lo smerdato (🍕)"));
+    RaidEvent quiet = robbed;
+    quiet.sneaked = true;
+    quiet.seconds = 5;
+    CHECK(raid_event_reply(quiet) == "Carol scivoli di nascosto oltre le difese di Bob lo smerdato (🍕) e rubi 3 palle! "
+                                     "Torni in Carol tra 5 secondi.");
     RaidEvent caught = robbed;
     caught.loot = 0;
     caught.intercepted = true;

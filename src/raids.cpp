@@ -77,6 +77,7 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
         .bomb_dud_percent = config.bomb_dud_percent,
         .dog_percent = config.dog_percent,
         .mailbox_percent = config.mailbox_percent,
+        .ninja_percent = config.ninja_percent,
     };
     /* The news waits for the second round: by then IRC has had a tick to connect. */
     int rounds = 0;

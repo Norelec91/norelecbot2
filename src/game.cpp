@@ -873,8 +873,22 @@ std::int64_t inflated(std::int64_t cost, std::size_t copies, std::int64_t inflat
 
 }
 
+namespace {
+
+/* The same emoji whatever the tone of its skin: 🥷🏿 is a 🥷. */
+std::string without_tone(std::string emoji) {
+    for (const std::string_view tone : {"🏻", "🏼", "🏽", "🏾", "🏿"}) {
+        for (std::size_t at = emoji.find(tone); at != std::string::npos; at = emoji.find(tone, at)) {
+            emoji.erase(at, tone.size());
+        }
+    }
+    return emoji;
+}
+
+}
+
 bool is_power(std::string_view emoji, const Power &power) {
-    return without_variation(emoji) == without_variation(power.emoji);
+    return without_tone(without_variation(emoji)) == without_tone(without_variation(power.emoji));
 }
 
 const Power *power_of(std::string_view emoji) {
@@ -1533,6 +1547,25 @@ RaidResult raid_start(
 
 namespace {
 
+/* The 🥷 a raider has with him may take him past what guards the house, the 🎈 that is there and the 🐶,
+   without touching either. Only where there is something to slip past. */
+bool sneaks(StorageSession &session, const ConquisterState &state, const Raid &raid, const RaidRules &rules,
+            RaidEvent &event) {
+    const bool guarded = balloon_slot(state, raid.target, Whereabouts::home).has_value() ||
+        copies_of(state, raid.target, power::dog) > 0;
+    const std::vector<std::string> slots = furniture_slots(shown_furniture(state, raid.raider));
+    std::int64_t ninjas = 0;
+    for (std::size_t slot = 0; slot < slots.size(); ++slot) {
+        /* The ones he has with him: one hung at his house while he was out is not on this raid. */
+        if (is_power(slots[slot], power::ninja) && !stayed_home(state, raid.raider, slot)) {
+            ++ninjas;
+        }
+    }
+    const std::int64_t chance = std::min<std::int64_t>(100, ninjas * std::max<std::int64_t>(rules.ninja_percent, 0));
+    event.sneaked = guarded && chance > 0 && static_cast<std::int64_t>(session.random_index(100)) < chance;
+    return event.sneaked;
+}
+
 /* A raid meets the 🎈 that is at the house first: the one of a player at home, since he carries it with
    him when he goes out. */
 bool defended_at_home(StorageSession &session, ConquisterState &state, const std::string &target,
@@ -1677,9 +1710,10 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                             event.no_room = true;
                         }
                     }
-                } else if (defended_at_home(session, state, raid.target, event)) {
+                } else if (!sneaks(session, state, raid, rules, event) &&
+                           defended_at_home(session, state, raid.target, event)) {
                     raid.loot = 0;
-                } else if (const std::int64_t chance = std::min<std::int64_t>(
+                } else if (const std::int64_t chance = event.sneaked ? 0 : std::min<std::int64_t>(
                                100, copies_of(state, raid.target, power::dog) * std::max<std::int64_t>(rules.dog_percent, 0));
                            chance > 0 && static_cast<std::int64_t>(session.random_index(100)) < chance) {
                     /* The dogs stay at home and guard it whether he is in or out: one of them caught him. */
