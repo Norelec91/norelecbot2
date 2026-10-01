@@ -1321,6 +1321,27 @@ FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, 
     return result;
 }
 
+RecallResult player_recall(Storage &storage, std::string_view name, RaidTargetKind platform) {
+    const RecallResult result = storage.transaction([&](StorageSession &session) {
+        ConquisterState &state = session.state();
+        RecallResult outcome;
+        const std::optional<std::string> key = player_by_name(state, name, platform);
+        if (!key) {
+            outcome.status = RecallStatus::unknown;
+            return outcome;
+        }
+        outcome.name = display_name(state, *key);
+        if (!is_flung(state, *key)) {
+            outcome.status = RecallStatus::not_flung;
+            return outcome;
+        }
+        state.flung.erase(*key);
+        return outcome;
+    });
+    log_info("recall name={} status={}", name, static_cast<int>(result.status));
+    return result;
+}
+
 std::vector<std::string> smeared_all(Storage &storage, std::int64_t now) {
     return storage.transaction([now](StorageSession &session) {
         const ConquisterState &state = session.state();

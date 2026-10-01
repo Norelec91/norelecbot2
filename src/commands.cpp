@@ -933,6 +933,30 @@ std::string handle_debug(const CommandContext &context, std::string_view argumen
               : "Debug spento: i tuoi acquisti tornano a costare.";
 }
 
+/* "/richiama name": the owner brings back a player a 🌀 flung far away. */
+std::string handle_recall(const CommandContext &context, std::string_view argument) {
+    if (!context.owner) {
+        return "Solo il proprietario può richiamare un giocatore.";
+    }
+    const std::string_view wanted = text::trim(argument);
+    if (wanted.empty()) {
+        return std::format("Uso: {}richiama <nome>.", command_prefix(context));
+    }
+    const bool telegram = wanted.starts_with('@');
+    const RecallResult result = player_recall(context.storage, telegram ? wanted.substr(1) : wanted,
+                                              telegram ? RaidTargetKind::telegram : RaidTargetKind::irc);
+    switch (result.status) {
+    case RecallStatus::unknown:
+        return std::format("Non conosco nessun giocatore di nome {}.", wanted);
+    case RecallStatus::not_flung:
+        return std::format("{} non è stato scaraventato lontano.", result.name);
+    case RecallStatus::recalled:
+        break;
+    }
+    return std::format("{} è di nuovo vicino: i viaggi da lui e verso di lui tornano normali, e può rientrare in {}.",
+                       result.name, conquister_place);
+}
+
 /* "/buyballoon": temporary. The free 🎈 for whoever had no room for one when balloons became emoji. */
 std::string handle_buy_balloon(const CommandContext &context, std::string_view) {
     if (context.username.empty()) {
@@ -1006,6 +1030,7 @@ constexpr std::array commands{
     CommandDefinition{"/delquote", handle_delete_quote},
     CommandDefinition{"/debug", handle_debug},
     CommandDefinition{"/buyballoon", handle_buy_balloon},
+    CommandDefinition{"/richiama", handle_recall},
 };
 
 const CommandDefinition *find_command(std::string_view name) {

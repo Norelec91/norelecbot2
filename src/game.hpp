@@ -451,6 +451,16 @@ struct FurnitureBurnResult {
 [[nodiscard]] FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player,
                                                  const std::string &emoji, std::int64_t now = 0,
                                                  const RaidRules &rules = {});
+enum class RecallStatus { recalled, not_flung, unknown };
+
+struct RecallResult {
+    RecallStatus status = RecallStatus::recalled;
+    /* The spelling the player has on file. */
+    std::string name;
+};
+
+/* Brings back a player a 🌀 flung far away, named as on that platform: the owner's remedy. */
+[[nodiscard]] RecallResult player_recall(Storage &storage, std::string_view name, RaidTargetKind platform);
 /* The players who are "lo smerdato" right now. */
 [[nodiscard]] std::vector<std::string> smeared_all(Storage &storage, std::int64_t now);
 

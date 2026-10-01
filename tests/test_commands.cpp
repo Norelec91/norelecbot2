@@ -1082,6 +1082,34 @@ TEST_CASE("a 🥷 takes the claimer past the holder's 🎈") {
     CHECK_FALSE(reply.contains("bucato"));
 }
 
+TEST_CASE("/richiama lets the owner bring back a player a 🌀 flung away") {
+    const TestPaths paths{"recall-test"};
+    AppConfig config;
+    config.starter_balloon = false;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{config.conquister_path, config.quotes_path};
+    CommandContext owner{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
+    const CommandContext bob{.storage = storage, .config = config, .user_id = 2, .username = "Bob"};
+    REQUIRE(command_dispatch(bob, "/profile"));
+    storage.transaction([](StorageSession &session) {
+        session.state().flung["tg:2"] = 10;
+        return 0;
+    });
+    CHECK(command_dispatch(bob, "We @TheConquister37").value_or("").contains("scaraventato lontano"));
+
+    /* Not for anybody. */
+    CHECK(command_dispatch(owner, "/richiama @Bob") == "Solo il proprietario può richiamare un giocatore.");
+    CHECK(command_dispatch(bob, "/richiama @Bob") == "Solo il proprietario può richiamare un giocatore.");
+    owner.owner = true;
+    CHECK(command_dispatch(owner, "/richiama") == "Uso: /richiama <nome>.");
+    CHECK(command_dispatch(owner, "/richiama @Nessuno") == "Non conosco nessun giocatore di nome @Nessuno.");
+    CHECK(command_dispatch(owner, "/richiama @Bob") ==
+          "Bob è di nuovo vicino: i viaggi da lui e verso di lui tornano normali, e può rientrare in @TheConquister37.");
+    CHECK(command_dispatch(owner, "/richiama @Bob") == "Bob non è stato scaraventato lontano.");
+    CHECK(command_dispatch(bob, "We @TheConquister37").value_or("").contains("Bob sei in @TheConquister37!"));
+}
+
 TEST_CASE("the quotes are open to the admins as well as to the owner") {
     const TestPaths paths{"admin-command-test"};
     AppConfig config;
