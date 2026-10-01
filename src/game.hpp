@@ -38,14 +38,19 @@ inline constexpr Power bolt{"⚡", PowerKind::carried, "when he enters @TheConqu
 inline constexpr Power lobster{"🦞", PowerKind::carried, "when he enters @TheConquister37 kicking somebody out",
                                "becomes what the kicked holder has in the same slot until he leaves"};
 inline constexpr Power poo{"💩", PowerKind::thrown, "when it lands", "makes whoever it hits \"lo smerdato\" for a while"};
+inline constexpr Power bomb{"💣", PowerKind::thrown, "when it lands on a house",
+                            "takes two neighbouring emoji with a power that are at home, or one"};
 
 }
 
 /* Every emoji with a power: a new one is a row here, of a declared kind, plus what it does. */
-inline constexpr std::array powers{power::pleading, power::rocket, power::bolt, power::lobster, power::poo};
+inline constexpr std::array powers{power::pleading, power::rocket, power::bolt,
+                                   power::lobster,  power::poo,    power::bomb};
 
 /* Whether an emoji is that power's, drawn in colour or not. */
 [[nodiscard]] bool is_power(std::string_view emoji, const Power &power);
+/* The power an emoji has, or nothing for one that only hangs there. */
+[[nodiscard]] const Power *power_of(std::string_view emoji);
 
 enum class ClaimStatus { taken, already_held, defended, cooldown, travelling };
 
@@ -184,6 +189,8 @@ struct RaidEvent {
        target's name was full on arrival. */
     std::string gift_emoji;
     bool no_room = false;
+    /* delivered, with a 💣: the emoji it took off the target's name, none when it found nothing to take. */
+    std::vector<std::string> blown{};
     /* The furniture hung beside the two names, to be shown along with them. */
     std::string raider_emoji;
     std::string target_emoji;

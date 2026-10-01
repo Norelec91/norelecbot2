@@ -963,6 +963,17 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
         if (is_power(event.gift_emoji, power::poo)) {
             return poo_throw(home, std::format("{}{}", mention, event.target));
         }
+        if (is_power(event.gift_emoji, power::bomb)) {
+            std::string blown;
+            for (const std::string &emoji : event.blown) {
+                blown += emoji;
+            }
+            return blown.empty()
+                ? std::format("💣 {} la tua bomba esplode in casa di {}{} ma non trova niente da portarsi via. "
+                              "Torni in {} tra {}.", raider, mention, target, home, format_wait(event.seconds))
+                : std::format("💣 {} la tua bomba esplode in casa di {}{} e si porta via {}! Torni in {} tra {}.",
+                              raider, mention, target, blown, home, format_wait(event.seconds));
+        }
         return std::format("🎁 {} hai consegnato {} a {}{}! Torni in {} tra {}.",
                            raider, event.gift_emoji, mention, target, home, format_wait(event.seconds));
     }

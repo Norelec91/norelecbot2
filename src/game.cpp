@@ -749,6 +749,11 @@ bool is_power(std::string_view emoji, const Power &power) {
     return without_variation(emoji) == without_variation(power.emoji);
 }
 
+const Power *power_of(std::string_view emoji) {
+    const auto found = std::ranges::find_if(powers, [emoji](const Power &power) { return is_power(emoji, power); });
+    return found == powers.end() ? nullptr : &*found;
+}
+
 std::vector<std::string> furniture_slots(std::string_view stored) {
     std::vector<std::string> slots;
     while (!stored.empty()) {
@@ -793,6 +798,12 @@ bool is_poo(std::string_view emoji) {
 
 bool is_lobster(std::string_view emoji) {
     return is_power(emoji, power::lobster);
+}
+
+/* Thrown, an emoji is not hung on the target: it needs no room there. */
+bool is_thrown(std::string_view emoji) {
+    const Power *power = power_of(emoji);
+    return power != nullptr && power->kind == PowerKind::thrown;
 }
 
 std::int64_t copies_of(const ConquisterState &state, const std::string &player, const Power &power) {
@@ -1221,8 +1232,8 @@ RaidResult raid_start(
                 outcome.status = RaidStatus::no_such_emoji;
                 return outcome;
             }
-            /* A pile of poo is thrown, not hung: it needs no room on the target's name. */
-            if (!is_poo(gift_emoji) && !has_room(state, *known, rules.furniture_limit)) {
+            /* What is thrown is not hung: it needs no room on the target's name. */
+            if (!is_thrown(gift_emoji) && !has_room(state, *known, rules.furniture_limit)) {
                 outcome.status = RaidStatus::no_room;
                 return outcome;
             }
@@ -1286,6 +1297,43 @@ bool defended_at_home(StorageSession &session, ConquisterState &state, const std
     return false;
 }
 
+/* A 💣 going off in a house takes two emoji with a power from neighbouring slots, or one when no two
+   are side by side. Only what is at home can go: the ones he carries are with him when he is out. */
+std::vector<std::string> blow_up(StorageSession &session, ConquisterState &state, const std::string &target) {
+    std::vector<std::string> slots = slots_of(state, target);
+    const bool home = at_home(state, target);
+    const auto exposed = [&slots, home](std::size_t slot) {
+        const Power *power = slots[slot].empty() ? nullptr : power_of(slots[slot]);
+        return power != nullptr && (home || power->kind != PowerKind::carried);
+    };
+    std::vector<std::size_t> pairs;
+    std::vector<std::size_t> singles;
+    for (std::size_t slot = 0; slot < slots.size(); ++slot) {
+        if (!exposed(slot)) {
+            continue;
+        }
+        singles.push_back(slot);
+        if (slot + 1 < slots.size() && exposed(slot + 1)) {
+            pairs.push_back(slot);
+        }
+    }
+    std::vector<std::string> blown;
+    if (!pairs.empty()) {
+        const std::size_t first = pairs[session.random_index(pairs.size())];
+        blown = {slots[first], slots[first + 1]};
+        slots[first].clear();
+        slots[first + 1].clear();
+    } else if (!singles.empty()) {
+        const std::size_t only = singles[session.random_index(singles.size())];
+        blown = {slots[only]};
+        slots[only].clear();
+    } else {
+        return blown;
+    }
+    hang(state, target, std::move(slots));
+    return blown;
+}
+
 }
 
 std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRules &rules) {
@@ -1324,6 +1372,10 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                             raid.gift_emoji.clear();
                             smear(state, raid.target, now, rules.smeared_seconds);
                             event.target_smeared = true;
+                        } else if (is_power(raid.gift_emoji, power::bomb)) {
+                            raid.gift_emoji.clear();
+                            event.blown = blow_up(session, state, raid.target);
+                            event.target_emoji = shown_furniture(state, raid.target);
                         } else if (has_room(state, raid.target, rules.furniture_limit) &&
                             give_emoji(state, raid.target, raid.gift_emoji, rules.furniture_limit)) {
                             raid.gift_emoji.clear();

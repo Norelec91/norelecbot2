@@ -1056,10 +1056,57 @@ TEST_CASE("every emoji with a power is listed once, with its kind") {
     CHECK(power::bolt.kind == PowerKind::carried);
     CHECK(power::lobster.kind == PowerKind::carried);
     CHECK(power::poo.kind == PowerKind::thrown);
+    CHECK(power::bomb.kind == PowerKind::thrown);
+    CHECK(power_of("💣") == &powers[5]);
+    CHECK(power_of("🍕") == nullptr);
     /* Drawn in colour or not, it is the same emoji. */
     CHECK(is_power("⚡\xEF\xB8\x8F", power::bolt));
     CHECK(is_power("⚡", power::bolt));
     CHECK_FALSE(is_power("🍕", power::bolt));
+}
+
+TEST_CASE("a 💣 takes two neighbouring emoji with a power that are at home, or one") {
+    const TestPaths paths{"bomb-test"};
+    {
+        /* dave holds the place: the ⚡ and the 🚀 he carries are with him, only his 🥺 is at home. */
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":0,"username":"dave","since":0},)"
+             << R"("scores":{"alice":0,"bob":0,"carol":0,"dave":0},"quotes_added":{},)"
+             << R"("furniture":{"alice":"💣💣💣","bob":"🍕🥺⚡🍕🚀","carol":"🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕",)"
+             << R"("dave":"⚡🚀🍕🥺"}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    const auto thrown_at = [&storage](const std::string &target, std::int64_t now) {
+        REQUIRE(raid_start(storage, 0, "alice", target, now, quick_rides(), RaidTargetKind::any, 0, "💣").status ==
+                RaidStatus::started);
+        const std::vector<RaidEvent> arrival = raid_due(storage, now + 5, quick_rides());
+        REQUIRE(arrival.size() == 1);
+        CHECK(arrival[0].kind == RaidEvent::Kind::delivered);
+        CHECK(arrival[0].gift_emoji == "💣");
+        const std::vector<RaidEvent> home = raid_due(storage, now + 10, quick_rides());
+        REQUIRE(home.size() == 1);
+        /* It went off: nothing comes back. */
+        CHECK(home[0].gift_emoji.empty());
+        return arrival[0];
+    };
+
+    /* At home, the only two side by side are the 🥺 and the ⚡; the 🚀 stands alone, the 🍕 have no power. */
+    const RaidEvent pair = thrown_at("bob", 0);
+    CHECK(pair.blown == std::vector<std::string>{"🥺", "⚡"});
+    CHECK(pair.target_emoji == "🍕[][]🍕🚀");
+    CHECK(furniture_all(storage).at("bob") == "🍕[][]🍕🚀");
+
+    /* A full name of plain emoji takes the hit and loses nothing. */
+    const RaidEvent nothing = thrown_at("carol", 20);
+    CHECK(nothing.blown.empty());
+    CHECK(furniture_all(storage).at("carol") == "🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕");
+
+    /* Out of the house, what he carries is safe: only the 🥺 is there to take. */
+    const RaidEvent single = thrown_at("dave", 40);
+    CHECK(single.blown == std::vector<std::string>{"🥺"});
+    CHECK(furniture_all(storage).at("dave") == "⚡🚀🍕");
+    /* All three bombs are spent. */
+    CHECK(furniture_all(storage).count("alice") == 0);
 }
 
 TEST_CASE("a pile of poo is thrown, not hung: a full name takes it and keeps nothing") {

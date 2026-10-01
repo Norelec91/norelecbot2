@@ -768,6 +768,15 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     poo.raider_on_telegram = true;
     CHECK(raid_event_reply(poo) ==
           "@Alice, tiri una palla di cacca a @Bob, bravo hai fatto centro, l'hai completamente smerdato!");
+    /* A bomb says what it took, or that it found nothing. */
+    RaidEvent bomb = given;
+    bomb.gift_emoji = "💣";
+    bomb.target_emoji = "🍕";
+    CHECK(raid_event_reply(bomb) == "💣 Alice la tua bomba esplode in casa di @Bob (🍕) ma non trova niente da "
+                                    "portarsi via. Torni in Alice tra 5 secondi.");
+    bomb.blown = {"🥺", "⚡"};
+    CHECK(raid_event_reply(bomb) ==
+          "💣 Alice la tua bomba esplode in casa di @Bob (🍕) e si porta via 🥺⚡! Torni in Alice tra 5 secondi.");
     /* Hit, he is "lo smerdato" wherever he is named. */
     RaidEvent robbed;
     robbed.raider = "Carol";
