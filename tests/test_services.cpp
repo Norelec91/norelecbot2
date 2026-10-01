@@ -145,9 +145,9 @@ TEST_CASE("a balloon defends the holder until it pops") {
     CHECK(attack.status == ClaimStatus::taken);
     CHECK(attack.balloon_popped);
     CHECK(attack.previous_username == "alice");
-    /* Popped, her 🎈 is gone from her name; bob brought his own, untouched. */
+    /* Popped and kicked out, her 🎈 is fresh again and still on her name. */
     CHECK(read_json(paths.conquister).at("balloons").empty());
-    CHECK(furniture_all(storage).count("alice") == 0);
+    CHECK(furniture_all(storage).at("alice") == "🎈");
 
     /* Worn at the place, the balloon goes home with him just as worn: it is the same one. */
     storage.transaction([](StorageSession &session) {
@@ -213,8 +213,10 @@ TEST_CASE("the fourth attempt pops the balloon for certain") {
     const ClaimResult attack = conquister_claim(storage, 2, "bob", 10);
     CHECK(attack.status == ClaimStatus::taken);
     CHECK(attack.balloon_popped);
-    /* Popped, the 🎈 is off her name, and with it the defence: the next one walks in. */
-    CHECK(furniture_all(storage).at("alice") == "🍕");
+    /* Popped, the 🎈 stays on her name. It is having it that defends: once she burns it, the next one
+       walks in. */
+    CHECK(furniture_all(storage).at("alice") == "🍕🎈");
+    CHECK(furniture_burn(storage, "alice", "🎈", 15).status == FurnitureBurnStatus::burned);
     CHECK(conquister_claim(storage, 1, "alice", 20).status == ClaimStatus::taken);
     const ClaimResult unguarded = conquister_claim(storage, 2, "bob", 30);
     CHECK(unguarded.status == ClaimStatus::taken);
@@ -338,8 +340,7 @@ TEST_CASE("a 🦞 comes in as what the kicked holder has in the same slot, and l
         CHECK(entered.entered_lightning == 150);
         CHECK(player_profile_of(storage, "bob", 100).furniture == "⚡🦞🍕🦞");
         CHECK(furniture_all(storage).at("bob") == "⚡🦞🍕🦞");
-        /* alice's 🎈 popped as bob came in. */
-        CHECK(furniture_all(storage).at("alice") == "⚡[][]🦞");
+        CHECK(furniture_all(storage).at("alice") == "⚡[]🎈🦞");
     }
     /* The copy survives a restart, and what is saved on the name is still the 🦞. */
     const Json saved = read_json(paths.conquister);

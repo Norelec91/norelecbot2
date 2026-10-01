@@ -41,8 +41,6 @@ Landing land(StorageSession &session, ConquisterState &state, std::string_view t
 bool is_smeared(const ConquisterState &state, const std::string &player, std::int64_t now);
 /* Where the emoji with a power in a slot is. */
 Whereabouts site_of(const ConquisterState &state, const std::string &player, std::size_t slot, const Power &power);
-/* Empties one slot of a name. */
-void clear_slot(ConquisterState &state, const std::string &player, std::size_t slot);
 /* Hands a player the 🎈 everybody starts with, once, if he has none and a free slot. */
 void welcome(ConquisterState &state, const std::string &player, std::size_t limit);
 /* How many copies of a power's emoji hang on a name as the group sees it. */
@@ -117,7 +115,7 @@ std::optional<std::size_t> balloon_slot(const ConquisterState &state, const std:
 }
 
 /* The 🎈 is an emoji like the others: no 🎈 there, no defence. The file keeps how many attempts his has
-   survived; one that pops leaves his name, and the next one starts fresh. */
+   survived; one that pops lets the attempt through and is as good as new at once, still on his name. */
 BalloonRoll balloon_attempt(StorageSession &session, ConquisterState &state, const std::string &player,
                             Whereabouts site) {
     const std::optional<std::size_t> slot = balloon_slot(state, player, site);
@@ -127,7 +125,6 @@ BalloonRoll balloon_attempt(StorageSession &session, ConquisterState &state, con
     const std::int64_t attempt = counter(state.balloons, player) + 1;
     if (static_cast<std::int64_t>(session.random_index(balloon_attempts)) < attempt) {
         state.balloons.erase(player);
-        clear_slot(state, player, *slot);
         return BalloonRoll::popped;
     }
     state.balloons[player] = attempt;
@@ -610,7 +607,7 @@ ClaimResult conquister_claim(
                 return outcome;
             }
             outcome.balloon_popped = balloon == BalloonRoll::popped;
-            /* Whatever 🎈 he has next starts fresh. */
+            /* Kicked out, his 🎈 is fresh again. */
             state.balloons.erase(holder);
             outcome.previous_username = display_name(state, holder);
             outcome.previous_key = holder;
@@ -1038,14 +1035,6 @@ bool give_emoji(ConquisterState &state, const std::string &player, const std::st
         state.stayed[player].push_back(static_cast<std::int64_t>(*slot));
     }
     return true;
-}
-
-void clear_slot(ConquisterState &state, const std::string &player, std::size_t slot) {
-    std::vector<std::string> slots = slots_of(state, player);
-    if (slot < slots.size()) {
-        slots[slot].clear();
-        hang(state, player, std::move(slots));
-    }
 }
 
 void welcome(ConquisterState &state, const std::string &player, std::size_t limit) {

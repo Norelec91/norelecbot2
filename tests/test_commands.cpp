@@ -328,8 +328,8 @@ TEST_CASE("the balloon replies are the ones the players read") {
     context.user_id = 2;
     context.username = "bob";
     const std::string popped = reply("We @TheConquister37");
-    CHECK(popped.starts_with("💥 bob hai bucato il palloncino di @alice!\n"));
-    CHECK(popped.contains("bob hai cacciato @alice da @TheConquister37.\n"));
+    CHECK(popped.starts_with("💥 bob hai bucato il palloncino di @alice (🎈)!\n"));
+    CHECK(popped.contains("bob hai cacciato @alice (🎈) da @TheConquister37.\n"));
     CHECK(popped.contains("bob sei in @TheConquister37!"));
 }
 
@@ -428,7 +428,7 @@ TEST_CASE("the balloon replies follow the same rule") {
 
     const CommandContext context{.storage = storage, .config = config, .user_id = 2, .username = "bob"};
     const std::string reply = command_dispatch(context, "We @TheConquister37").value_or("<nessuna risposta>");
-    CHECK(reply.starts_with("💥 bob hai bucato il palloncino di alice!\n"));
+    CHECK(reply.starts_with("💥 bob hai bucato il palloncino di alice (🎈)!\n"));
     CHECK_FALSE(reply.contains("@alice"));
 }
 
@@ -471,11 +471,15 @@ TEST_CASE("We @someone sends the player out to rob them") {
 
     /* On the road, naming yourself turns you round, and the way back is the road already
        walked: he turned round the moment he left, so he is home at once. */
-    CHECK(reply("We @bob") == "🚀 bob lasci perdere e torni in @bob: arrivi tra 0 secondi.");
-    CHECK(reply("We @alice") == "🚀 bob sei già in viaggio, torni tra 0 secondi.");
+    /* The clock may tick between leaving and turning round: no time at all, or one second. */
+    const auto soon = [](const std::string &said, std::string_view start) {
+        return said == std::format("{}0 secondi.", start) || said == std::format("{}1 secondo.", start);
+    };
+    CHECK(soon(reply("We @bob"), "🚀 bob lasci perdere e torni in @bob: arrivi tra "));
+    CHECK(soon(reply("We @alice"), "🚀 bob sei già in viaggio, torni tra "));
 
-    CHECK(reply("We @TheConquister37") ==
-          "🚀 bob sei per strada: non puoi entrare in @TheConquister37 prima di tornare in @bob, tra 0 secondi.");
+    CHECK(soon(reply("We @TheConquister37"),
+               "🚀 bob sei per strada: non puoi entrare in @TheConquister37 prima di tornare in @bob, tra "));
 
     /* The one holding the place stays in it. */
     static_cast<void>(conquister_claim(storage, 9, "erin", seconds_now_for_test()));
@@ -965,6 +969,41 @@ TEST_CASE("everybody starts with a 🎈, which is what defends him and can be bo
     /* A new one has its own price, whatever copies are around. */
     CHECK(command_dispatch(alice, "We @Alice 🎈").value_or("").contains("Alice (🎈) hai speso 1000 palle"));
     CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score >= 500);
+}
+
+TEST_CASE("a popped 🎈 stays on the name, and a player is handed only one") {
+    const TestPaths paths{"balloon-regen-test"};
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    config.cooldown_seconds = 0;
+    const auto furniture_of_alice = [](Storage &storage) {
+        const Authors all = furniture_all(storage);
+        return all.count("tg:1") == 0 ? std::string{} : all.at("tg:1");
+    };
+    {
+        Storage storage{config.conquister_path, config.quotes_path};
+        const CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
+        const CommandContext bob{.storage = storage, .config = config, .user_id = 2, .username = "Bob"};
+        REQUIRE(command_dispatch(alice, "We @TheConquister37"));
+        CHECK(furniture_of_alice(storage) == "🎈");
+        /* bob keeps at it until her balloon pops and he is in: it is still hers, as good as new. */
+        std::string reply;
+        for (int attempt = 0; attempt < 8 && !reply.contains("hai cacciato"); ++attempt) {
+            reply = command_dispatch(bob, "We @TheConquister37").value_or("");
+        }
+        CHECK(reply.contains("hai bucato il palloncino di @Alice"));
+        CHECK(furniture_of_alice(storage) == "🎈");
+        /* Burnt, it is gone for good: nothing she does hands her another. */
+        REQUIRE(command_dispatch(alice, "We @TheConquister37 🎈"));
+        CHECK(furniture_of_alice(storage).empty());
+        REQUIRE(command_dispatch(alice, "/profile"));
+        CHECK(furniture_of_alice(storage).empty());
+    }
+    /* Nor does a restart. */
+    Storage storage{config.conquister_path, config.quotes_path};
+    balloons_hand_out(storage, 10);
+    CHECK(furniture_of_alice(storage).empty());
 }
 
 TEST_CASE("the quotes are open to the admins as well as to the owner") {

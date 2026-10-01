@@ -48,7 +48,7 @@ inline constexpr Power nuke{"☢️", PowerKind::thrown, "when it lands",
 inline constexpr Power dog{"🐶", PowerKind::home, "when a raider reaches the house",
                            "each is a chance of sending him away with nothing"};
 inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries to get past it, where its owner is",
-                               "holds off whoever comes for his place or his house until it pops, and is gone"};
+                               "holds off whoever comes for his place or his house until it pops, then is as good as new"};
 
 }
 

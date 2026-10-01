@@ -77,7 +77,7 @@ struct ConquisterState {
     Counters scores;
     Counters quotes_added;
     /* The attempts each player's 🎈 already survived, where it guards him: @TheConquister37 while he
-       holds it, his home while he is there. A fresh one has no entry; one that pops leaves his name. */
+       holds it, his home while he is there. A fresh one has no entry, and one that pops is fresh again. */
     Counters balloons;
     /* Users mapped to the instant their claim penalty expires. */
     Counters cooldowns;
