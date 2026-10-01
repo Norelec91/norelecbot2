@@ -4,6 +4,7 @@
 #include "storage.hpp"
 #include "zodiac.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -12,6 +13,39 @@
 #include <vector>
 
 namespace norelecbot {
+
+/* Where an emoji with a power does its work. One hung at home stays there and guards the house whether
+   its owner is in or out; one carried counts for him away from home, on the road or in
+   @TheConquister37; one thrown leaves his name for good and lands on somebody else. */
+enum class PowerKind { home, carried, thrown };
+
+/* An emoji that does something beyond hanging beside a name. */
+struct Power {
+    std::string_view emoji;
+    PowerKind kind;
+    /* The moment the copies on the name are counted: nothing hung or burnt afterwards changes it. */
+    std::string_view counted;
+    std::string_view effect;
+};
+
+namespace power {
+
+inline constexpr Power pleading{"🥺", PowerKind::home, "when a raider reaches the house",
+                                "each makes him take a share less"};
+inline constexpr Power rocket{"🚀", PowerKind::carried, "when he sets off", "each makes both legs of the ride faster"};
+inline constexpr Power bolt{"⚡", PowerKind::carried, "when he enters @TheConquister37",
+                            "each makes the hold worth a share more"};
+inline constexpr Power lobster{"🦞", PowerKind::carried, "when he enters @TheConquister37 kicking somebody out",
+                               "becomes what the kicked holder has in the same slot until he leaves"};
+inline constexpr Power poo{"💩", PowerKind::thrown, "when it lands", "makes whoever it hits \"lo smerdato\" for a while"};
+
+}
+
+/* Every emoji with a power: a new one is a row here, of a declared kind, plus what it does. */
+inline constexpr std::array powers{power::pleading, power::rocket, power::bolt, power::lobster, power::poo};
+
+/* Whether an emoji is that power's, drawn in colour or not. */
+[[nodiscard]] bool is_power(std::string_view emoji, const Power &power);
 
 enum class ClaimStatus { taken, already_held, defended, cooldown, travelling };
 

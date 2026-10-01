@@ -478,7 +478,7 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
     case FurnitureBurnStatus::burned:
         break;
     }
-    if (emoji == "💩") {
+    if (is_power(emoji, power::poo)) {
         /* Whoever holds the place takes it full in the face. */
         return poo_throw(own_name(context), burnt.hit.empty() ? std::string{conquister_place}
             : std::format("{}{} in {}", burnt.hit_on_telegram ? "@" : "", burnt.hit, conquister_place));
@@ -960,7 +960,7 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
             return std::format("🎁 {} {}{} non ha più posto per {}: te la riporti a casa tua. Torni in {} tra {}.",
                                raider, mention, target, event.gift_emoji, home, format_wait(event.seconds));
         }
-        if (event.gift_emoji == "💩") {
+        if (is_power(event.gift_emoji, power::poo)) {
             return poo_throw(home, std::format("{}{}", mention, event.target));
         }
         return std::format("🎁 {} hai consegnato {} a {}{}! Torni in {} tra {}.",

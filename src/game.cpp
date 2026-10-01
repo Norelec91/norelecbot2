@@ -24,6 +24,8 @@ std::string display_name(const ConquisterState &state, const std::string &key);
 std::string shown_furniture(const ConquisterState &state, const std::string &player);
 /* Hit by a 💩 and not clean yet. */
 bool is_smeared(const ConquisterState &state, const std::string &player, std::int64_t now);
+/* How many copies of a power's emoji hang on a name as the group sees it. */
+std::int64_t copies_of(const ConquisterState &state, const std::string &player, const Power &power);
 /* For every 🦞 on the claimer's name, the emoji the kicked holder has in that same slot. */
 std::map<std::size_t, std::string> lobsters_copying(const ConquisterState &state, const std::string &claimer,
                                                     const std::string &kicked);
@@ -318,13 +320,6 @@ std::optional<std::string> player_by_name(const ConquisterState &state, std::str
     return known_player(state, name);
 }
 
-/* How many ⚡ hang on a name, drawn in colour or not. */
-std::int64_t count_bolts(std::string_view stored) {
-    return std::ranges::count_if(furniture_slots(stored), [](const std::string &slot) {
-        return slot == "⚡" || slot == "⚡\xEF\xB8\x8F";
-    });
-}
-
 }
 
 std::string player_seen(Storage &storage, std::int64_t user_id, const std::string &username,
@@ -530,7 +525,7 @@ ClaimResult conquister_claim(
                                .lightning_percent = 0, .lobsters = std::move(lobsters)};
         /* The ⚡ on his name as he comes in fix what this hold is worth, each one adding its share:
            nothing hung or burnt later can change it. He brings his own balloon, as worn as it is. */
-        const std::int64_t bolts = count_bolts(shown_furniture(state, username));
+        const std::int64_t bolts = copies_of(state, username, power::bolt);
         outcome.entered_lightning = bolts > 0 && rules.lightning > 0 ? 100 + bolts * rules.lightning : 0;
         state.current->lightning_percent = outcome.entered_lightning;
         return outcome;
@@ -750,6 +745,10 @@ std::int64_t inflated(std::int64_t cost, std::size_t copies, std::int64_t inflat
 
 }
 
+bool is_power(std::string_view emoji, const Power &power) {
+    return without_variation(emoji) == without_variation(power.emoji);
+}
+
 std::vector<std::string> furniture_slots(std::string_view stored) {
     std::vector<std::string> slots;
     while (!stored.empty()) {
@@ -789,11 +788,17 @@ bool same_emoji(std::string_view one, std::string_view other) {
 }
 
 bool is_poo(std::string_view emoji) {
-    return same_emoji(emoji, "💩");
+    return is_power(emoji, power::poo);
 }
 
 bool is_lobster(std::string_view emoji) {
-    return same_emoji(emoji, "🦞");
+    return is_power(emoji, power::lobster);
+}
+
+std::int64_t copies_of(const ConquisterState &state, const std::string &player, const Power &power) {
+    return std::ranges::count_if(furniture_slots(shown_furniture(state, player)), [&power](const std::string &slot) {
+        return !slot.empty() && is_power(slot, power);
+    });
 }
 
 bool is_smeared(const ConquisterState &state, const std::string &player, std::int64_t now) {
@@ -1228,9 +1233,7 @@ RaidResult raid_start(
         const position::Point theirs = position::coordinates_of(player_id(session, state, *known));
         outcome.seconds = position::travel_seconds(position::distance(home, theirs), rules.travel_divisor);
         /* The 🚀 still on his name as he leaves speed up both legs; one carried as a gift does not. */
-        const auto rockets = std::ranges::count_if(slots_of(state, username), [](const std::string &slot) {
-            return !slot.empty() && same_emoji(slot, "🚀");
-        });
+        const std::int64_t rockets = copies_of(state, username, power::rocket);
         if (rockets > 0 && rules.rocket_percent > 0) {
             outcome.seconds = std::max(position::shortest_travel,
                                        outcome.seconds * 100 / (100 + rockets * rules.rocket_percent));
@@ -1347,8 +1350,7 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                     /* The road says what can be taken, and nobody loses more than he has; every 🥺
                        on his name as the raider arrives makes him take a share less. */
                     const std::int64_t taken = std::min(theirs, carried);
-                    const auto pleas = std::ranges::count_if(furniture_slots(event.target_emoji),
-                        [](const std::string &slot) { return !slot.empty() && same_emoji(slot, "🥺"); });
+                    const std::int64_t pleas = copies_of(state, raid.target, power::pleading);
                     event.pleaded_percent = std::min<std::int64_t>(100, pleas * std::max<std::int64_t>(
                         rules.pleading_percent, 0));
                     event.spared = taken * event.pleaded_percent / 100;

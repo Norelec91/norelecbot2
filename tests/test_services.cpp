@@ -1042,6 +1042,26 @@ TEST_CASE("every 🥺 on the target's name when the raider gets there talks him 
     CHECK(arrival[0].loot == 100);
 }
 
+TEST_CASE("every emoji with a power is listed once, with its kind") {
+    for (std::size_t first = 0; first < powers.size(); ++first) {
+        CHECK_FALSE(powers[first].counted.empty());
+        CHECK_FALSE(powers[first].effect.empty());
+        for (std::size_t second = first + 1; second < powers.size(); ++second) {
+            CHECK_FALSE(is_power(powers[first].emoji, powers[second]));
+        }
+    }
+    /* Hung at home, carried along, thrown at somebody. */
+    CHECK(power::pleading.kind == PowerKind::home);
+    CHECK(power::rocket.kind == PowerKind::carried);
+    CHECK(power::bolt.kind == PowerKind::carried);
+    CHECK(power::lobster.kind == PowerKind::carried);
+    CHECK(power::poo.kind == PowerKind::thrown);
+    /* Drawn in colour or not, it is the same emoji. */
+    CHECK(is_power("⚡\xEF\xB8\x8F", power::bolt));
+    CHECK(is_power("⚡", power::bolt));
+    CHECK_FALSE(is_power("🍕", power::bolt));
+}
+
 TEST_CASE("a pile of poo is thrown, not hung: a full name takes it and keeps nothing") {
     const TestPaths paths{"poo-throw-test"};
     {
