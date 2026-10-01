@@ -1146,6 +1146,51 @@ TEST_CASE("a 💣 takes two neighbouring emoji with a power that are at home, or
     CHECK(furniture_all(storage).at("dave") == "⚡");
 }
 
+TEST_CASE("an emoji hung while its owner is out is at home, even of a kind he would carry") {
+    const TestPaths paths{"stayed-home-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":0,"bob":0},"quotes_added":{},)"
+             << R"("furniture":{"alice":"⚡💣💣","bob":"⚡"}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    const ClaimRules claim{.cooldown_seconds = 0, .signs = {}, .lightning = 25};
+    /* bob walks in with his one ⚡; alice brings him another, which is hung at his house. */
+    CHECK(conquister_claim(storage, 2, "bob", 0, claim).entered_lightning == 125);
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 0, quick_rides(), RaidTargetKind::any, 0, "⚡").status ==
+            RaidStatus::started);
+    REQUIRE(raid_due(storage, 5, quick_rides()).size() == 1);
+    REQUIRE(raid_due(storage, 10, quick_rides()).size() == 1);
+    CHECK(furniture_all(storage).at("bob") == "⚡⚡");
+    CHECK(player_profile_of(storage, "bob", 10).lightning_percent == 125);
+
+    /* A bomb at his house finds the one that was hung there, not the one he has with him... */
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 10, quick_rides(), RaidTargetKind::any, 0, "💣").status ==
+            RaidStatus::started);
+    const std::vector<RaidEvent> house = raid_due(storage, 15, quick_rides());
+    REQUIRE(house.size() == 1);
+    CHECK(house[0].blown == std::vector<std::string>{"⚡"});
+    CHECK(furniture_all(storage).at("bob") == "⚡");
+    CHECK(player_profile_of(storage, "bob", 15).lightning_percent == 125);
+    REQUIRE(raid_due(storage, 20, quick_rides()).size() == 1);
+
+    /* ...and one at the place finds the one he has with him, which lowers the hold. */
+    const FurnitureBurnResult place = furniture_burn(storage, "alice", "💣", 20, 86400);
+    CHECK(place.blown == std::vector<std::string>{"⚡"});
+    CHECK(furniture_all(storage).count("bob") == 0);
+    CHECK(player_profile_of(storage, "bob", 20).lightning_percent == 0);
+
+    /* Once he has been home and left again, what was hung in his absence goes with him. */
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["bob"] = "🚀";
+        session.state().stayed["bob"] = {0};
+        return 0;
+    });
+    REQUIRE(raid_start(storage, 2, "bob", "bob", 30, quick_rides()).status == RaidStatus::left_place);
+    REQUIRE(raid_start(storage, 2, "bob", "alice", 30, quick_rides()).status == RaidStatus::started);
+    CHECK(storage.transaction([](StorageSession &session) { return session.state().stayed.count("bob") == 0; }));
+}
+
 TEST_CASE("a pile of poo is thrown, not hung: a full name takes it and keeps nothing") {
     const TestPaths paths{"poo-throw-test"};
     {

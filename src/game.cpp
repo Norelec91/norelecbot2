@@ -173,6 +173,18 @@ Whereabouts whereabouts(const ConquisterState &state, const std::string &player)
     return travelling ? Whereabouts::road : Whereabouts::home;
 }
 
+/* Whether what hangs in a slot was put there while its owner was out. */
+bool stayed_home(const ConquisterState &state, const std::string &player, std::size_t slot) {
+    const auto mine = state.stayed.find(player);
+    return mine != state.stayed.end() &&
+        std::ranges::find(mine->second, static_cast<std::int64_t>(slot)) != mine->second.end();
+}
+
+/* Leaving from home he takes along everything he can carry, whenever it was hung. */
+void leave_home(ConquisterState &state, const std::string &player) {
+    state.stayed.erase(player);
+}
+
 /* From @TheConquister37 a line meant for home takes him there first; anywhere else nothing happens. */
 Departure go_home(ConquisterState &state, const std::string &player, std::int64_t now, zodiac::Overrides signs) {
     if (whereabouts(state, player) != Whereabouts::conquister) {
@@ -547,6 +559,7 @@ ClaimResult conquister_claim(
         for (const auto &[slot, emoji] : lobsters) {
             outcome.lobsters_became.push_back(emoji);
         }
+        leave_home(state, username);
         state.current = Holder{.user_id = user_id, .username = username, .since = now,
                                .lightning_percent = 0, .bolts = 0, .banked = 0, .counted_from = 0,
                                .lobsters = std::move(lobsters)};
@@ -952,6 +965,10 @@ bool give_emoji(ConquisterState &state, const std::string &player, const std::st
     }
     slots[*slot] = emoji;
     hang(state, player, std::move(slots));
+    /* Hung while he is out, it is at home: he did not take it along. */
+    if (whereabouts(state, player) != Whereabouts::home) {
+        state.stayed[player].push_back(static_cast<std::int64_t>(*slot));
+    }
     return true;
 }
 
@@ -1009,7 +1026,14 @@ void lose_bolts(ConquisterState &state, std::int64_t now, zodiac::Overrides sign
         return;
     }
     Holder &hold = *state.current;
-    const std::int64_t left = copies_of(state, hold.username, power::bolt);
+    /* Only the ones he has with him count: one hung at home since he came in was never part of it. */
+    const std::vector<std::string> slots = furniture_slots(shown_furniture(state, hold.username));
+    std::int64_t left = 0;
+    for (std::size_t slot = 0; slot < slots.size(); ++slot) {
+        if (is_power(slots[slot], power::bolt) && !stayed_home(state, hold.username, slot)) {
+            ++left;
+        }
+    }
     if (left >= hold.bolts) {
         return;
     }
@@ -1298,6 +1322,7 @@ RaidResult raid_start(
             outcome.seconds = std::max(position::shortest_travel,
                                        outcome.seconds * 100 / (100 + rockets * rules.rocket_percent));
         }
+        leave_home(state, username);
         state.raids.push_back(Raid{
             .raider = username,
             .target = *known,
@@ -1346,9 +1371,11 @@ bool defended_at_home(StorageSession &session, ConquisterState &state, const std
     return false;
 }
 
-/* Where an emoji with a power is: the ones he carries are wherever he is, the others stay at home. */
-Whereabouts site_of(const ConquisterState &state, const std::string &player, const Power &power) {
-    return power.kind == PowerKind::carried ? whereabouts(state, player) : Whereabouts::home;
+/* Where the emoji with a power in a slot is: one he carries is wherever he is, unless it was hung
+   while he was out; everything else stays at home. */
+Whereabouts site_of(const ConquisterState &state, const std::string &player, std::size_t slot, const Power &power) {
+    return power.kind == PowerKind::carried && !stayed_home(state, player, slot) ? whereabouts(state, player)
+                                                                              : Whereabouts::home;
 }
 
 /* A 💣 going off takes two emoji with a power from neighbouring slots, or one when no two are side by
@@ -1359,7 +1386,7 @@ std::vector<std::string> blow_up(StorageSession &session, ConquisterState &state
     std::vector<std::string> slots = slots_of(state, target);
     const auto exposed = [&](std::size_t slot) {
         const Power *power = slots[slot].empty() ? nullptr : power_of(slots[slot]);
-        return power != nullptr && site_of(state, target, *power) == site;
+        return power != nullptr && site_of(state, target, slot, *power) == site;
     };
     std::vector<std::size_t> pairs;
     std::vector<std::size_t> singles;

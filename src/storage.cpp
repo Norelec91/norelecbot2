@@ -90,6 +90,25 @@ Authors parse_authors(const Json &state, const char *name) {
     return authors;
 }
 
+Slots parse_slots(const Json &state, const char *name) {
+    Slots slots;
+    const auto section = state.find(name);
+    if (section == state.end() || !section->is_object()) {
+        return slots;
+    }
+    for (const auto &entry : section->items()) {
+        if (!entry.value().is_array()) {
+            continue;
+        }
+        std::vector<std::int64_t> numbers;
+        for (const Json &slot : entry.value()) {
+            numbers.push_back(integer(slot));
+        }
+        slots.emplace(entry.key(), std::move(numbers));
+    }
+    return slots;
+}
+
 std::vector<Raid> parse_raids(const Json &state) {
     std::vector<Raid> raids;
     const auto section = state.find("raids");
@@ -162,6 +181,7 @@ ConquisterState parse_state(const Json &json) {
         parse_authors(json, "furniture"),
         parse_counters(json, "debugging"),
         parse_counters(json, "smeared"),
+        parse_slots(json, "stayed"),
     };
     return state;
 }
@@ -218,6 +238,7 @@ Json state_to_json(const ConquisterState &state) {
         {"furniture", state.furniture},
         {"debugging", state.debugging},
         {"smeared", state.smeared},
+        {"stayed", state.stayed},
     };
 }
 

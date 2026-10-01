@@ -49,6 +49,8 @@ struct Holder {
 using Counters = nlohmann::ordered_map<std::string, std::int64_t>;
 /* Quotes mapped to whoever added them, in file order. */
 using Authors = nlohmann::ordered_map<std::string, std::string>;
+/* Players mapped to slots of their names, from 0, in file order. */
+using Slots = nlohmann::ordered_map<std::string, std::vector<std::int64_t>>;
 
 
 /* A player away from home, robbing another one. */
@@ -103,6 +105,9 @@ struct ConquisterState {
     Counters debugging;
     /* Players hit by a thrown 💩, mapped to the instant they stop being "lo smerdato". */
     Counters smeared;
+    /* The slots filled while the player was away: what was hung there is at home, even of a kind he
+       would carry, until he next leaves from home. */
+    Slots stayed;
 
     bool operator==(const ConquisterState &) const = default;
 };
