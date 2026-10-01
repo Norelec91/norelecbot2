@@ -997,8 +997,8 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
     }
     reply += std::format("! Torni in {} tra {}.", home, format_wait(event.seconds));
     if (event.spared > 0) {
-        reply += std::format("\n🥺 {} ti ha impietosito: gli lasci {} ({}% in meno).", target, palle(event.spared),
-                             event.pleaded_percent);
+        reply += std::format("\n🥺 {} ti ha impietosito: gli lasci {} invece di rubarne {} ({}% in meno).", target,
+                             palle(event.spared), event.spared + event.loot, event.pleaded_percent);
     }
     return reply;
 }
