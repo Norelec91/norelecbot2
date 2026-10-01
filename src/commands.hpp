@@ -32,7 +32,7 @@ struct CommandContext {
     bool admin = false;
 };
 
-/* What the bot says when a raid reaches its target or comes home; nothing for a homecoming empty-handed. */
+/* What the bot says when a raid reaches its target or comes home. */
 [[nodiscard]] std::optional<std::string> raid_event_reply(const RaidEvent &event);
 
 /* Whether the text is a claim or a known command, without running it. */

@@ -569,7 +569,7 @@ TEST_CASE("the raids tell what happened") {
     home.loot = 250;
     CHECK(raid_event_reply(home) == "🏠 bob torni in bob con 250 palle.");
     home.loot = 0;
-    CHECK_FALSE(raid_event_reply(home));
+    CHECK(raid_event_reply(home) == "🏠 bob sei tornato in bob.");
 
     RaidEvent given;
     given.kind = RaidEvent::Kind::delivered;

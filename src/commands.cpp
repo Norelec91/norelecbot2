@@ -966,8 +966,8 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
         if (event.loot > 0) {
             return std::format("🏠 {} torni in {} con {}.", raider, home, palle(event.loot));
         }
-        /* Coming home with nothing is not news. */
-        return std::nullopt;
+        /* Empty-handed too: he needs to know he is home and can leave again. */
+        return std::format("🏠 {} sei tornato in {}.", raider, home);
     }
     if (event.kind == RaidEvent::Kind::delivered && !event.gift_emoji.empty()) {
         if (event.no_room) {
