@@ -27,11 +27,13 @@ Whereabouts whereabouts(const ConquisterState &state, const std::string &player)
 /* What a thrown emoji did where it landed. */
 struct Landing {
     bool smeared = false;
+    /* A 💣 that was a dud went off in the thrower's hand: what is blown is his, not the victim's. */
+    bool backfired = false;
     std::vector<std::string> blown;
 };
 /* A thrown emoji lands where somebody is, his house or @TheConquister37, and works on what is there. */
-Landing land(StorageSession &session, ConquisterState &state, std::string_view thrown, const std::string &victim,
-             Whereabouts site, std::int64_t now, std::int64_t smeared_seconds);
+Landing land(StorageSession &session, ConquisterState &state, std::string_view thrown, const std::string &thrower,
+             const std::string &victim, Whereabouts site, std::int64_t now, const RaidRules &rules);
 /* Hit by a 💩 and not clean yet. */
 bool is_smeared(const ConquisterState &state, const std::string &player, std::int64_t now);
 /* How many copies of a power's emoji hang on a name as the group sees it. */
@@ -1047,7 +1049,7 @@ void lose_bolts(ConquisterState &state, std::int64_t now, zodiac::Overrides sign
 }
 
 FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, const std::string &emoji,
-                                   std::int64_t now, std::int64_t smeared_seconds, zodiac::Overrides signs) {
+                                   std::int64_t now, const RaidRules &rules) {
     const FurnitureBurnResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         FurnitureBurnResult outcome;
@@ -1064,12 +1066,15 @@ FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, 
         if (is_thrown(emoji) && state.current && !state.current->username.empty() &&
             state.current->username != player) {
             const std::string holder = state.current->username;
-            outcome.blown = land(session, state, emoji, holder, Whereabouts::conquister, now, smeared_seconds).blown;
+            Landing landing = land(session, state, emoji, player, holder, Whereabouts::conquister, now, rules);
+            outcome.backfired = landing.backfired;
+            outcome.blown = std::move(landing.blown);
+            outcome.shown = shown_furniture(state, player);
             outcome.hit = display_name(state, holder);
             outcome.hit_on_telegram = counter(state.telegram_ids, holder) != 0;
             outcome.hit_furniture = shown_furniture(state, holder);
         }
-        lose_bolts(state, now, signs);
+        lose_bolts(state, now, rules.signs);
         return outcome;
     });
     if (result.status == FurnitureBurnStatus::burned) {
@@ -1379,13 +1384,15 @@ Whereabouts site_of(const ConquisterState &state, const std::string &player, std
 }
 
 /* A 💣 going off takes one emoji with a power, drawn among those that are there: at his house what he
-   left at home, in @TheConquister37 what he carries. */
+   left at home, in @TheConquister37 what he carries. In the thrower's own hand it is only among what
+   he carries that it draws. */
 std::vector<std::string> blow_up(StorageSession &session, ConquisterState &state, const std::string &target,
-                                 Whereabouts site) {
+                                 Whereabouts site, bool carried_only = false) {
     std::vector<std::string> slots = slots_of(state, target);
     const auto exposed = [&](std::size_t slot) {
         const Power *power = slots[slot].empty() ? nullptr : power_of(slots[slot]);
-        return power != nullptr && site_of(state, target, slot, *power) == site;
+        return power != nullptr && site_of(state, target, slot, *power) == site &&
+            (!carried_only || power->kind == PowerKind::carried);
     };
     std::vector<std::size_t> there;
     for (std::size_t slot = 0; slot < slots.size(); ++slot) {
@@ -1403,14 +1410,21 @@ std::vector<std::string> blow_up(StorageSession &session, ConquisterState &state
     return blown;
 }
 
-Landing land(StorageSession &session, ConquisterState &state, std::string_view thrown, const std::string &victim,
-             Whereabouts site, std::int64_t now, std::int64_t smeared_seconds) {
+Landing land(StorageSession &session, ConquisterState &state, std::string_view thrown, const std::string &thrower,
+             const std::string &victim, Whereabouts site, std::int64_t now, const RaidRules &rules) {
     Landing landing;
     if (is_power(thrown, power::poo)) {
-        smear(state, victim, now, smeared_seconds);
+        smear(state, victim, now, rules.smeared_seconds);
         landing.smeared = true;
     } else if (is_power(thrown, power::bomb)) {
-        landing.blown = blow_up(session, state, victim, site);
+        /* A dud goes off in his hand as he throws it, among what he has with him, and spares the victim. */
+        if (rules.bomb_dud_percent > 0 &&
+            static_cast<std::int64_t>(session.random_index(100)) < rules.bomb_dud_percent) {
+            landing.backfired = true;
+            landing.blown = blow_up(session, state, thrower, whereabouts(state, thrower), true);
+        } else {
+            landing.blown = blow_up(session, state, victim, site);
+        }
     }
     return landing;
 }
@@ -1449,11 +1463,13 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                            other emoji is hung, and a name that filled up meanwhile sends it back the
                            way it came. */
                         if (is_thrown(raid.gift_emoji)) {
-                            Landing landing = land(session, state, raid.gift_emoji, raid.target, Whereabouts::home,
-                                                   now, rules.smeared_seconds);
+                            Landing landing = land(session, state, raid.gift_emoji, raid.raider, raid.target,
+                                                   Whereabouts::home, now, rules);
                             raid.gift_emoji.clear();
                             event.target_smeared = event.target_smeared || landing.smeared;
+                            event.backfired = landing.backfired;
                             event.blown = std::move(landing.blown);
+                            event.raider_emoji = shown_furniture(state, raid.raider);
                             event.target_emoji = shown_furniture(state, raid.target);
                         } else if (has_room(state, raid.target, rules.furniture_limit) &&
                             give_emoji(state, raid.target, raid.gift_emoji, rules.furniture_limit)) {

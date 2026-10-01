@@ -160,6 +160,8 @@ struct RaidRules {
     /* How much less a raider takes for every 🥺 on the target's name when he gets there, in percent:
        they add up, to all of it at most. */
     std::int64_t pleading_percent = 0;
+    /* How often, in percent, a 💣 is a dud that goes off in the thrower's hand. */
+    std::int64_t bomb_dud_percent = 0;
 };
 
 struct RaidResult {
@@ -194,6 +196,8 @@ struct RaidEvent {
     bool no_room = false;
     /* delivered, with a 💣: the emoji it took off the target's name, empty when it found nothing to take. */
     std::vector<std::string> blown{};
+    /* The 💣 was a dud: what it took is the raider's own, among what he had with him. */
+    bool backfired = false;
     /* The furniture hung beside the two names, to be shown along with them. */
     std::string raider_emoji;
     std::string target_emoji;
@@ -369,6 +373,8 @@ struct FurnitureBurnResult {
     bool hit_on_telegram = false;
     std::string hit_furniture;
     std::vector<std::string> blown{};
+    /* The 💣 was a dud: what it took is the thrower's own, among what he had with him. */
+    bool backfired = false;
 };
 
 /* An emoji brought back to @TheConquister37 leaves the game too: the first slot that holds it is
@@ -376,7 +382,7 @@ struct FurnitureBurnResult {
    smerdato", a 💣 takes the emoji he carries. */
 [[nodiscard]] FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player,
                                                  const std::string &emoji, std::int64_t now = 0,
-                                                 std::int64_t smeared_seconds = 0, zodiac::Overrides signs = {});
+                                                 const RaidRules &rules = {});
 /* The players who are "lo smerdato" right now. */
 [[nodiscard]] std::vector<std::string> smeared_all(Storage &storage, std::int64_t now);
 

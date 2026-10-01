@@ -271,6 +271,7 @@ RaidRules raid_rules(const CommandContext &context) {
         .smeared_seconds = context.config.smeared_seconds,
         .rocket_percent = context.config.rocket_percent,
         .pleading_percent = context.config.pleading_percent,
+        .bomb_dud_percent = context.config.bomb_dud_percent,
     };
 }
 
@@ -392,6 +393,14 @@ std::string on_the_road(const CommandContext &context, std::string_view emoji, s
 }
 
 /* A pile of poo is not handed over or burnt: it is thrown, at the place or at a player. */
+/* A 💣 that was a dud: what it took from the thrower himself, or that he had nothing on him. */
+std::string dud_reply(std::string_view thrower, std::string_view blown, std::string_view after = {}) {
+    return blown.empty()
+        ? std::format("💣 {} la bomba era difettosa: ti esplode in mano, ma non avevi niente con te da perdere.{}",
+                      thrower, after)
+        : std::format("💣 {} la bomba era difettosa: ti esplode in mano e si porta via {}!{}", thrower, blown, after);
+}
+
 std::string poo_throw(std::string_view thrower, std::string_view target) {
     return std::format("{}, tiri una palla di cacca a {}, bravo hai fatto centro, l'hai completamente smerdato!",
                        thrower, target);
@@ -469,8 +478,7 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
         return missing_username_reply();
     }
     const FurnitureBurnResult burnt = furniture_burn(context.storage, std::string{context.player_key}, std::string{emoji},
-                                                     seconds_now(), context.config.smeared_seconds,
-                                                     context.config.zodiac_signs);
+                                                     seconds_now(), raid_rules(context));
     switch (burnt.status) {
     case FurnitureBurnStatus::travelling:
         return on_the_road(context, "🔥", "si brucia da casa tua o da @TheConquister37.");
@@ -488,6 +496,9 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
         std::string blown;
         for (const std::string &taken : burnt.blown) {
             blown += taken;
+        }
+        if (burnt.backfired) {
+            return dud_reply(context.username, blown);
         }
         const std::string holder = std::format("{}{}", burnt.hit_on_telegram ? "@" : "",
                                                with_furniture(burnt.hit, burnt.hit_furniture, false));
@@ -981,6 +992,9 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
             std::string blown;
             for (const std::string &emoji : event.blown) {
                 blown += emoji;
+            }
+            if (event.backfired) {
+                return dud_reply(raider, blown, std::format(" Torni in {} tra {}.", home, format_wait(event.seconds)));
             }
             return blown.empty()
                 ? std::format("💣 {} la tua bomba esplode in casa di {}{} ma non trova niente da portarsi via. "

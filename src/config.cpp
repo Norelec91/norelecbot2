@@ -135,6 +135,9 @@ constexpr std::array settings{
     Setting{"NORELECBOT_PLEADING_PERCENT", [](AppConfig &config, std::string_view value) {
         return set_number(config.pleading_percent, value, AppConfig::default_pleading_percent, 0, 100);
     }},
+    Setting{"NORELECBOT_BOMB_DUD_PERCENT", [](AppConfig &config, std::string_view value) {
+        return set_number(config.bomb_dud_percent, value, AppConfig::default_bomb_dud_percent, 0, 100);
+    }},
     Setting{"NORELECBOT_CONQUISTER_CHAT_ID", [](AppConfig &config, std::string_view value) {
         return set_number(config.conquister_chat_id, value, std::int64_t{0});
     }},

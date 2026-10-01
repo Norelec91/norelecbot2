@@ -777,6 +777,12 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     bomb.blown = {"🥺", "⚡"};
     CHECK(raid_event_reply(bomb) ==
           "💣 Alice la tua bomba esplode in casa di @Bob (🍕) e si porta via 🥺⚡! Torni in Alice tra 5 secondi.");
+    bomb.backfired = true;
+    CHECK(raid_event_reply(bomb) ==
+          "💣 Alice la bomba era difettosa: ti esplode in mano e si porta via 🥺⚡! Torni in Alice tra 5 secondi.");
+    bomb.blown.clear();
+    CHECK(raid_event_reply(bomb) == "💣 Alice la bomba era difettosa: ti esplode in mano, ma non avevi niente con te "
+                                    "da perdere. Torni in Alice tra 5 secondi.");
     /* Hit, he is "lo smerdato" wherever he is named. */
     RaidEvent robbed;
     robbed.raider = "Carol";
@@ -807,6 +813,8 @@ TEST_CASE("a 💩 thrown at the place makes the holder \"lo smerdato\" for a day
     AppConfig config;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
+    /* No duds here: the bombs must go off where they are thrown. */
+    config.bomb_dud_percent = 0;
     Storage storage{config.conquister_path, config.quotes_path};
     const CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
     const CommandContext bob{.storage = storage, .config = config, .user_id = 2, .username = "Bob"};

@@ -1119,7 +1119,7 @@ TEST_CASE("a 💣 takes one emoji with a power among those that are where it lan
         session.state().current->bolts = 1;
         return 0;
     });
-    const FurnitureBurnResult onto = furniture_burn(storage, "alice", "💣", 100, 86400);
+    const FurnitureBurnResult onto = furniture_burn(storage, "alice", "💣", 100);
     CHECK(onto.status == FurnitureBurnStatus::burned);
     CHECK(onto.hit == "dave");
     CHECK(onto.blown == std::vector<std::string>{"⚡"});
@@ -1131,7 +1131,7 @@ TEST_CASE("a 💣 takes one emoji with a power among those that are where it lan
     CHECK(after.counted_from == 100);
     CHECK(after.since == 0);
     /* Nothing he carries is left: the 🥺 and the 💩 are at home, out of reach from here. */
-    const FurnitureBurnResult again = furniture_burn(storage, "alice", "💣", 100, 86400);
+    const FurnitureBurnResult again = furniture_burn(storage, "alice", "💣", 100);
     CHECK(again.hit == "dave");
     CHECK(again.blown.empty());
     CHECK(furniture_all(storage).at("dave") == "[]🍕🥺💩");
@@ -1140,10 +1140,33 @@ TEST_CASE("a 💣 takes one emoji with a power among those that are where it lan
         session.state().furniture["dave"] = "⚡💣";
         return 0;
     });
-    const FurnitureBurnResult own = furniture_burn(storage, "dave", "💣", 100, 86400);
+    const FurnitureBurnResult own = furniture_burn(storage, "dave", "💣", 100);
     CHECK(own.status == FurnitureBurnStatus::burned);
     CHECK(own.hit.empty());
     CHECK(furniture_all(storage).at("dave") == "⚡");
+
+    /* A dud goes off in the thrower's hand: it spares the victim and takes one of what the thrower has
+       with him, never what only hangs at his house. */
+    RaidRules duds = quick_rides();
+    duds.bomb_dud_percent = 100;
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["alice"] = "🥺🚀💣💣💣";
+        return 0;
+    });
+    const FurnitureBurnResult dud = furniture_burn(storage, "alice", "💣", 200, duds);
+    CHECK(dud.backfired);
+    CHECK(dud.blown == std::vector<std::string>{"🚀"});
+    CHECK(dud.shown == "🥺[][]💣💣");
+    CHECK(furniture_all(storage).at("dave") == "⚡");
+    /* On the way to a house it goes off on arrival, and with nothing on him he loses nothing. */
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 200, duds, RaidTargetKind::any, 0, "💣").status ==
+            RaidStatus::started);
+    const std::vector<RaidEvent> arrival = raid_due(storage, 205, duds);
+    REQUIRE(arrival.size() == 1);
+    CHECK(arrival[0].backfired);
+    CHECK(arrival[0].blown.empty());
+    CHECK(furniture_all(storage).at("bob") == "🍕[]🍕");
+    CHECK(furniture_all(storage).at("alice") == "🥺[][][]💣");
 }
 
 TEST_CASE("an emoji hung while its owner is out is at home, even of a kind he would carry") {
@@ -1175,7 +1198,7 @@ TEST_CASE("an emoji hung while its owner is out is at home, even of a kind he wo
     REQUIRE(raid_due(storage, 20, quick_rides()).size() == 1);
 
     /* ...and one at the place finds the one he has with him, which lowers the hold. */
-    const FurnitureBurnResult place = furniture_burn(storage, "alice", "💣", 20, 86400);
+    const FurnitureBurnResult place = furniture_burn(storage, "alice", "💣", 20);
     CHECK(place.blown == std::vector<std::string>{"⚡"});
     CHECK(furniture_all(storage).count("bob") == 0);
     CHECK(player_profile_of(storage, "bob", 20).lightning_percent == 0);
