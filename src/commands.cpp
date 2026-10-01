@@ -782,15 +782,15 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
                         zodiac::element_name(zodiac::element_of_day(now)),
                         multiplier_text(percent));
     switch (profile.place) {
-    case ProfilePlace::home:
+    case Whereabouts::home:
         card += std::format("🏠 in {}{}\n", profile.on_telegram ? "@" : "", profile.name);
         break;
-    case ProfilePlace::conquister:
+    case Whereabouts::conquister:
         card += std::format("🪐 in {} da {}{}\n", conquister_place, format_wait(std::max<std::int64_t>(now - profile.since, 0)),
                             profile.lightning_percent > 100 ? std::format(" col ⚡ {}", multiplier_text(profile.lightning_percent))
                                                             : std::string{});
         break;
-    case ProfilePlace::road:
+    case Whereabouts::road:
         card += std::format("🚀 {} {}: rientra tra {}\n", profile.returning ? "sulla via del ritorno da" : "in viaggio verso",
                             profile.heading, format_wait(profile.home_in));
         break;

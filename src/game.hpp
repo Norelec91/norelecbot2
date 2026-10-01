@@ -271,8 +271,10 @@ struct ClaimRules {
     std::int64_t now,
     const ClaimRules &rules = {}
 );
-/* Where a player is right now. */
-enum class ProfilePlace { home, conquister, road };
+/* Where a player is right now. Away from home is either of the other two: on the road to somebody and
+   back, or in @TheConquister37, where the ride takes no time and he stays until he leaves or is kicked
+   out. Away, his house has no balloon and what he carries is with him. */
+enum class Whereabouts { home, conquister, road };
 
 /* Everything the group can know about one player. */
 struct Profile {
@@ -287,7 +289,7 @@ struct Profile {
     std::size_t rank = 0;
     std::size_t players = 0;
     std::int64_t quotes_added = 0;
-    ProfilePlace place = ProfilePlace::home;
+    Whereabouts place = Whereabouts::home;
     /* conquister: since when, and what the hold is worth in percent (0 without ⚡). */
     std::int64_t since = 0;
     std::int64_t lightning_percent = 0;

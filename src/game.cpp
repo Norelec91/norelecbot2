@@ -22,6 +22,8 @@ constexpr std::size_t quotes_page_size = 30;
 std::string display_name(const ConquisterState &state, const std::string &key);
 /* What hangs beside a name as the group sees it: the holder's 🦞 show what they came in as. */
 std::string shown_furniture(const ConquisterState &state, const std::string &player);
+/* Where a player is right now: the one question every rule about home and away asks. */
+Whereabouts whereabouts(const ConquisterState &state, const std::string &player);
 /* Hit by a 💩 and not clean yet. */
 bool is_smeared(const ConquisterState &state, const std::string &player, std::int64_t now);
 /* How many copies of a power's emoji hang on a name as the group sees it. */
@@ -144,9 +146,19 @@ Settlement leave_place(ConquisterState &state, std::int64_t now, zodiac::Overrid
     return settle_hold(state, holder, now, signs);
 }
 
+Whereabouts whereabouts(const ConquisterState &state, const std::string &player) {
+    if (state.current && text::equals_ignore_case(state.current->username, player)) {
+        return Whereabouts::conquister;
+    }
+    const bool travelling = std::ranges::any_of(state.raids, [&player](const Raid &raid) {
+        return raid.raider == player;
+    });
+    return travelling ? Whereabouts::road : Whereabouts::home;
+}
+
 /* From @TheConquister37 a line meant for home takes him there first; anywhere else nothing happens. */
 Departure go_home(ConquisterState &state, const std::string &player, std::int64_t now, zodiac::Overrides signs) {
-    if (!state.current || !text::equals_ignore_case(state.current->username, player)) {
+    if (whereabouts(state, player) != Whereabouts::conquister) {
         return {};
     }
     const Settlement settled = leave_place(state, now, signs);
@@ -155,17 +167,14 @@ Departure go_home(ConquisterState &state, const std::string &player, std::int64_
             .zodiac_percent = settled.zodiac_percent};
 }
 
-/* A raid takes the player away from home until the return trip ends. */
-bool is_away(const ConquisterState &state, const std::string &username) {
-    return std::ranges::any_of(state.raids, [&username](const Raid &raid) {
-        return raid.raider == username;
-    });
+/* Occupying @TheConquister37 is not the same as being home, and neither is a raid, which takes the
+   player away until the return trip ends. */
+bool at_home(const ConquisterState &state, const std::string &username) {
+    return whereabouts(state, username) == Whereabouts::home;
 }
 
-/* Occupying @TheConquister37 is not the same as being home. */
-bool at_home(const ConquisterState &state, const std::string &username) {
-    return !is_away(state, username) &&
-        (!state.current || !text::equals_ignore_case(state.current->username, username));
+bool on_the_road(const ConquisterState &state, const std::string &username) {
+    return whereabouts(state, username) == Whereabouts::road;
 }
 
 Raid *raid_of(ConquisterState &state, const std::string &username) {
@@ -482,7 +491,7 @@ ClaimResult conquister_claim(
             }
             state.cooldowns.erase(username);
         }
-        if (state.current && state.current->username == username) {
+        if (whereabouts(state, username) == Whereabouts::conquister) {
             outcome.status = ClaimStatus::already_held;
             return outcome;
         }
@@ -600,12 +609,11 @@ Profile profile_from(ConquisterState &state, const std::string &key, std::int64_
             [score](const Counters::value_type &other) { return ranks_before(other, *score); })) + 1;
     }
     profile.quotes_added = counter(state.quotes_added, key);
-    if (state.current && state.current->username == key) {
-        profile.place = ProfilePlace::conquister;
+    profile.place = whereabouts(state, key);
+    if (profile.place == Whereabouts::conquister && state.current) {
         profile.since = state.current->since;
         profile.lightning_percent = state.current->lightning_percent;
     } else if (const Raid *trip = raid_of(state, key); trip != nullptr) {
-        profile.place = ProfilePlace::road;
         profile.heading = display_name(state, trip->target);
         profile.returning = trip->arrived;
         profile.home_in = std::max<std::int64_t>(trip->back - now, 0);
@@ -981,7 +989,7 @@ FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, 
     const FurnitureBurnResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         FurnitureBurnResult outcome;
-        if (is_away(state, player)) {
+        if (on_the_road(state, player)) {
             outcome.status = FurnitureBurnStatus::travelling;
             return outcome;
         }
@@ -1121,7 +1129,7 @@ BurnResult palle_burn(Storage &storage, const std::string &player, std::int64_t 
         BurnResult outcome;
         const std::int64_t score = counter(state.scores, player);
         outcome.score = score;
-        if (is_away(state, player)) {
+        if (on_the_road(state, player)) {
             outcome.status = BurnStatus::travelling;
             return outcome;
         }
@@ -1170,7 +1178,7 @@ RaidResult raid_start(
             outcome.status = RaidStatus::unknown_target;
             return outcome;
         }
-        const bool holds_place = state.current && text::equals_ignore_case(state.current->username, username);
+        const bool holds_place = whereabouts(state, username) == Whereabouts::conquister;
         Raid *travelling = raid_of(state, username);
         /* Naming yourself is the way home. */
         if (homewards) {
