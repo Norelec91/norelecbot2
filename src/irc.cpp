@@ -6,6 +6,7 @@
 #include "irc_session.hpp"
 #include "logging.hpp"
 #include "telegram.hpp"
+#include "text.hpp"
 
 #include <openssl/err.h>
 #include <openssl/ssl.h>
@@ -361,6 +362,10 @@ void irc_run(Storage &storage, const AppConfig &config, const std::atomic<bool> 
                 .account_name = account,
                 .claims_allowed = true,
                 .owner = owner,
+                /* Only a nick NickServ vouches for gets this far, so the name is enough. */
+                .admin = std::ranges::any_of(config.irc_admin_nicks, [nick](const std::string &admin) {
+                    return text::equals_ignore_case(admin, nick);
+                }),
             };
             const std::optional<std::string> reply = command_dispatch(command, text);
             /* Answered in the group by the bot itself, so it reads there as Telegram writes: whole

@@ -113,6 +113,8 @@ struct AppConfig {
     std::string irc_channel;
     std::string irc_no_forward_prefix;
     std::string irc_owner_nick;
+    /* The nicks that are admins on IRC, as the Telegram ids in admin_ids are there. */
+    std::vector<std::string> irc_admin_nicks;
 };
 
 /* Reads the required .env file, then applies the environment variables on top of it. */

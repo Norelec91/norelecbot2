@@ -148,4 +148,12 @@ TEST_CASE("the admins are read like the owners, and are nobody by default") {
     CHECK(nobody->admin_ids.empty());
 
     CHECK_FALSE(file.load("NORELECBOT_ADMIN_ID=12345, tizio\n"));
+
+    /* On IRC they are nicks. */
+    const auto nicks = file.load("NORELECBOT_IRC_ADMIN=Kio, Altro\n");
+    REQUIRE(nicks);
+    REQUIRE(nicks->irc_admin_nicks.size() == 2);
+    CHECK(nicks->irc_admin_nicks[0] == "Kio");
+    CHECK(nicks->irc_admin_nicks[1] == "Altro");
+    CHECK(nobody->irc_admin_nicks.empty());
 }

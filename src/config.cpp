@@ -212,6 +212,10 @@ constexpr std::array settings{
     Setting{"NORELECBOT_IRC_OWNER", [](AppConfig &config, std::string_view value) {
         return set_text(config.irc_owner_nick, value, {});
     }},
+    Setting{"NORELECBOT_IRC_ADMIN", [](AppConfig &config, std::string_view value) {
+        config.irc_admin_nicks = split_names(value);
+        return true;
+    }},
     Setting{"NORELECBOT_QUOTES_FILE", [](AppConfig &config, std::string_view value) {
         return set_text(config.quotes_path, value, AppConfig::default_quotes_path);
     }},
