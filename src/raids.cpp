@@ -80,6 +80,8 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
         .ninja_percent = config.ninja_percent,
         .alarm_percent = config.alarm_percent,
         .pirate_percent = config.pirate_percent,
+        .pregnancy_seconds = config.pregnancy_seconds,
+        .child_stage_seconds = config.child_stage_seconds,
     };
     /* The news waits for the second round: by then IRC has had a tick to connect. */
     int rounds = 0;

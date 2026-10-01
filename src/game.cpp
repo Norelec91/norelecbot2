@@ -34,6 +34,8 @@ struct Landing {
     bool reset = false;
     /* A 🌀 flung the victim far away. */
     bool flung = false;
+    /* A 💦 left the victim expecting: the seconds until the child is born. */
+    std::int64_t expecting = 0;
     std::vector<std::string> blown;
 };
 /* A thrown emoji lands where somebody is, his house or @TheConquister37, and works on what is there. */
@@ -1075,22 +1077,37 @@ bool has_room(const ConquisterState &state, const std::string &player, std::size
     return empty_slots(slots_of(state, player), limit) >= needed;
 }
 
-bool has_emoji(const ConquisterState &state, const std::string &player, std::string_view emoji) {
-    return std::ranges::any_of(slots_of(state, player), [emoji](const std::string &slot) {
-        return !slot.empty() && same_emoji(slot, emoji);
+/* A child is not his to hand over, burn or lose: it stays where it was born until it leaves by itself. */
+bool is_child(const ConquisterState &state, const std::string &player, std::size_t slot) {
+    return std::ranges::any_of(state.children, [&](const Child &child) {
+        return child.owner == player && child.slot == static_cast<std::int64_t>(slot);
     });
+}
+
+/* The first slot that holds an emoji he can part with; nothing when there is none. */
+std::optional<std::size_t> slot_holding(const ConquisterState &state, const std::string &player,
+                                        std::string_view emoji) {
+    const std::vector<std::string> slots = slots_of(state, player);
+    for (std::size_t slot = 0; slot < slots.size(); ++slot) {
+        if (!slots[slot].empty() && same_emoji(slots[slot], emoji) && !is_child(state, player, slot)) {
+            return slot;
+        }
+    }
+    return std::nullopt;
+}
+
+bool has_emoji(const ConquisterState &state, const std::string &player, std::string_view emoji) {
+    return slot_holding(state, player, emoji).has_value();
 }
 
 /* Takes the first copy of an emoji off a name, leaving a hole where it hung. */
 bool take_emoji(ConquisterState &state, const std::string &player, std::string_view emoji) {
-    std::vector<std::string> slots = slots_of(state, player);
-    const auto found = std::ranges::find_if(slots, [emoji](const std::string &slot) {
-        return !slot.empty() && same_emoji(slot, emoji);
-    });
-    if (found == slots.end()) {
+    const std::optional<std::size_t> found = slot_holding(state, player, emoji);
+    if (!found) {
         return false;
     }
-    found->clear();
+    std::vector<std::string> slots = slots_of(state, player);
+    slots[*found].clear();
     hang(state, player, std::move(slots));
     return true;
 }
@@ -1186,6 +1203,17 @@ FurnitureMoveResult furniture_move(Storage &storage, const std::string &username
         outcome.moved = slots[source];
         outcome.swapped = slots[target];
         std::swap(slots[source], slots[target]);
+        /* A child moves with its emoji. */
+        for (Child &child : state.children) {
+            if (child.owner != username) {
+                continue;
+            }
+            if (child.slot == static_cast<std::int64_t>(source)) {
+                child.slot = static_cast<std::int64_t>(target);
+            } else if (child.slot == static_cast<std::int64_t>(target)) {
+                child.slot = static_cast<std::int64_t>(source);
+            }
+        }
         outcome.status = outcome.swapped.empty() ? FurnitureMoveStatus::moved : FurnitureMoveStatus::swapped;
         hang(state, username, slots);
         outcome.shown = furniture_stored(std::move(slots));
@@ -1246,6 +1274,8 @@ void start_over(ConquisterState &state) {
     state.stayed.clear();
     /* And where he first lived: nobody is far away any more. */
     state.flung.clear();
+    state.pregnancies.clear();
+    state.children.clear();
 }
 
 /* On a house it does the same to the one who lives there: no palle, no emoji, out of the place
@@ -1269,6 +1299,8 @@ void start_over(ConquisterState &state, const std::string &player, std::int64_t 
         }
     }
     state.furniture[player] = std::string{power::balloon.emoji};
+    std::erase_if(state.pregnancies, [&player](const Pregnancy &pregnancy) { return pregnancy.mother == player; });
+    std::erase_if(state.children, [&player](const Child &child) { return child.owner == player; });
     state.balloons.erase(player);
     state.cooldowns.erase(player);
     state.smeared.erase(player);
@@ -1309,6 +1341,7 @@ FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, 
             Landing landing = land(session, state, emoji, player, holder, Whereabouts::conquister, now, rules);
             outcome.backfired = landing.backfired;
             outcome.flung = landing.flung;
+            outcome.expecting = landing.expecting;
             outcome.blown = std::move(landing.blown);
             outcome.shown = shown_furniture(state, player);
             outcome.hit = display_name(state, holder);
@@ -1400,6 +1433,11 @@ FurnitureResult furniture_buy(
             index = static_cast<std::size_t>(position - 1);
         }
         outcome.position = index + 1;
+        if (is_child(state, username, index)) {
+            outcome.status = FurnitureStatus::child_there;
+            outcome.replaced = index < slots.size() ? slots[index] : std::string{};
+            return outcome;
+        }
         const std::string wanted = without_variation(emoji);
         if (index < slots.size() && without_variation(slots[index]) == wanted) {
             outcome.status = FurnitureStatus::already_there;
@@ -1641,7 +1679,7 @@ std::string board(StorageSession &session, ConquisterState &state, const Raid &r
     std::vector<std::string> slots = slots_of(state, raid.target);
     std::vector<std::size_t> there;
     for (std::size_t slot = 0; slot < slots.size(); ++slot) {
-        if (slots[slot].empty() || is_power(slots[slot], power::balloon)) {
+        if (slots[slot].empty() || is_power(slots[slot], power::balloon) || is_child(state, raid.target, slot)) {
             continue;
         }
         const Power *power = power_of(slots[slot]);
@@ -1658,6 +1696,105 @@ std::string board(StorageSession &session, ConquisterState &state, const Raid &r
     hang(state, raid.target, std::move(slots));
     static_cast<void>(hang_with_him(state, raid.raider, emoji, rules.furniture_limit));
     return emoji;
+}
+
+/* What a child looks like at each of its ages; nothing once it has lived them all. */
+std::string child_emoji(bool male, std::int64_t age) {
+    constexpr std::array<std::string_view, 4> boy{"👶", "👦", "👨", "👴"};
+    constexpr std::array<std::string_view, 4> girl{"👶", "👧", "👩", "👵"};
+    if (age < 0 || age >= static_cast<std::int64_t>(boy.size())) {
+        return {};
+    }
+    return std::string{(male ? boy : girl)[static_cast<std::size_t>(age)]};
+}
+
+/* The children whose time has come are born: a boy or a girl, hung in the mother's first empty slot or,
+   on a full name, in the place of an emoji drawn among the others. Never in the place of a 🎈 or of
+   another child. */
+std::vector<RaidEvent> births(StorageSession &session, ConquisterState &state, std::int64_t now,
+                              const RaidRules &rules) {
+    std::vector<RaidEvent> born;
+    std::vector<Pregnancy> waiting;
+    const std::vector<Pregnancy> pregnancies = state.pregnancies;
+    for (const Pregnancy &pregnancy : pregnancies) {
+        if (pregnancy.due > now) {
+            waiting.push_back(pregnancy);
+            continue;
+        }
+        const std::string &mother = pregnancy.mother;
+        const bool male = session.random_index(2) == 0;
+        RaidEvent event;
+        event.kind = RaidEvent::Kind::born;
+        event.raider = display_name(state, pregnancy.father);
+        event.target = display_name(state, mother);
+        event.target_on_telegram = counter(state.telegram_ids, mother) != 0;
+        event.raider_on_telegram = counter(state.telegram_ids, pregnancy.father) != 0;
+        event.gift_emoji = child_emoji(male, 0);
+        /* Whether it is a boy or a girl: the newborn looks the same either way. */
+        event.gift = male ? 1 : 0;
+        std::vector<std::string> slots = slots_of(state, mother);
+        std::optional<std::size_t> place = free_slot(slots, rules.furniture_limit);
+        if (!place) {
+            std::vector<std::size_t> others;
+            for (std::size_t slot = 0; slot < slots.size(); ++slot) {
+                if (!is_power(slots[slot], power::balloon) && !is_child(state, mother, slot)) {
+                    others.push_back(slot);
+                }
+            }
+            if (others.empty()) {
+                continue;
+            }
+            place = others[session.random_index(others.size())];
+            event.blown = {slots[*place]};
+        }
+        if (*place >= slots.size()) {
+            slots.resize(*place + 1);
+        }
+        slots[*place] = event.gift_emoji;
+        hang(state, mother, std::move(slots));
+        state.children.push_back(Child{.owner = mother, .slot = static_cast<std::int64_t>(*place), .male = male,
+                                       .born = now});
+        event.target_emoji = shown_furniture(state, mother);
+        born.push_back(std::move(event));
+    }
+    state.pregnancies = std::move(waiting);
+    return born;
+}
+
+/* The children grow where they were born, one age after the other, and after the last they leave. */
+std::vector<RaidEvent> grow(ConquisterState &state, std::int64_t now, const RaidRules &rules) {
+    std::vector<RaidEvent> gone;
+    std::vector<Child> staying;
+    const std::vector<Child> children = state.children;
+    const std::int64_t stage = std::max<std::int64_t>(rules.child_stage_seconds, 1);
+    for (const Child &child : children) {
+        const std::int64_t age = std::max<std::int64_t>(now - child.born, 0) / stage;
+        const std::string looks = child_emoji(child.male, age);
+        std::vector<std::string> slots = slots_of(state, child.owner);
+        const auto slot = static_cast<std::size_t>(child.slot);
+        if (slot >= slots.size() || slots[slot].empty()) {
+            continue;
+        }
+        if (looks.empty()) {
+            RaidEvent event;
+            event.kind = RaidEvent::Kind::gone;
+            event.target = display_name(state, child.owner);
+            event.target_on_telegram = counter(state.telegram_ids, child.owner) != 0;
+            event.gift_emoji = slots[slot];
+            slots[slot].clear();
+            hang(state, child.owner, std::move(slots));
+            event.target_emoji = shown_furniture(state, child.owner);
+            gone.push_back(std::move(event));
+            continue;
+        }
+        if (slots[slot] != looks) {
+            slots[slot] = looks;
+            hang(state, child.owner, std::move(slots));
+        }
+        staying.push_back(child);
+    }
+    state.children = std::move(staying);
+    return gone;
 }
 
 /* The 🥷 a raider has with him may take him past what guards the house, the 🎈 that is there and the 🐶,
@@ -1760,6 +1897,10 @@ Landing land(StorageSession &session, ConquisterState &state, std::string_view t
         }
         state.flung[victim] = now;
         landing.flung = true;
+    } else if (is_power(thrown, power::seed)) {
+        const std::int64_t wait = std::max<std::int64_t>(rules.pregnancy_seconds, 0);
+        state.pregnancies.push_back(Pregnancy{.mother = victim, .father = thrower, .due = now + wait});
+        landing.expecting = std::max<std::int64_t>(wait, 1);
     }
     return landing;
 }
@@ -1769,7 +1910,8 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
     const std::vector<RaidEvent> events = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         wash(state, now);
-        std::vector<RaidEvent> settled;
+        std::vector<RaidEvent> settled = grow(state, now, rules);
+        std::ranges::move(births(session, state, now, rules), std::back_inserter(settled));
         for (Raid &raid : state.raids) {
             if (!raid.arrived && now >= raid.arrive) {
                 raid.arrived = true;
@@ -1810,7 +1952,8 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                             if (event.sent_back) {
                                 RaidRules as_it_is = rules;
                                 as_it_is.bomb_dud_percent = 0;
-                                landing = land(session, state, thrown, raid.target, raid.raider, Whereabouts::home,
+                                /* Sent back, it is still the raider who threw it. */
+                                landing = land(session, state, thrown, raid.raider, raid.raider, Whereabouts::home,
                                                now, as_it_is);
                                 event.raider_smeared = event.raider_smeared || landing.smeared;
                             } else {
@@ -1822,6 +1965,7 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                             event.backfired = landing.backfired;
                             event.reset = landing.reset;
                             event.flung = landing.flung;
+                            event.expecting = landing.expecting;
                             event.blown = std::move(landing.blown);
                             event.raider_emoji = shown_furniture(state, raid.raider);
                             event.target_emoji = shown_furniture(state, raid.target);
@@ -1932,6 +2076,13 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
         case RaidEvent::Kind::returned:
             log_info("raid returned user={} target={} loot={} gift={} emoji={}", event.raider,
                      event.target, event.loot, event.gift, event.gift_emoji);
+            break;
+        case RaidEvent::Kind::born:
+            log_info("child born mother={} father={} child={} replaced={}", event.target, event.raider,
+                     event.gift_emoji, event.blown.empty() ? std::string{} : event.blown.front());
+            break;
+        case RaidEvent::Kind::gone:
+            log_info("child gone owner={} child={}", event.target, event.gift_emoji);
             break;
         }
     }

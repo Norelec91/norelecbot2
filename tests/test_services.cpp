@@ -1081,6 +1081,7 @@ TEST_CASE("every emoji with a power is listed once, with its kind") {
     CHECK(power::alarm.kind == PowerKind::home);
     CHECK(power::vortex.kind == PowerKind::thrown);
     CHECK(power::pirate.kind == PowerKind::carried);
+    CHECK(power::seed.kind == PowerKind::thrown);
     /* Whatever the tone of its skin, it is the same emoji. */
     CHECK(is_power("🥷🏿", power::ninja));
     CHECK(is_power("🥷", power::ninja));
@@ -1593,6 +1594,108 @@ TEST_CASE("a 🏴‍☠️ with the raider may carry off an emoji that is at the
     REQUIRE(arrival.size() == 1);
     CHECK(arrival[0].boarded.empty());
     CHECK(furniture_all(storage).at("bob") == "🍕");
+}
+
+TEST_CASE("a 💦 leaves a child on the way, born on the name it landed on") {
+    const TestPaths paths{"seed-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":0,"username":"carol","since":0},)"
+             << R"("scores":{"alice":0,"bob":0,"carol":0},"quotes_added":{},"telegram_ids":{"alice":1},)"
+             << R"("furniture":{"alice":"💦💦💦","bob":"🍕","carol":"🎈⚡"}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    RaidRules rules = quick_rides();
+    rules.pregnancy_seconds = 100;
+    rules.child_stage_seconds = 100000;
+    rules.furniture_limit = 2;
+
+    /* At a house nothing shows when it lands. */
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 0, rules, RaidTargetKind::any, 0, "💦").status ==
+            RaidStatus::started);
+    std::vector<RaidEvent> events = raid_due(storage, 5, rules);
+    REQUIRE(events.size() == 1);
+    CHECK(events[0].kind == RaidEvent::Kind::delivered);
+    CHECK(events[0].expecting == 100);
+    CHECK(furniture_all(storage).at("bob") == "🍕");
+    REQUIRE(raid_due(storage, 10, rules).size() == 1);
+    CHECK(raid_due(storage, 104, rules).empty());
+    /* Its time come, the newborn takes the empty slot: a boy or a girl. */
+    events = raid_due(storage, 105, rules);
+    REQUIRE(events.size() == 1);
+    CHECK(events[0].kind == RaidEvent::Kind::born);
+    CHECK(events[0].raider == "alice");
+    CHECK(events[0].raider_on_telegram);
+    CHECK(events[0].target == "bob");
+    CHECK(events[0].gift_emoji == "👶");
+    CHECK(events[0].blown.empty());
+    CHECK(furniture_all(storage).at("bob") == "🍕👶");
+    CHECK(raid_due(storage, 106, rules).empty());
+
+    /* On a full name the next one takes the place of another emoji, never of the first child. */
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 200, rules, RaidTargetKind::any, 0, "💦").status ==
+            RaidStatus::started);
+    REQUIRE(raid_due(storage, 205, rules).size() == 1);
+    REQUIRE(raid_due(storage, 210, rules).size() == 1);
+    events = raid_due(storage, 305, rules);
+    REQUIRE(events.size() == 1);
+    CHECK(events[0].blown == std::vector<std::string>{"🍕"});
+    CHECK(furniture_all(storage).at("bob") == "👶👶");
+
+    /* Thrown at the place it is the holder who is expecting; her 🎈 is never the slot taken. */
+    const FurnitureBurnResult onto = furniture_burn(storage, "alice", "💦", 400, rules);
+    CHECK(onto.hit == "carol");
+    CHECK(onto.expecting == 100);
+    events = raid_due(storage, 500, rules);
+    REQUIRE(events.size() == 1);
+    CHECK(events[0].target == "carol");
+    CHECK(events[0].blown == std::vector<std::string>{"⚡"});
+    CHECK(furniture_all(storage).at("carol") == "🎈👶");
+}
+
+TEST_CASE("a child grows through its ages where it was born, then leaves, and nothing takes it before") {
+    const TestPaths paths{"child-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":1000,"bob":100},"quotes_added":{},)"
+             << R"("furniture":{"alice":"🏴‍☠️🏴‍☠️","bob":"👶"},)"
+             << R"("children":[{"owner":"bob","slot":0,"male":true,"born":0}]})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    RaidRules rules = quick_rides();
+    rules.child_stage_seconds = 100;
+    rules.pirate_percent = 50;
+
+    /* It is not his to burn or to hand over, and nothing can be hung in its place. */
+    CHECK(furniture_burn(storage, "bob", "👶", 10, rules).status == FurnitureBurnStatus::not_owned);
+    CHECK(raid_start(storage, 0, "bob", "alice", 10, rules, RaidTargetKind::any, 0, "👶").status ==
+          RaidStatus::no_such_emoji);
+    CHECK(furniture_buy(storage, "bob", "🍕", 1, 0, 10, 10).status == FurnitureStatus::child_there);
+    /* Nor is it there for a pirate to take. */
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 10, rules).status == RaidStatus::started);
+    std::vector<RaidEvent> events = raid_due(storage, 15, rules);
+    REQUIRE(events.size() == 1);
+    CHECK(events[0].boarded.empty());
+    CHECK(furniture_all(storage).at("bob") == "👶");
+    REQUIRE(raid_due(storage, 20, rules).size() == 1);
+
+    /* Moved, it is the same child in another slot, and it goes on growing there. */
+    CHECK(furniture_move(storage, "bob", 1, 3, 10, 30).status == FurnitureMoveStatus::moved);
+    CHECK(furniture_all(storage).at("bob") == "[][]👶");
+    CHECK(raid_due(storage, 100, rules).empty());
+    CHECK(furniture_all(storage).at("bob") == "[][]👦");
+    CHECK(raid_due(storage, 200, rules).empty());
+    CHECK(furniture_all(storage).at("bob") == "[][]👨");
+    CHECK(raid_due(storage, 399, rules).empty());
+    CHECK(furniture_all(storage).at("bob") == "[][]👴");
+    /* A whole life lived, it leaves by itself and the slot is free again. */
+    events = raid_due(storage, 400, rules);
+    REQUIRE(events.size() == 1);
+    CHECK(events[0].kind == RaidEvent::Kind::gone);
+    CHECK(events[0].target == "bob");
+    CHECK(events[0].gift_emoji == "👴");
+    CHECK(furniture_all(storage).count("bob") == 0);
+    CHECK(storage.transaction([](StorageSession &session) { return session.state().children.empty(); }));
 }
 
 TEST_CASE("a pile of poo is thrown, not hung: a full name takes it and keeps nothing") {

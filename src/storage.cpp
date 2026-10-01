@@ -133,6 +133,45 @@ std::vector<Raid> parse_raids(const Json &state) {
     return raids;
 }
 
+std::vector<Pregnancy> parse_pregnancies(const Json &state) {
+    std::vector<Pregnancy> pregnancies;
+    const auto section = state.find("pregnancies");
+    if (section == state.end() || !section->is_array()) {
+        return pregnancies;
+    }
+    for (const Json &entry : *section) {
+        if (!entry.is_object()) {
+            continue;
+        }
+        pregnancies.push_back(Pregnancy{
+            .mother = entry.at("mother").get<std::string>(),
+            .father = entry.at("father").get<std::string>(),
+            .due = integer(entry.at("due")),
+        });
+    }
+    return pregnancies;
+}
+
+std::vector<Child> parse_children(const Json &state) {
+    std::vector<Child> children;
+    const auto section = state.find("children");
+    if (section == state.end() || !section->is_array()) {
+        return children;
+    }
+    for (const Json &entry : *section) {
+        if (!entry.is_object()) {
+            continue;
+        }
+        children.push_back(Child{
+            .owner = entry.at("owner").get<std::string>(),
+            .slot = integer(entry.at("slot")),
+            .male = entry.at("male").get<bool>(),
+            .born = integer(entry.at("born")),
+        });
+    }
+    return children;
+}
+
 /* Missing sections count as empty, like in the original C version. */
 ConquisterState parse_state(const Json &json) {
     if (!json.is_object()) {
@@ -185,6 +224,8 @@ ConquisterState parse_state(const Json &json) {
         parse_counters(json, "welcomed"),
         parse_counters(json, "balloon_ported"),
         parse_counters(json, "flung"),
+        parse_pregnancies(json),
+        parse_children(json),
     };
     return state;
 }
@@ -202,6 +243,14 @@ Json state_to_json(const ConquisterState &state) {
             {"gift", raid.gift},
             {"gift_emoji", raid.gift_emoji},
         };
+    });
+    Json pregnancies = Json::array();
+    std::ranges::transform(state.pregnancies, std::back_inserter(pregnancies), [](const Pregnancy &pregnancy) {
+        return Json{{"mother", pregnancy.mother}, {"father", pregnancy.father}, {"due", pregnancy.due}};
+    });
+    Json children = Json::array();
+    std::ranges::transform(state.children, std::back_inserter(children), [](const Child &child) {
+        return Json{{"owner", child.owner}, {"slot", child.slot}, {"male", child.male}, {"born", child.born}};
     });
     Json current = nullptr;
     if (state.current) {
@@ -245,6 +294,8 @@ Json state_to_json(const ConquisterState &state) {
         {"welcomed", state.welcomed},
         {"balloon_ported", state.balloon_ported},
         {"flung", state.flung},
+        {"pregnancies", std::move(pregnancies)},
+        {"children", std::move(children)},
     };
 }
 

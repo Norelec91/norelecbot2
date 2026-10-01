@@ -811,6 +811,31 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     gone.flung = true;
     CHECK(raid_event_reply(gone) == "Alice scaraventi @Bob lontanissimo: ora è a un anno di viaggio da tutti e da "
                                     "@TheConquister37. Torni in Alice tra 5 secondi.");
+    RaidEvent seeded = given;
+    seeded.gift_emoji = "💦";
+    seeded.expecting = 32400;
+    CHECK(raid_event_reply(seeded) ==
+          "Alice la tua 💦 è arrivata a casa di @Bob: tra 9 ore si vedrà. Torni in Alice tra 5 secondi.");
+    RaidEvent birth;
+    birth.kind = RaidEvent::Kind::born;
+    birth.raider = "Alice";
+    birth.raider_on_telegram = true;
+    birth.target = "Bob";
+    birth.target_on_telegram = true;
+    birth.target_emoji = "🍕👶";
+    birth.gift_emoji = "👶";
+    CHECK(raid_event_reply(birth) == "@Bob (🍕👶) è nata una femmina 👶: il padre è @Alice.");
+    birth.gift = 1;
+    birth.target_emoji = "👶";
+    birth.blown = {"🍕"};
+    CHECK(raid_event_reply(birth) ==
+          "@Bob (👶) è nato un maschio 👶: il padre è @Alice. Non c'era un posto libero: ha preso quello di 🍕.");
+    RaidEvent left;
+    left.kind = RaidEvent::Kind::gone;
+    left.target = "Bob";
+    left.target_on_telegram = true;
+    left.gift_emoji = "👴";
+    CHECK(raid_event_reply(left) == "@Bob 👴 ha vissuto la sua vita e se n'è andato: il posto è di nuovo libero.");
     bomb.backfired = true;
     CHECK(raid_event_reply(bomb) ==
           "Alice la bomba era difettosa: ti esplode in mano e si porta via 🥺⚡! Torni in Alice tra 5 secondi.");

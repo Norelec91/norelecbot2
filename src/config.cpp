@@ -166,6 +166,12 @@ constexpr std::array settings{
     Setting{"NORELECBOT_PIRATE_PERCENT", [](AppConfig &config, std::string_view value) {
         return set_number(config.pirate_percent, value, AppConfig::default_pirate_percent, 0, 100);
     }},
+    Setting{"NORELECBOT_PREGNANCY_SECONDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.pregnancy_seconds, value, AppConfig::default_pregnancy_seconds, 0);
+    }},
+    Setting{"NORELECBOT_CHILD_STAGE_SECONDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.child_stage_seconds, value, AppConfig::default_child_stage_seconds, 1);
+    }},
     Setting{"NORELECBOT_CONQUISTER_CHAT_ID", [](AppConfig &config, std::string_view value) {
         return set_number(config.conquister_chat_id, value, std::int64_t{0});
     }},

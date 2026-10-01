@@ -72,6 +72,26 @@ struct Raid {
     bool operator==(const Raid &) const = default;
 };
 
+/* A child on the way: the player a 💦 landed on, whoever threw it, and when it is born. */
+struct Pregnancy {
+    std::string mother;
+    std::string father;
+    std::int64_t due = 0;
+
+    bool operator==(const Pregnancy &) const = default;
+};
+
+/* A child born of a 💦, in a slot of its mother's name, from 0: it grows there, stage by stage, and
+   nothing can take it away before it leaves by itself. */
+struct Child {
+    std::string owner;
+    std::int64_t slot = 0;
+    bool male = false;
+    std::int64_t born = 0;
+
+    bool operator==(const Child &) const = default;
+};
+
 struct ConquisterState {
     std::optional<Holder> current;
     Counters scores;
@@ -115,6 +135,9 @@ struct ConquisterState {
     Counters balloon_ported;
     /* The players a 🌀 flung far away, and when: a year of road from everybody and from @TheConquister37. */
     Counters flung;
+    /* The children on the way, in the order they were conceived. */
+    std::vector<Pregnancy> pregnancies;
+    std::vector<Child> children;
 
     bool operator==(const ConquisterState &) const = default;
 };

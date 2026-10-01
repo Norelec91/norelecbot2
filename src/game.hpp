@@ -57,6 +57,8 @@ inline constexpr Power vortex{"🌀", PowerKind::thrown, "when it lands",
                               "flings whoever it hits a year of road away from everybody and from the place"};
 inline constexpr Power pirate{"🏴‍☠️", PowerKind::carried, "when a raid of his gets through",
                               "each is a chance of carrying off one emoji that is at the house too"};
+inline constexpr Power seed{"💦", PowerKind::thrown, "when it lands",
+                            "in time a child is born on the name of whoever it hits, taking a slot"};
 inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries to get past it, where its owner is",
                                "holds off whoever comes for his place or his house until it pops, then is as good as new"};
 
@@ -66,7 +68,7 @@ inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries 
 inline constexpr std::array powers{power::pleading, power::rocket, power::bolt, power::lobster,
                                    power::poo,      power::bomb,   power::nuke, power::dog,
                                    power::balloon,  power::mailbox, power::ninja, power::alarm,
-                                   power::vortex,   power::pirate};
+                                   power::vortex,   power::pirate,  power::seed};
 
 /* Whether an emoji is that power's, drawn in colour or not and whatever the tone of its skin. */
 [[nodiscard]] bool is_power(std::string_view emoji, const Power &power);
@@ -115,7 +117,16 @@ struct Departure {
     int zodiac_percent = 100;
 };
 
-enum class FurnitureStatus { bought, full, invalid_position, already_there, insufficient_score, not_home };
+/* child_there: the slot named holds a child, which nothing replaces. */
+enum class FurnitureStatus {
+    bought,
+    full,
+    invalid_position,
+    already_there,
+    insufficient_score,
+    not_home,
+    child_there
+};
 
 struct FurnitureResult {
     FurnitureStatus status = FurnitureStatus::bought;
@@ -199,6 +210,10 @@ struct RaidRules {
     /* The chance, in percent, that each 🏴‍☠️ the raider has with him gives of carrying off an emoji from
        the house he robs: they add up. */
     std::int64_t pirate_percent = 0;
+    /* How long after a 💦 lands the child is born. */
+    std::int64_t pregnancy_seconds = 9 * 60 * 60;
+    /* How long a child stays in each of its four ages before it moves on, and at last leaves. */
+    std::int64_t child_stage_seconds = 24 * 60 * 60;
 };
 
 struct RaidResult {
@@ -216,7 +231,10 @@ struct RaidResult {
 };
 
 struct RaidEvent {
-    enum class Kind { stolen, delivered, returned };
+    /* gone: a child that lived all its ages leaves the target's name; gift_emoji is what it was last.
+       born: a child conceived by a 💦 comes into the world. The raider is the father, the target the
+       mother; gift_emoji is the child, blown what it took the slot of when the name was full. */
+    enum class Kind { stolen, delivered, returned, born, gone };
 
     Kind kind = Kind::stolen;
     std::string raider;
@@ -247,6 +265,8 @@ struct RaidEvent {
     bool reset = false;
     /* delivered, with a 🌀: the target was flung far away. */
     bool flung = false;
+    /* delivered, with a 💦: a child is on the way, born after this many seconds. */
+    std::int64_t expecting = 0;
     /* delivered, with something thrown: a 📮 sent it back, and what it did it did to the raider, at his
        own house. */
     bool sent_back = false;
@@ -450,6 +470,8 @@ struct FurnitureBurnResult {
     bool reset = false;
     /* It was a 🌀: whoever held the place was flung far away. */
     bool flung = false;
+    /* It was a 💦: the holder is expecting, and the child is born after this many seconds. */
+    std::int64_t expecting = 0;
 };
 
 /* An emoji brought back to @TheConquister37 leaves the game too: the first slot that holds it is

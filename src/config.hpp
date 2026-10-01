@@ -48,6 +48,10 @@ struct AppConfig {
     static constexpr int default_alarm_percent = 10;
     /* The chance, in percent, that each 🏴‍☠️ a raider has with him gives of carrying off an emoji. */
     static constexpr int default_pirate_percent = 10;
+    /* How long after a 💦 lands the child is born: nine hours. */
+    static constexpr int default_pregnancy_seconds = 9 * 60 * 60;
+    /* How long a child stays in each of its four ages: a day. */
+    static constexpr int default_child_stage_seconds = 24 * 60 * 60;
     static constexpr int default_api_port = 8000;
     static constexpr int default_irc_port = 6697;
     static constexpr std::string_view default_irc_nick = "NorelecBot";
@@ -85,6 +89,8 @@ struct AppConfig {
     int ninja_percent = default_ninja_percent;
     int alarm_percent = default_alarm_percent;
     int pirate_percent = default_pirate_percent;
+    int pregnancy_seconds = default_pregnancy_seconds;
+    int child_stage_seconds = default_child_stage_seconds;
     /* Whether a player seen for the first time is handed a 🎈. */
     bool starter_balloon = true;
     /* Players whose real sign the owner knows, instead of the one their name gives. */

@@ -296,6 +296,8 @@ RaidRules raid_rules(const CommandContext &context) {
         .ninja_percent = context.config.ninja_percent,
         .alarm_percent = context.config.alarm_percent,
         .pirate_percent = context.config.pirate_percent,
+        .pregnancy_seconds = context.config.pregnancy_seconds,
+        .child_stage_seconds = context.config.child_stage_seconds,
     };
 }
 
@@ -529,6 +531,11 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
         /* Whoever holds the place takes it full in the face. */
         return poo_throw(own_name(context), burnt.hit.empty() ? std::string{conquister_place}
             : std::format("{}{} in {}", burnt.hit_on_telegram ? "@" : "", burnt.hit, conquister_place));
+    }
+    if (burnt.expecting > 0) {
+        return std::format("{} la tua 💦 è arrivata addosso a {}{} in {}: tra {} si vedrà.", context.username,
+                           burnt.hit_on_telegram ? "@" : "", burnt.hit, conquister_place,
+                           format_wait(burnt.expecting));
     }
     if (burnt.flung) {
         return std::format("{} scaraventi {}{} fuori da {} e lontanissimo: ora è a un anno di viaggio da tutti e dal "
@@ -774,6 +781,9 @@ std::string handle_furniture(const CommandContext &context, std::string_view wan
         return departure + std::format("{} i posti vanno da 1 a {}: nessun addebito.", username, limit);
     case FurnitureStatus::already_there:
         return departure + std::format("{} nel posto {} c'è già {}: nessun addebito.", username, result.position, result.replaced);
+    case FurnitureStatus::child_there:
+        return departure + std::format("{} nel posto {} c'è {}, che non si tocca: se ne andrà da solo. Nessun addebito.",
+                                       username, result.position, result.replaced);
     case FurnitureStatus::insufficient_score:
         if (result.copies > 0) {
             return departure + std::format("{} ti servono {} per {} (ce ne sono già {} in giro, ne hai {}).",
@@ -1075,6 +1085,20 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
     /* The bare name for whoever is spoken to, the dressed one when somebody is named. */
     const std::string raider = with_furniture(event.raider, event.raider_emoji, event.raider_smeared);
     const std::string target = with_furniture(event.target, event.target_emoji, event.target_smeared);
+    if (event.kind == RaidEvent::Kind::gone) {
+        return std::format("{}{} {} ha vissuto la sua vita e se n'è andato: il posto è di nuovo libero.", mention,
+                           target, event.gift_emoji);
+    }
+    if (event.kind == RaidEvent::Kind::born) {
+        const bool boy = event.gift != 0;
+        std::string news = std::format("{}{} {} {}: il padre è {}{}.", mention, target,
+                                       boy ? "è nato un maschio" : "è nata una femmina", event.gift_emoji,
+                                       event.raider_on_telegram ? "@" : "", event.raider);
+        if (!event.blown.empty()) {
+            news += std::format(" Non c'era un posto libero: ha preso quello di {}.", event.blown.front());
+        }
+        return news;
+    }
     if (event.kind == RaidEvent::Kind::returned) {
         if (!event.gift_emoji.empty()) {
             return std::format("{} torni in {} con {} ancora in tasca.", raider, home, event.gift_emoji);
@@ -1099,7 +1123,9 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
             for (const std::string &emoji : event.blown) {
                 blown += emoji;
             }
-            const std::string what = is_power(event.gift_emoji, power::vortex)
+            const std::string what = is_power(event.gift_emoji, power::seed)
+                ? std::format("tra {} si vedrà, e sarà tutto tuo", format_wait(event.expecting))
+                : is_power(event.gift_emoji, power::vortex)
                 ? "vieni scaraventato lontanissimo, a un anno di viaggio da tutti e dal posto"
                 : is_power(event.gift_emoji, power::poo) ? "ora lo smerdato sei tu"
                 : is_power(event.gift_emoji, power::nuke) ? "riparti da zero, senza palle e con il solo 🎈 di partenza"
@@ -1110,6 +1136,10 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
         }
         if (is_power(event.gift_emoji, power::poo)) {
             return poo_throw(home, std::format("{}{}", mention, event.target));
+        }
+        if (event.expecting > 0 && !event.sent_back) {
+            return std::format("{} la tua 💦 è arrivata a casa di {}{}: tra {} si vedrà. Torni in {} tra {}.", raider,
+                               mention, event.target, format_wait(event.expecting), home, format_wait(event.seconds));
         }
         if (event.flung) {
             return std::format("{} scaraventi {}{} lontanissimo: ora è a un anno di viaggio da tutti e da {}. Torni "
