@@ -1047,6 +1047,31 @@ TEST_CASE("/buyballoon hands the free 🎈 once, and a full name can try again")
     CHECK(furniture_all(storage).at("tg:1") == "[]⚡⚡");
 }
 
+TEST_CASE("a 🥷 takes the claimer past the holder's 🎈") {
+    const TestPaths paths{"ninja-claim-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":0,"username":"alice","since":0},"scores":{},"quotes_added":{},)"
+             << R"("furniture":{"alice":"🎈"}})";
+    }
+    AppConfig config;
+    config.starter_balloon = false;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    config.ninja_percent = 100;
+    Storage storage{config.conquister_path, config.quotes_path};
+    const CommandContext bob{.storage = storage, .config = config, .user_id = 2, .username = "bob"};
+    REQUIRE(command_dispatch(bob, "/profile"));
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["tg:2"] = "🥷🏿";
+        return 0;
+    });
+    const std::string reply = command_dispatch(bob, "We @TheConquister37").value_or("");
+    CHECK(reply.starts_with("bob (🥷🏿) scivoli di nascosto oltre il palloncino di alice (🎈)!\n"));
+    CHECK(reply.contains("bob (🥷🏿) hai cacciato alice (🎈) da @TheConquister37.\n"));
+    CHECK_FALSE(reply.contains("bucato"));
+}
+
 TEST_CASE("the quotes are open to the admins as well as to the owner") {
     const TestPaths paths{"admin-command-test"};
     AppConfig config;

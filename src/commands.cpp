@@ -545,6 +545,7 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
                 .cooldown_seconds = context.config.cooldown_seconds,
                 .signs = context.config.zodiac_signs,
                 .lightning = context.config.lightning_percent,
+                .ninja = context.config.ninja_percent,
             }
         );
     /* A name that came from IRC must not be written as a mention: on Telegram it would tag a stranger. */
@@ -578,6 +579,11 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
         );
     }
     std::string reply;
+    if (result.sneaked) {
+        reply = std::format("{} scivoli di nascosto oltre il palloncino di {}{}!\n",
+                            dressed(furniture, context.player_key, username), mention,
+                            dressed(furniture, result.previous_key, result.previous_username));
+    }
     if (result.balloon_popped) {
         reply = std::format(
             "{} hai bucato il palloncino di {}{}!\n",

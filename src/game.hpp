@@ -49,7 +49,7 @@ inline constexpr Power dog{"🐶", PowerKind::home, "when a raider reaches the h
                            "each is a chance of sending him away with nothing"};
 inline constexpr Power mailbox{"📮", PowerKind::home, "when something thrown lands on the house",
                                "each is a chance of sending it back to whoever threw it"};
-inline constexpr Power ninja{"🥷", PowerKind::carried, "when he reaches a house to rob it",
+inline constexpr Power ninja{"🥷", PowerKind::carried, "when he reaches a house to rob it, or comes for the place",
                              "each is a chance of slipping past the 🎈 and the 🐶 that guard it"};
 inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries to get past it, where its owner is",
                                "holds off whoever comes for his place or his house until it pops, then is as good as new"};
@@ -78,6 +78,8 @@ struct ClaimResult {
     std::int64_t earned = 0;
     /* taken: getting in popped a balloon. defended: the percentage the next attempt will have. */
     bool balloon_popped = false;
+    /* taken: a 🥷 took him past the holder's 🎈, unnoticed and untouched. */
+    bool sneaked = false;
     /* taken: what the new hold is worth in percent, set by the ⚡ on his name; 0 without one. */
     std::int64_t entered_lightning = 0;
     /* taken: what the 🦞 on his name became, slot by slot, copying the kicked holder's; empty if none did. */
@@ -297,6 +299,8 @@ struct ClaimRules {
     zodiac::Overrides signs;
     /* What every ⚡ on the claimer's name adds to the hold, in percent: they add up. */
     std::int64_t lightning = 0;
+    /* The chance, in percent, that each 🥷 on the claimer's name gives of slipping past the holder's 🎈. */
+    std::int64_t ninja = 0;
 };
 
 [[nodiscard]] ClaimResult conquister_claim(

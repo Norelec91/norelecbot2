@@ -1456,6 +1456,26 @@ TEST_CASE("a 🥷 with the raider may take him past the 🎈 and the 🐶 of the
     CHECK(arrival[0].intercepted);
     REQUIRE(raid_due(storage, 20, rules).size() == 1);
 
+    /* The same at the place: past the holder's 🎈, which stays as worn as it was. */
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["bob"] = "🎈";
+        session.state().balloons["bob"] = 2;
+        session.state().current = Holder{.user_id = 0, .username = "bob", .since = 20};
+        return 0;
+    });
+    const ClaimResult quiet = conquister_claim(storage, 0, "alice", 20,
+                                               ClaimRules{.cooldown_seconds = 0, .signs = {}, .ninja = 50});
+    CHECK(quiet.status == ClaimStatus::taken);
+    CHECK(quiet.sneaked);
+    CHECK_FALSE(quiet.balloon_popped);
+    CHECK(quiet.previous_username == "bob");
+    CHECK(read_json(paths.conquister).at("balloons").at("bob") == 2);
+    CHECK(furniture_all(storage).at("bob") == "🎈");
+    storage.transaction([](StorageSession &session) {
+        session.state().current.reset();
+        return 0;
+    });
+
     /* Where nothing guards the house there is nothing to slip past. */
     REQUIRE(raid_start(storage, 0, "alice", "dave", 20, rules).status == RaidStatus::started);
     arrival = raid_due(storage, 25, rules);

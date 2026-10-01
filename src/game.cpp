@@ -47,6 +47,10 @@ bool has_balloon(const ConquisterState &state, const std::string &player);
 bool hang_balloon(ConquisterState &state, const std::string &player, std::size_t limit);
 /* How many copies of a power's emoji hang on a name as the group sees it. */
 std::int64_t copies_of(const ConquisterState &state, const std::string &player, const Power &power);
+/* The copies he has with him: one hung at his house while he was out stayed there. */
+std::int64_t carried_copies(const ConquisterState &state, const std::string &player, const Power &power);
+bool stayed_home(const ConquisterState &state, const std::string &player, std::size_t slot);
+std::optional<std::size_t> balloon_slot(const ConquisterState &state, const std::string &player, Whereabouts site);
 /* For every 🦞 on the claimer's name, the emoji the kicked holder has in that same slot. */
 std::map<std::size_t, std::string> lobsters_copying(const ConquisterState &state, const std::string &claimer,
                                                     const std::string &kicked);
@@ -616,7 +620,13 @@ ClaimResult conquister_claim(
             outcome.previous_user_id = !ambiguous_legacy(state, holder) &&
                 counter(state.telegram_ids, holder) != 0
                 ? counter(state.telegram_ids, holder) : state.current->user_id;
-            const BalloonRoll balloon = balloon_attempt(session, state, holder, Whereabouts::conquister);
+            /* The 🥷 on his name may take him past the holder's 🎈, which is not even touched. */
+            const std::int64_t stealth = std::min<std::int64_t>(
+                100, carried_copies(state, username, power::ninja) * std::max<std::int64_t>(rules.ninja, 0));
+            outcome.sneaked = stealth > 0 && balloon_slot(state, holder, Whereabouts::conquister).has_value() &&
+                static_cast<std::int64_t>(session.random_index(100)) < stealth;
+            const BalloonRoll balloon = outcome.sneaked
+                ? BalloonRoll::none : balloon_attempt(session, state, holder, Whereabouts::conquister);
             if (balloon == BalloonRoll::held) {
                 if (rules.cooldown_seconds > 0) {
                     state.cooldowns[username] = now + rules.cooldown_seconds;
@@ -629,8 +639,10 @@ ClaimResult conquister_claim(
                 return outcome;
             }
             outcome.balloon_popped = balloon == BalloonRoll::popped;
-            /* Kicked out, his 🎈 is fresh again. */
-            state.balloons.erase(holder);
+            /* Kicked out, his 🎈 is fresh again; one he was slipped past is as worn as it was. */
+            if (!outcome.sneaked) {
+                state.balloons.erase(holder);
+            }
             outcome.previous_username = display_name(state, holder);
             outcome.previous_key = holder;
             const Settlement settled = settle_hold(state, *state.current, now, rules.signs);
@@ -942,6 +954,17 @@ bool is_lobster(std::string_view emoji) {
 bool is_thrown(std::string_view emoji) {
     const Power *power = power_of(emoji);
     return power != nullptr && power->kind == PowerKind::thrown;
+}
+
+std::int64_t carried_copies(const ConquisterState &state, const std::string &player, const Power &power) {
+    const std::vector<std::string> slots = furniture_slots(shown_furniture(state, player));
+    std::int64_t copies = 0;
+    for (std::size_t slot = 0; slot < slots.size(); ++slot) {
+        if (is_power(slots[slot], power) && !stayed_home(state, player, slot)) {
+            ++copies;
+        }
+    }
+    return copies;
 }
 
 std::int64_t copies_of(const ConquisterState &state, const std::string &player, const Power &power) {
@@ -1553,14 +1576,7 @@ bool sneaks(StorageSession &session, const ConquisterState &state, const Raid &r
             RaidEvent &event) {
     const bool guarded = balloon_slot(state, raid.target, Whereabouts::home).has_value() ||
         copies_of(state, raid.target, power::dog) > 0;
-    const std::vector<std::string> slots = furniture_slots(shown_furniture(state, raid.raider));
-    std::int64_t ninjas = 0;
-    for (std::size_t slot = 0; slot < slots.size(); ++slot) {
-        /* The ones he has with him: one hung at his house while he was out is not on this raid. */
-        if (is_power(slots[slot], power::ninja) && !stayed_home(state, raid.raider, slot)) {
-            ++ninjas;
-        }
-    }
+    const std::int64_t ninjas = carried_copies(state, raid.raider, power::ninja);
     const std::int64_t chance = std::min<std::int64_t>(100, ninjas * std::max<std::int64_t>(rules.ninja_percent, 0));
     event.sneaked = guarded && chance > 0 && static_cast<std::int64_t>(session.random_index(100)) < chance;
     return event.sneaked;
