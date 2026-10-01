@@ -46,6 +46,8 @@ struct AppConfig {
     static constexpr int default_ninja_percent = 10;
     /* What each 🔊 at a house takes off a raider's chance of slipping past, in percent points. */
     static constexpr int default_alarm_percent = 10;
+    /* The chance, in percent, that each 🏴‍☠️ a raider has with him gives of carrying off an emoji. */
+    static constexpr int default_pirate_percent = 10;
     static constexpr int default_api_port = 8000;
     static constexpr int default_irc_port = 6697;
     static constexpr std::string_view default_irc_nick = "NorelecBot";
@@ -82,6 +84,7 @@ struct AppConfig {
     int mailbox_percent = default_mailbox_percent;
     int ninja_percent = default_ninja_percent;
     int alarm_percent = default_alarm_percent;
+    int pirate_percent = default_pirate_percent;
     /* Whether a player seen for the first time is handed a 🎈. */
     bool starter_balloon = true;
     /* Players whose real sign the owner knows, instead of the one their name gives. */

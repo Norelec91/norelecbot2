@@ -251,6 +251,15 @@ std::string too_far_reply(std::string_view username) {
                        conquister_place);
 }
 
+/* The 🌀 is the admins' alone, to buy and to throw: nobody else can use one, however he came by it. */
+bool admins_only(const CommandContext &context, std::string_view emoji) {
+    return is_power(emoji, power::vortex) && !context.owner && !context.admin;
+}
+
+std::string admins_only_reply(std::string_view username) {
+    return std::format("{} la 🌀 è riservata agli amministratori.", username);
+}
+
 std::string missing_username_reply() {
     return std::format("Imposta uno username Telegram per giocare a {}.", conquister_place);
 }
@@ -286,6 +295,7 @@ RaidRules raid_rules(const CommandContext &context) {
         .mailbox_percent = context.config.mailbox_percent,
         .ninja_percent = context.config.ninja_percent,
         .alarm_percent = context.config.alarm_percent,
+        .pirate_percent = context.config.pirate_percent,
     };
 }
 
@@ -293,6 +303,9 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
                         std::string_view gift_emoji = {}) {
     if (context.username.empty()) {
         return missing_username_reply();
+    }
+    if (admins_only(context, gift_emoji)) {
+        return admins_only_reply(context.username);
     }
     const std::string username{context.username};
     /* His own place is named after him, with the mention only where it reaches him. */
@@ -492,6 +505,9 @@ std::string handle_furniture_move(const CommandContext &context, const ParsedMov
 std::string handle_emoji_burn(const CommandContext &context, std::string_view emoji) {
     if (context.username.empty()) {
         return missing_username_reply();
+    }
+    if (admins_only(context, emoji)) {
+        return admins_only_reply(context.username);
     }
     const FurnitureBurnResult burnt = furniture_burn(context.storage, std::string{context.player_key}, std::string{emoji},
                                                      seconds_now(), raid_rules(context));
@@ -722,6 +738,9 @@ std::string handle_furniture(const CommandContext &context, std::string_view wan
                              std::optional<std::int64_t> slot) {
     if (context.username.empty()) {
         return missing_username_reply();
+    }
+    if (admins_only(context, wanted)) {
+        return admins_only_reply(context.username);
     }
     const std::string username{context.username};
     /* The ☢️, the 🌀 and the 🎈 have prices of their own, which do not grow with the copies in the game. */
@@ -1160,6 +1179,9 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
         reply += ", che non era a casa";
     }
     reply += std::format("! Torni in {} tra {}.", home, format_wait(event.seconds));
+    if (!event.boarded.empty()) {
+        reply += std::format("\nArrembaggio: ti porti via anche {} da casa sua.", event.boarded);
+    }
     if (event.spared > 0) {
         reply += std::format("\n{} ti ha impietosito: gli rubi {} invece di {} ({}% in meno).", target,
                              palle(event.loot), palle(event.spared + event.loot), event.pleaded_percent);

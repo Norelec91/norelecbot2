@@ -835,6 +835,10 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     found.seconds = 5;
     CHECK(raid_event_reply(found).value_or("").starts_with(
         "L'allarme di Bob ti scopre: devi vedertela con le sue difese.\nCarol hai rubato 3 palle a Bob lo smerdato"));
+    RaidEvent boarded = robbed;
+    boarded.boarded = "🍕";
+    boarded.seconds = 5;
+    CHECK(raid_event_reply(boarded).value_or("").ends_with("\nArrembaggio: ti porti via anche 🍕 da casa sua."));
     RaidEvent caught = robbed;
     caught.loot = 0;
     caught.intercepted = true;
@@ -1108,6 +1112,33 @@ TEST_CASE("/richiama lets the owner bring back a player a 🌀 flung away") {
           "Bob è di nuovo vicino: i viaggi da lui e verso di lui tornano normali, e può rientrare in @TheConquister37.");
     CHECK(command_dispatch(owner, "/richiama @Bob") == "Bob non è stato scaraventato lontano.");
     CHECK(command_dispatch(bob, "We @TheConquister37").value_or("").contains("Bob sei in @TheConquister37!"));
+}
+
+TEST_CASE("the 🌀 is for the admins alone, to buy and to throw") {
+    const TestPaths paths{"vortex-admin-test"};
+    AppConfig config;
+    config.starter_balloon = false;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    config.vortex_cost = 0;
+    Storage storage{config.conquister_path, config.quotes_path};
+    CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
+    const CommandContext bob{.storage = storage, .config = config, .user_id = 2, .username = "Bob"};
+    REQUIRE(command_dispatch(bob, "/profile"));
+
+    CHECK(command_dispatch(alice, "We @Alice 🌀") == "Alice la 🌀 è riservata agli amministratori.");
+    /* However she came by one, she cannot throw it either. */
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["tg:1"] = "🌀🌀";
+        return 0;
+    });
+    CHECK(command_dispatch(alice, "We @Bob 🌀") == "Alice la 🌀 è riservata agli amministratori.");
+    CHECK(command_dispatch(alice, "We @TheConquister37 🌀") == "Alice la 🌀 è riservata agli amministratori.");
+    CHECK(furniture_all(storage).at("tg:1") == "🌀🌀");
+
+    alice.admin = true;
+    CHECK(command_dispatch(alice, "We @Alice 🌀").value_or("").contains("hai speso"));
+    CHECK(command_dispatch(alice, "We @Bob 🌀").value_or("").starts_with("Alice parti per Bob con 🌀 da consegnare"));
 }
 
 TEST_CASE("the quotes are open to the admins as well as to the owner") {

@@ -48,6 +48,8 @@ Whereabouts site_of(const ConquisterState &state, const std::string &player, std
 /* Hands a player the 🎈 everybody starts with, once, if he has none and a free slot. */
 void welcome(ConquisterState &state, const std::string &player, std::size_t limit);
 bool has_balloon(const ConquisterState &state, const std::string &player);
+bool has_room(const ConquisterState &state, const std::string &player, std::size_t limit);
+bool hang_with_him(ConquisterState &state, const std::string &player, const std::string &emoji, std::size_t limit);
 bool hang_balloon(ConquisterState &state, const std::string &player, std::size_t limit);
 /* How many copies of a power's emoji hang on a name as the group sees it. */
 std::int64_t copies_of(const ConquisterState &state, const std::string &player, const Power &power);
@@ -1118,9 +1120,9 @@ bool has_balloon(const ConquisterState &state, const std::string &player) {
     });
 }
 
-/* Hangs a 🎈 in his first empty slot; false when there is none. It is his wherever he is now: it is
-   with him, not left at home. */
-bool hang_balloon(ConquisterState &state, const std::string &player, std::size_t limit) {
+/* Hangs an emoji in his first empty slot; false when there is none. It is his wherever he is now: it
+   is with him, not left at home. */
+bool hang_with_him(ConquisterState &state, const std::string &player, const std::string &emoji, std::size_t limit) {
     std::vector<std::string> slots = slots_of(state, player);
     const std::optional<std::size_t> slot = free_slot(slots, limit);
     if (!slot) {
@@ -1129,9 +1131,13 @@ bool hang_balloon(ConquisterState &state, const std::string &player, std::size_t
     if (*slot >= slots.size()) {
         slots.resize(*slot + 1);
     }
-    slots[*slot] = std::string{power::balloon.emoji};
+    slots[*slot] = emoji;
     hang(state, player, std::move(slots));
     return true;
+}
+
+bool hang_balloon(ConquisterState &state, const std::string &player, std::size_t limit) {
+    return hang_with_him(state, player, std::string{power::balloon.emoji}, limit);
 }
 
 void welcome(ConquisterState &state, const std::string &player, std::size_t limit) {
@@ -1623,6 +1629,37 @@ RaidResult raid_start(
 
 namespace {
 
+/* A raid that got through may carry off an emoji too, for the 🏴‍☠️ the raider has with him: one of
+   those that are at the house, never a 🎈, and only if he has somewhere to hang it. */
+std::string board(StorageSession &session, ConquisterState &state, const Raid &raid, const RaidRules &rules) {
+    const std::int64_t chance = std::min<std::int64_t>(
+        100, carried_copies(state, raid.raider, power::pirate) * std::max<std::int64_t>(rules.pirate_percent, 0));
+    if (chance <= 0 || static_cast<std::int64_t>(session.random_index(100)) >= chance ||
+        !has_room(state, raid.raider, rules.furniture_limit)) {
+        return {};
+    }
+    std::vector<std::string> slots = slots_of(state, raid.target);
+    std::vector<std::size_t> there;
+    for (std::size_t slot = 0; slot < slots.size(); ++slot) {
+        if (slots[slot].empty() || is_power(slots[slot], power::balloon)) {
+            continue;
+        }
+        const Power *power = power_of(slots[slot]);
+        if (power == nullptr || site_of(state, raid.target, slot, *power) == Whereabouts::home) {
+            there.push_back(slot);
+        }
+    }
+    if (there.empty()) {
+        return {};
+    }
+    const std::size_t taken = there[session.random_index(there.size())];
+    std::string emoji = slots[taken];
+    slots[taken].clear();
+    hang(state, raid.target, std::move(slots));
+    static_cast<void>(hang_with_him(state, raid.raider, emoji, rules.furniture_limit));
+    return emoji;
+}
+
 /* The 🥷 a raider has with him may take him past what guards the house, the 🎈 that is there and the 🐶,
    without touching either. Only where there is something to slip past. */
 bool sneaks(StorageSession &session, const ConquisterState &state, const Raid &raid, const RaidRules &rules,
@@ -1830,6 +1867,11 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                         state.scores[raid.target] = theirs - event.loot;
                     }
                     raid.loot = event.loot;
+                    event.boarded = board(session, state, raid, rules);
+                    if (!event.boarded.empty()) {
+                        event.raider_emoji = shown_furniture(state, raid.raider);
+                        event.target_emoji = shown_furniture(state, raid.target);
+                    }
                 }
                 settled.push_back(std::move(event));
             }

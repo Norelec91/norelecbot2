@@ -1080,6 +1080,7 @@ TEST_CASE("every emoji with a power is listed once, with its kind") {
     CHECK(power::ninja.kind == PowerKind::carried);
     CHECK(power::alarm.kind == PowerKind::home);
     CHECK(power::vortex.kind == PowerKind::thrown);
+    CHECK(power::pirate.kind == PowerKind::carried);
     /* Whatever the tone of its skin, it is the same emoji. */
     CHECK(is_power("🥷🏿", power::ninja));
     CHECK(is_power("🥷", power::ninja));
@@ -1540,6 +1541,58 @@ TEST_CASE("a 🌀 flings a player a year of road away from everybody and from th
     REQUIRE(arrival.size() == 1);
     CHECK(arrival[0].flung);
     CHECK(player_profile_of(storage, "carol", 205).flung);
+}
+
+TEST_CASE("a 🏴‍☠️ with the raider may carry off an emoji that is at the house") {
+    const TestPaths paths{"pirate-test"};
+    {
+        /* bob holds the place: his ⚡ is with him, his 🎈 too. Only the 🍕 is at home to take. */
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":0,"username":"bob","since":0},)"
+             << R"("scores":{"alice":0,"bob":100,"carol":100,"dave":0},"quotes_added":{},)"
+             << R"("furniture":{"alice":"🏴‍☠️🏴‍☠️","bob":"⚡🎈🍕","carol":"🎈",)"
+             << R"("dave":"🏴‍☠️🏴‍☠️🍕🍕🍕🍕🍕🍕🍕🍕"}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    RaidRules rules = quick_rides();
+    /* Two of them at fifty each never fail. */
+    rules.pirate_percent = 50;
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 0, rules).status == RaidStatus::started);
+    std::vector<RaidEvent> arrival = raid_due(storage, 5, rules);
+    REQUIRE(arrival.size() == 1);
+    CHECK(arrival[0].boarded == "🍕");
+    CHECK(furniture_all(storage).at("bob") == "⚡🎈");
+    CHECK(furniture_all(storage).at("alice") == "🏴‍☠️🏴‍☠️🍕");
+    CHECK(arrival[0].raider_emoji == "🏴‍☠️🏴‍☠️🍕");
+    REQUIRE(raid_due(storage, 10, rules).size() == 1);
+
+    /* Nothing left there but what he carries: nothing to take. A 🎈 is never taken. */
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 10, rules).status == RaidStatus::started);
+    arrival = raid_due(storage, 15, rules);
+    REQUIRE(arrival.size() == 1);
+    CHECK(arrival[0].boarded.empty());
+    REQUIRE(raid_due(storage, 20, rules).size() == 1);
+    storage.transaction([](StorageSession &session) {
+        session.state().balloons["carol"] = 3;
+        return 0;
+    });
+    REQUIRE(raid_start(storage, 0, "alice", "carol", 20, rules).status == RaidStatus::started);
+    arrival = raid_due(storage, 25, rules);
+    REQUIRE(arrival.size() == 1);
+    CHECK(arrival[0].boarded.empty());
+    CHECK(furniture_all(storage).at("carol") == "🎈");
+    REQUIRE(raid_due(storage, 30, rules).size() == 1);
+
+    /* A name with no room carries nothing off. */
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["bob"] = "🍕";
+        return 0;
+    });
+    REQUIRE(raid_start(storage, 0, "dave", "bob", 30, rules).status == RaidStatus::started);
+    arrival = raid_due(storage, 35, rules);
+    REQUIRE(arrival.size() == 1);
+    CHECK(arrival[0].boarded.empty());
+    CHECK(furniture_all(storage).at("bob") == "🍕");
 }
 
 TEST_CASE("a pile of poo is thrown, not hung: a full name takes it and keeps nothing") {

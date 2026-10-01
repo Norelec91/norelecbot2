@@ -55,6 +55,8 @@ inline constexpr Power alarm{"🔊", PowerKind::home, "when a raider with a 🥷
                              "each takes a share off his chance of slipping past unnoticed"};
 inline constexpr Power vortex{"🌀", PowerKind::thrown, "when it lands",
                               "flings whoever it hits a year of road away from everybody and from the place"};
+inline constexpr Power pirate{"🏴‍☠️", PowerKind::carried, "when a raid of his gets through",
+                              "each is a chance of carrying off one emoji that is at the house too"};
 inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries to get past it, where its owner is",
                                "holds off whoever comes for his place or his house until it pops, then is as good as new"};
 
@@ -64,7 +66,7 @@ inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries 
 inline constexpr std::array powers{power::pleading, power::rocket, power::bolt, power::lobster,
                                    power::poo,      power::bomb,   power::nuke, power::dog,
                                    power::balloon,  power::mailbox, power::ninja, power::alarm,
-                                   power::vortex};
+                                   power::vortex,   power::pirate};
 
 /* Whether an emoji is that power's, drawn in colour or not and whatever the tone of its skin. */
 [[nodiscard]] bool is_power(std::string_view emoji, const Power &power);
@@ -194,6 +196,9 @@ struct RaidRules {
     std::int64_t ninja_percent = 0;
     /* What each 🔊 at the house takes off that chance, in percent points: they add up. */
     std::int64_t alarm_percent = 0;
+    /* The chance, in percent, that each 🏴‍☠️ the raider has with him gives of carrying off an emoji from
+       the house he robs: they add up. */
+    std::int64_t pirate_percent = 0;
 };
 
 struct RaidResult {
@@ -223,6 +228,8 @@ struct RaidEvent {
     bool sneaked = false;
     /* stolen: his 🥷 would have done it, but a 🔊 at the house gave him away. */
     bool alarmed = false;
+    /* stolen: the emoji his 🏴‍☠️ carried off from the house and onto his own name; empty when none. */
+    std::string boarded{};
     /* stolen: what the 🥺 on the target's name talked the raider out of, and by how much in percent. */
     std::int64_t spared = 0;
     std::int64_t pleaded_percent = 0;
