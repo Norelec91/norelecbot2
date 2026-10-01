@@ -1525,14 +1525,15 @@ Whereabouts site_of(const ConquisterState &state, const std::string &player, std
 
 /* A 💣 going off takes one emoji with a power, drawn among those that are there: at his house what he
    left at home, in @TheConquister37 what he carries. In the thrower's own hand it is only among what
-   he carries that it draws. */
+   he carries that it draws. The 🎈 is never among them. */
 std::vector<std::string> blow_up(StorageSession &session, ConquisterState &state, const std::string &target,
                                  Whereabouts site, bool carried_only = false) {
     std::vector<std::string> slots = slots_of(state, target);
     const auto exposed = [&](std::size_t slot) {
         const Power *power = slots[slot].empty() ? nullptr : power_of(slots[slot]);
-        return power != nullptr && site_of(state, target, slot, *power) == site &&
-            (!carried_only || power->kind == PowerKind::carried);
+        /* No explosion takes a 🎈. */
+        return power != nullptr && !is_power(slots[slot], power::balloon) &&
+            site_of(state, target, slot, *power) == site && (!carried_only || power->kind == PowerKind::carried);
     };
     std::vector<std::size_t> there;
     for (std::size_t slot = 0; slot < slots.size(); ++slot) {

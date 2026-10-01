@@ -1115,6 +1115,20 @@ TEST_CASE("a 💣 takes one emoji with a power among those that are where it lan
     CHECK(pair.target_emoji == "🍕[]🍕");
     CHECK(furniture_all(storage).at("bob") == "🍕[]🍕");
 
+    /* Nor does it take a 🎈, which no explosion touches. */
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["bob"] = "🍕🎈🍕";
+        session.state().furniture["alice"] = "💣💣💣";
+        return 0;
+    });
+    const RaidEvent spared = thrown_at("bob", 12);
+    CHECK(spared.blown.empty());
+    CHECK(furniture_all(storage).at("bob") == "🍕🎈🍕");
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["bob"] = "🍕[]🍕";
+        return 0;
+    });
+
     /* A full name of plain emoji takes the hit and loses nothing. */
     const RaidEvent nothing = thrown_at("carol", 20);
     CHECK(nothing.blown.empty());
