@@ -251,13 +251,14 @@ std::string too_far_reply(std::string_view username) {
                        conquister_place);
 }
 
-/* The 🌀 is the admins' alone, to buy and to throw: nobody else can use one, however he came by it. */
+/* The 🌀 and the 💦 are the admins' alone, to buy and to throw: nobody else can use one, however he came
+   by it. */
 bool admins_only(const CommandContext &context, std::string_view emoji) {
-    return is_power(emoji, power::vortex) && !context.owner && !context.admin;
+    return (is_power(emoji, power::vortex) || is_power(emoji, power::seed)) && !context.owner && !context.admin;
 }
 
-std::string admins_only_reply(std::string_view username) {
-    return std::format("{} la 🌀 è riservata agli amministratori.", username);
+std::string admins_only_reply(std::string_view username, std::string_view emoji) {
+    return std::format("{} la {} è riservata agli amministratori.", username, emoji);
 }
 
 std::string missing_username_reply() {
@@ -307,7 +308,7 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
         return missing_username_reply();
     }
     if (admins_only(context, gift_emoji)) {
-        return admins_only_reply(context.username);
+        return admins_only_reply(context.username, gift_emoji);
     }
     const std::string username{context.username};
     /* His own place is named after him, with the mention only where it reaches him. */
@@ -509,7 +510,7 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
         return missing_username_reply();
     }
     if (admins_only(context, emoji)) {
-        return admins_only_reply(context.username);
+        return admins_only_reply(context.username, emoji);
     }
     const FurnitureBurnResult burnt = furniture_burn(context.storage, std::string{context.player_key}, std::string{emoji},
                                                      seconds_now(), raid_rules(context));
@@ -747,7 +748,7 @@ std::string handle_furniture(const CommandContext &context, std::string_view wan
         return missing_username_reply();
     }
     if (admins_only(context, wanted)) {
-        return admins_only_reply(context.username);
+        return admins_only_reply(context.username, wanted);
     }
     const std::string username{context.username};
     /* The ☢️, the 🌀 and the 🎈 have prices of their own, which do not grow with the copies in the game. */

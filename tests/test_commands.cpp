@@ -1166,6 +1166,11 @@ TEST_CASE("the 🌀 is for the admins alone, to buy and to throw") {
     CHECK(command_dispatch(alice, "We @TheConquister37 🌀") == "Alice la 🌀 è riservata agli amministratori.");
     CHECK(furniture_all(storage).at("tg:1") == "🌀🌀");
 
+    /* The 💦 is theirs alone as well. */
+    CHECK(command_dispatch(alice, "We @Alice 💦") == "Alice la 💦 è riservata agli amministratori.");
+    CHECK(command_dispatch(alice, "We @Bob 💦") == "Alice la 💦 è riservata agli amministratori.");
+    CHECK(command_dispatch(alice, "We @TheConquister37 💦") == "Alice la 💦 è riservata agli amministratori.");
+
     alice.admin = true;
     CHECK(command_dispatch(alice, "We @Alice 🌀").value_or("").contains("hai speso"));
     CHECK(command_dispatch(alice, "We @Bob 🌀").value_or("").starts_with("Alice parti per Bob con 🌀 da consegnare"));
