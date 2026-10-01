@@ -18,6 +18,9 @@ namespace norelecbot {
    its owner is in or out; one carried counts for him away from home, on the road or in
    @TheConquister37; one thrown leaves his name for good and lands on somebody else. */
 enum class PowerKind { home, carried, thrown };
+/* That is also where each one is. What is carried is wherever its owner is: at home, on the road or
+   in @TheConquister37. Everything else is at home, a thrown one until it is thrown. And what is thrown
+   lands where somebody is, his house or @TheConquister37, and works on what it finds there. */
 
 /* An emoji that does something beyond hanging beside a name. */
 struct Power {
@@ -38,8 +41,8 @@ inline constexpr Power bolt{"⚡", PowerKind::carried, "when he enters @TheConqu
 inline constexpr Power lobster{"🦞", PowerKind::carried, "when he enters @TheConquister37 kicking somebody out",
                                "becomes what the kicked holder has in the same slot until he leaves"};
 inline constexpr Power poo{"💩", PowerKind::thrown, "when it lands", "makes whoever it hits \"lo smerdato\" for a while"};
-inline constexpr Power bomb{"💣", PowerKind::thrown, "when it lands on a house",
-                            "takes two neighbouring emoji with a power that are at home, or one"};
+inline constexpr Power bomb{"💣", PowerKind::thrown, "when it lands",
+                            "takes two neighbouring emoji with a power that are where it lands, or one"};
 
 }
 
@@ -64,7 +67,7 @@ struct ClaimResult {
     std::int64_t earned = 0;
     /* taken: getting in popped a balloon. defended: the percentage the next attempt will have. */
     bool balloon_popped = false;
-    /* taken: what the new hold is worth in percent, fixed by the ⚡ on his name; 0 without one. */
+    /* taken: what the new hold is worth in percent, set by the ⚡ on his name; 0 without one. */
     std::int64_t entered_lightning = 0;
     /* taken: what the 🦞 on his name became, slot by slot, copying the kicked holder's; empty if none did. */
     std::vector<std::string> lobsters_became;
@@ -360,16 +363,20 @@ struct FurnitureBurnResult {
     FurnitureBurnStatus status = FurnitureBurnStatus::burned;
     /* How his name reads once it is gone. */
     std::string shown;
-    /* A 💩 thrown at the place hits whoever holds it, unless that is the thrower himself. */
+    /* What is thrown at the place lands on whoever holds it, unless that is the thrower himself: who
+       he is, how his name reads afterwards and, for a 💣, the emoji it took from the ones he carries. */
     std::string hit;
     bool hit_on_telegram = false;
+    std::string hit_furniture;
+    std::vector<std::string> blown{};
 };
 
 /* An emoji brought back to @TheConquister37 leaves the game too: the first slot that holds it is
-   emptied. Not from the road. A 💩 is thrown instead, and makes the holder "lo smerdato". */
+   emptied. Not from the road. One that is thrown lands on the holder instead: a 💩 makes him "lo
+   smerdato", a 💣 takes the emoji he carries. */
 [[nodiscard]] FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player,
                                                  const std::string &emoji, std::int64_t now = 0,
-                                                 std::int64_t smeared_seconds = 0);
+                                                 std::int64_t smeared_seconds = 0, zodiac::Overrides signs = {});
 /* The players who are "lo smerdato" right now. */
 [[nodiscard]] std::vector<std::string> smeared_all(Storage &storage, std::int64_t now);
 

@@ -272,12 +272,13 @@ TEST_CASE("every ⚡ on the name as a player comes in adds its share to that hol
 
     const ClaimResult entered = conquister_claim(storage, 1, "alice", 0, rules);
     CHECK(entered.entered_lightning == 150);
-    /* Burning the ⚡ halfway changes nothing: what the hold is worth was fixed on the way in. */
-    CHECK(furniture_burn(storage, "alice", "⚡").status == FurnitureBurnStatus::burned);
+    /* Burning the ⚡ partway lowers the hold from then on: what it made so far is kept as it was. */
+    CHECK(furniture_burn(storage, "alice", "⚡", 400).status == FurnitureBurnStatus::burned);
+    CHECK(player_profile_of(storage, "alice", 400).lightning_percent == 0);
     const ClaimResult kicked = conquister_claim(storage, 2, "bob", 1000, rules);
     CHECK(kicked.previous_username == "alice");
-    CHECK(kicked.lightning == 150);
-    CHECK(kicked.earned == earnings("alice", 1000, 1000, 150));
+    CHECK(kicked.lightning == 0);
+    CHECK(kicked.earned == earnings("alice", 400, 400, 150) + earnings("alice", 600, 1000));
     CHECK(kicked.entered_lightning == 0);
 
     /* Coming in without one, a ⚡ that arrives later does not count either. */
@@ -342,9 +343,9 @@ TEST_CASE("a 🦞 comes in as what the kicked holder has in the same slot, and l
         return 0;
     });
 
-    /* Kicked out, he is back to his 🦞, and the hold was worth what the copied ⚡ made it. */
+    /* Kicked out, he is back to his 🦞. The copied ⚡ went with the 🦞 he burnt, and its share with it. */
     const ClaimResult kicked = conquister_claim(storage, 3, "carol", 300, rules);
-    CHECK(kicked.lightning == 150);
+    CHECK(kicked.lightning == 0);
     CHECK(kicked.lobsters_became.empty());
     CHECK(player_profile_of(storage, "bob", 300).furniture == "🦞🦞🍕🦞");
     CHECK(furniture_all(storage).at("bob") == "🦞🦞🍕🦞");
@@ -1107,6 +1108,42 @@ TEST_CASE("a 💣 takes two neighbouring emoji with a power that are at home, or
     CHECK(furniture_all(storage).at("dave") == "⚡🚀🍕");
     /* All three bombs are spent. */
     CHECK(furniture_all(storage).count("alice") == 0);
+
+    /* Thrown at the place it lands on the holder, and there it is what he carries that goes: the ⚡ and
+       the 🚀 side by side, not the 🍕. Losing the ⚡ he came in with, the hold is worth less from then
+       on, and what it made so far is put aside. */
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["alice"] = "💣💣";
+        session.state().furniture["dave"] = "⚡🚀🍕🥺💩";
+        session.state().current->lightning_percent = 125;
+        session.state().current->bolts = 1;
+        return 0;
+    });
+    const FurnitureBurnResult onto = furniture_burn(storage, "alice", "💣", 100, 86400);
+    CHECK(onto.status == FurnitureBurnStatus::burned);
+    CHECK(onto.hit == "dave");
+    CHECK(onto.blown == std::vector<std::string>{"⚡", "🚀"});
+    CHECK(onto.hit_furniture == "[][]🍕🥺💩");
+    CHECK(player_profile_of(storage, "dave", 100).lightning_percent == 0);
+    const Holder after = storage.transaction([](StorageSession &session) { return *session.state().current; });
+    CHECK(after.bolts == 0);
+    CHECK(after.banked == earnings("dave", 100, 100, 125));
+    CHECK(after.counted_from == 100);
+    CHECK(after.since == 0);
+    /* Nothing he carries is left: the 🥺 and the 💩 are at home, out of reach from here. */
+    const FurnitureBurnResult again = furniture_burn(storage, "alice", "💣", 100, 86400);
+    CHECK(again.hit == "dave");
+    CHECK(again.blown.empty());
+    CHECK(furniture_all(storage).at("dave") == "[][]🍕🥺💩");
+    /* The holder who throws one at his own place hits nobody. */
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["dave"] = "⚡💣";
+        return 0;
+    });
+    const FurnitureBurnResult own = furniture_burn(storage, "dave", "💣", 100, 86400);
+    CHECK(own.status == FurnitureBurnStatus::burned);
+    CHECK(own.hit.empty());
+    CHECK(furniture_all(storage).at("dave") == "⚡");
 }
 
 TEST_CASE("a pile of poo is thrown, not hung: a full name takes it and keeps nothing") {

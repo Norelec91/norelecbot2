@@ -831,6 +831,17 @@ TEST_CASE("a 💩 thrown at the place makes the holder \"lo smerdato\" for a day
     CHECK(board.contains("🪐 In @TheConquister37 ora: Bob lo smerdato"));
     CHECK(board.contains(" Alice ([]💩) — "));
 
+    /* A bomb thrown at the place goes off on him too, among what he carries. */
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["tg:1"] = "💣💣";
+        session.state().furniture["tg:2"] = "🍕⚡";
+        return 0;
+    });
+    CHECK(command_dispatch(alice, "We @TheConquister37 💣") ==
+          "💣 Alice la tua bomba esplode addosso a @Bob (🍕) in @TheConquister37 e si porta via ⚡!");
+    CHECK(command_dispatch(alice, "We @TheConquister37 💣") ==
+          "💣 Alice la tua bomba esplode addosso a @Bob (🍕) in @TheConquister37 ma non trova niente da portarsi via.");
+
     /* A day later he is clean, and the entry is gone. */
     storage.transaction([](StorageSession &session) {
         session.state().smeared["tg:2"] -= 86400;
@@ -839,7 +850,7 @@ TEST_CASE("a 💩 thrown at the place makes the holder \"lo smerdato\" for a day
     const std::int64_t now = std::chrono::duration_cast<std::chrono::seconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
     CHECK(raid_due(storage, now, RaidRules{}).empty());
-    CHECK(command_dispatch(bob, "/profile").value_or("").starts_with("👤 Bob\n"));
+    CHECK(command_dispatch(bob, "/profile").value_or("").starts_with("👤 Bob (🍕)\n"));
     CHECK(storage.transaction([](StorageSession &session) { return session.state().smeared.empty(); }));
 }
 

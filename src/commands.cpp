@@ -469,7 +469,8 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
         return missing_username_reply();
     }
     const FurnitureBurnResult burnt = furniture_burn(context.storage, std::string{context.player_key}, std::string{emoji},
-                                                     seconds_now(), context.config.smeared_seconds);
+                                                     seconds_now(), context.config.smeared_seconds,
+                                                     context.config.zodiac_signs);
     switch (burnt.status) {
     case FurnitureBurnStatus::travelling:
         return on_the_road(context, "🔥", "si brucia da casa tua o da @TheConquister37.");
@@ -482,6 +483,19 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
         /* Whoever holds the place takes it full in the face. */
         return poo_throw(own_name(context), burnt.hit.empty() ? std::string{conquister_place}
             : std::format("{}{} in {}", burnt.hit_on_telegram ? "@" : "", burnt.hit, conquister_place));
+    }
+    if (is_power(emoji, power::bomb) && !burnt.hit.empty()) {
+        std::string blown;
+        for (const std::string &taken : burnt.blown) {
+            blown += taken;
+        }
+        const std::string holder = std::format("{}{}", burnt.hit_on_telegram ? "@" : "",
+                                               with_furniture(burnt.hit, burnt.hit_furniture, false));
+        return blown.empty()
+            ? std::format("💣 {} la tua bomba esplode addosso a {} in {} ma non trova niente da portarsi via.",
+                          context.username, holder, conquister_place)
+            : std::format("💣 {} la tua bomba esplode addosso a {} in {} e si porta via {}!", context.username, holder,
+                          conquister_place, blown);
     }
     return std::format("🔥 {} hai riportato {} in {}: è uscita dal gioco.", context.username, emoji, conquister_place);
 }

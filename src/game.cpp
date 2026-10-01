@@ -24,6 +24,14 @@ std::string display_name(const ConquisterState &state, const std::string &key);
 std::string shown_furniture(const ConquisterState &state, const std::string &player);
 /* Where a player is right now: the one question every rule about home and away asks. */
 Whereabouts whereabouts(const ConquisterState &state, const std::string &player);
+/* What a thrown emoji did where it landed. */
+struct Landing {
+    bool smeared = false;
+    std::vector<std::string> blown;
+};
+/* A thrown emoji lands where somebody is, his house or @TheConquister37, and works on what is there. */
+Landing land(StorageSession &session, ConquisterState &state, std::string_view thrown, const std::string &victim,
+             Whereabouts site, std::int64_t now, std::int64_t smeared_seconds);
 /* Hit by a 💩 and not clean yet. */
 bool is_smeared(const ConquisterState &state, const std::string &player, std::int64_t now);
 /* How many copies of a power's emoji hang on a name as the group sees it. */
@@ -111,10 +119,12 @@ struct Settlement {
     int zodiac_percent = 100;
 };
 
-Settlement settle_hold(ConquisterState &state, const Holder &hold, std::int64_t now, zodiac::Overrides signs) {
+/* What the hold made since it was last counted, without paying it. */
+Settlement hold_value(const ConquisterState &state, const Holder &hold, std::int64_t now, zodiac::Overrides signs) {
     const std::string &holder = hold.username;
     Settlement settled;
-    settled.earned = now > hold.since ? now - hold.since : 0;
+    const std::int64_t from = std::max(hold.since, hold.counted_from);
+    settled.earned = now > from ? now - from : 0;
     if (hold.lightning_percent > 100) {
         settled.lightning = hold.lightning_percent;
         if (settled.earned > std::numeric_limits<std::int64_t>::max() / settled.lightning) {
@@ -126,7 +136,14 @@ Settlement settle_hold(ConquisterState &state, const Holder &hold, std::int64_t 
     settled.zodiac_percent = zodiac::percent_for(display_name(state, holder), now, signs);
     settled.earned = settled.earned / 100 * settled.zodiac_percent +
                      settled.earned % 100 * settled.zodiac_percent / 100;
-    std::int64_t &score = state.scores[holder];
+    return settled;
+}
+
+Settlement settle_hold(ConquisterState &state, const Holder &hold, std::int64_t now, zodiac::Overrides signs) {
+    Settlement settled = hold_value(state, hold, now, signs);
+    /* What was put aside when a ⚡ was lost is paid with the rest. */
+    settled.earned += hold.banked;
+    std::int64_t &score = state.scores[hold.username];
     if (score > 0 && settled.earned > std::numeric_limits<std::int64_t>::max() - score) {
         log_error("Could not update Conquister score");
         throw StorageError("Conquister score overflow");
@@ -531,12 +548,15 @@ ClaimResult conquister_claim(
             outcome.lobsters_became.push_back(emoji);
         }
         state.current = Holder{.user_id = user_id, .username = username, .since = now,
-                               .lightning_percent = 0, .lobsters = std::move(lobsters)};
-        /* The ⚡ on his name as he comes in fix what this hold is worth, each one adding its share:
-           nothing hung or burnt later can change it. He brings his own balloon, as worn as it is. */
+                               .lightning_percent = 0, .bolts = 0, .banked = 0, .counted_from = 0,
+                               .lobsters = std::move(lobsters)};
+        /* The ⚡ on his name as he comes in set what this hold is worth, each one adding its share: one
+           hung later does not raise it, one lost inside lowers it from then on. He brings his own
+           balloon, as worn as it is. */
         const std::int64_t bolts = copies_of(state, username, power::bolt);
         outcome.entered_lightning = bolts > 0 && rules.lightning > 0 ? 100 + bolts * rules.lightning : 0;
         state.current->lightning_percent = outcome.entered_lightning;
+        state.current->bolts = outcome.entered_lightning > 0 ? bolts : 0;
         return outcome;
     });
 
@@ -800,10 +820,6 @@ bool same_emoji(std::string_view one, std::string_view other) {
     return without_variation(one) == without_variation(other);
 }
 
-bool is_poo(std::string_view emoji) {
-    return is_power(emoji, power::poo);
-}
-
 bool is_lobster(std::string_view emoji) {
     return is_power(emoji, power::lobster);
 }
@@ -984,8 +1000,30 @@ FurnitureMoveResult furniture_move(Storage &storage, const std::string &username
     return result;
 }
 
+namespace {
+
+/* The holder who lost a ⚡ he came in with, burnt or blown up, keeps what the hold made so far and
+   earns less from now on: each one takes its share of the percent with it. */
+void lose_bolts(ConquisterState &state, std::int64_t now, zodiac::Overrides signs) {
+    if (!state.current || state.current->bolts <= 0) {
+        return;
+    }
+    Holder &hold = *state.current;
+    const std::int64_t left = copies_of(state, hold.username, power::bolt);
+    if (left >= hold.bolts) {
+        return;
+    }
+    hold.banked += hold_value(state, hold, now, signs).earned;
+    hold.counted_from = std::max(now, hold.since);
+    const std::int64_t share = (hold.lightning_percent - 100) / hold.bolts;
+    hold.bolts = left;
+    hold.lightning_percent = left > 0 ? 100 + left * share : 0;
+}
+
+}
+
 FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, const std::string &emoji,
-                                   std::int64_t now, std::int64_t smeared_seconds) {
+                                   std::int64_t now, std::int64_t smeared_seconds, zodiac::Overrides signs) {
     const FurnitureBurnResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         FurnitureBurnResult outcome;
@@ -998,13 +1036,16 @@ FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, 
             return outcome;
         }
         outcome.shown = shown_furniture(state, player);
-        if (is_poo(emoji) && state.current && !state.current->username.empty() &&
+        /* Thrown at the place, it lands on whoever holds it, unless he threw it himself. */
+        if (is_thrown(emoji) && state.current && !state.current->username.empty() &&
             state.current->username != player) {
-            const std::string &holder = state.current->username;
-            smear(state, holder, now, smeared_seconds);
+            const std::string holder = state.current->username;
+            outcome.blown = land(session, state, emoji, holder, Whereabouts::conquister, now, smeared_seconds).blown;
             outcome.hit = display_name(state, holder);
             outcome.hit_on_telegram = counter(state.telegram_ids, holder) != 0;
+            outcome.hit_furniture = shown_furniture(state, holder);
         }
+        lose_bolts(state, now, signs);
         return outcome;
     });
     if (result.status == FurnitureBurnStatus::burned) {
@@ -1305,14 +1346,20 @@ bool defended_at_home(StorageSession &session, ConquisterState &state, const std
     return false;
 }
 
-/* A 💣 going off in a house takes two emoji with a power from neighbouring slots, or one when no two
-   are side by side. Only what is at home can go: the ones he carries are with him when he is out. */
-std::vector<std::string> blow_up(StorageSession &session, ConquisterState &state, const std::string &target) {
+/* Where an emoji with a power is: the ones he carries are wherever he is, the others stay at home. */
+Whereabouts site_of(const ConquisterState &state, const std::string &player, const Power &power) {
+    return power.kind == PowerKind::carried ? whereabouts(state, player) : Whereabouts::home;
+}
+
+/* A 💣 going off takes two emoji with a power from neighbouring slots, or one when no two are side by
+   side. Only what is there can go: at his house what he left at home, in @TheConquister37 what he
+   carries. */
+std::vector<std::string> blow_up(StorageSession &session, ConquisterState &state, const std::string &target,
+                                 Whereabouts site) {
     std::vector<std::string> slots = slots_of(state, target);
-    const bool home = at_home(state, target);
-    const auto exposed = [&slots, home](std::size_t slot) {
+    const auto exposed = [&](std::size_t slot) {
         const Power *power = slots[slot].empty() ? nullptr : power_of(slots[slot]);
-        return power != nullptr && (home || power->kind != PowerKind::carried);
+        return power != nullptr && site_of(state, target, *power) == site;
     };
     std::vector<std::size_t> pairs;
     std::vector<std::size_t> singles;
@@ -1342,6 +1389,17 @@ std::vector<std::string> blow_up(StorageSession &session, ConquisterState &state
     return blown;
 }
 
+Landing land(StorageSession &session, ConquisterState &state, std::string_view thrown, const std::string &victim,
+             Whereabouts site, std::int64_t now, std::int64_t smeared_seconds) {
+    Landing landing;
+    if (is_power(thrown, power::poo)) {
+        smear(state, victim, now, smeared_seconds);
+        landing.smeared = true;
+    } else if (is_power(thrown, power::bomb)) {
+        landing.blown = blow_up(session, state, victim, site);
+    }
+    return landing;
+}
 }
 
 std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRules &rules) {
@@ -1376,13 +1434,12 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                         /* Poo splatters on arrival, making the target "lo smerdato", and is gone; any
                            other emoji is hung, and a name that filled up meanwhile sends it back the
                            way it came. */
-                        if (is_poo(raid.gift_emoji)) {
+                        if (is_thrown(raid.gift_emoji)) {
+                            Landing landing = land(session, state, raid.gift_emoji, raid.target, Whereabouts::home,
+                                                   now, rules.smeared_seconds);
                             raid.gift_emoji.clear();
-                            smear(state, raid.target, now, rules.smeared_seconds);
-                            event.target_smeared = true;
-                        } else if (is_power(raid.gift_emoji, power::bomb)) {
-                            raid.gift_emoji.clear();
-                            event.blown = blow_up(session, state, raid.target);
+                            event.target_smeared = event.target_smeared || landing.smeared;
+                            event.blown = std::move(landing.blown);
                             event.target_emoji = shown_furniture(state, raid.target);
                         } else if (has_room(state, raid.target, rules.furniture_limit) &&
                             give_emoji(state, raid.target, raid.gift_emoji, rules.furniture_limit)) {

@@ -129,6 +129,9 @@ ConquisterState parse_state(const Json &json) {
             .lightning_percent = current->contains("lightning_percent") ? integer(current->at("lightning_percent"))
                 : current->contains("multiplier") && integer(current->at("multiplier")) > 1
                     ? integer(current->at("multiplier")) * 100 : 0,
+            .bolts = current->contains("bolts") ? integer(current->at("bolts")) : 0,
+            .banked = current->contains("banked") ? integer(current->at("banked")) : 0,
+            .counted_from = current->contains("counted_from") ? integer(current->at("counted_from")) : 0,
             .lobsters = {},
         };
         if (const auto lobsters = current->find("lobsters"); lobsters != current->end()) {
@@ -184,6 +187,9 @@ Json state_to_json(const ConquisterState &state) {
             {"username", state.current->username},
             {"since", state.current->since},
             {"lightning_percent", state.current->lightning_percent},
+            {"bolts", state.current->bolts},
+            {"banked", state.current->banked},
+            {"counted_from", state.current->counted_from},
         };
         if (!state.current->lobsters.empty()) {
             Json lobsters = Json::object();

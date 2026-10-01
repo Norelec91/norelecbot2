@@ -29,8 +29,15 @@ struct Holder {
     std::int64_t user_id = 0;
     std::string username;
     std::int64_t since = 0;
-    /* What this hold is worth in percent, fixed on the way in by the ⚡ he had on his name; 0 for nothing. */
+    /* What this hold is worth in percent, set on the way in by the ⚡ he had on his name; 0 for nothing.
+       A ⚡ hung later does not raise it; one lost while he is inside lowers it from then on. */
     std::int64_t lightning_percent = 0;
+    /* How many ⚡ that percent stands for, so that a lost one takes its share with it. */
+    std::int64_t bolts = 0;
+    /* What the hold earned up to the instant a ⚡ was lost, and that instant: the rest is counted from
+       there at the lower percent. */
+    std::int64_t banked = 0;
+    std::int64_t counted_from = 0;
     /* The 🦞 on his name, by slot from 0, that came in as the emoji the kicked holder had in that same
        slot: they count and show as that emoji until he leaves. */
     std::map<std::size_t, std::string> lobsters{};
