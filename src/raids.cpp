@@ -85,6 +85,7 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
         .hen_per_minute = config.hen_per_minute,
         .adult_per_second = config.adult_per_second,
         .mating_percent = config.mating_percent,
+        .trap_percent = config.trap_percent,
     };
     /* The news waits for the second round: by then IRC has had a tick to connect. */
     int rounds = 0;

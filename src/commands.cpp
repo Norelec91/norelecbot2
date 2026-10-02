@@ -301,6 +301,7 @@ RaidRules raid_rules(const CommandContext &context) {
         .hen_per_minute = context.config.hen_per_minute,
         .adult_per_second = context.config.adult_per_second,
         .mating_percent = context.config.mating_percent,
+        .trap_percent = context.config.trap_percent,
     };
 }
 
@@ -1194,9 +1195,13 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
             format_wait(event.seconds)
         );
     }
-    const std::string alarm = event.alarmed
+    std::string alarm = event.alarmed
         ? std::format("L'allarme di {}{} ti scopre: devi vedertela con le sue difese.\n", mention, event.target)
         : std::string{};
+    if (event.trapped > 0) {
+        alarm += std::format("Finisci nelle trappole di {}{}: il ritorno dura {} in più.\n", mention, event.target,
+                             format_wait(event.trapped));
+    }
     if (event.balloon_held) {
         return alarm + std::format(
             "{} il palloncino di {}{} ha resistito. "

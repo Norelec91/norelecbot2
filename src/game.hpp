@@ -60,6 +60,8 @@ inline constexpr Power pirate{"🏴‍☠️", PowerKind::carried, "when a raid 
 inline constexpr Power seed{"💦", PowerKind::thrown, "when it lands on somebody who is there",
                             "in time a child is born on the name of whoever it hits, taking a slot"};
 inline constexpr Power hen{"🐔", PowerKind::home, "every minute", "each lays palle for its owner, whether he is in or out"};
+inline constexpr Power trap{"🪤", PowerKind::home, "when a raider reaches the house",
+                            "each makes his ride home longer by a share, robbed or not"};
 inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries to get past it, where its owner is",
                                "holds off whoever comes for his place or his house until it pops, then is as good as new"};
 
@@ -69,7 +71,8 @@ inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries 
 inline constexpr std::array powers{power::pleading, power::rocket, power::bolt, power::lobster,
                                    power::poo,      power::bomb,   power::nuke, power::dog,
                                    power::balloon,  power::mailbox, power::ninja, power::alarm,
-                                   power::vortex,   power::pirate,  power::seed,  power::hen};
+                                   power::vortex,   power::pirate,  power::seed,  power::hen,
+                                   power::trap};
 
 /* Whether an emoji is that power's, drawn in colour or not and whatever the tone of its skin. */
 [[nodiscard]] bool is_power(std::string_view emoji, const Power &power);
@@ -221,6 +224,8 @@ struct RaidRules {
     std::int64_t adult_per_second = 0;
     /* The chance, in percent, that a grown-up girl and a grown-up boy of the same house have a child. */
     std::int64_t mating_percent = 0;
+    /* How much longer each 🪤 at the house makes a raider's ride home, in percent: they add up. */
+    std::int64_t trap_percent = 0;
 };
 
 struct RaidResult {
@@ -247,6 +252,8 @@ struct RaidEvent {
     std::string raider;
     std::string target;
     std::int64_t loot = 0;
+    /* stolen: the seconds the 🪤 at the house added to the raider's ride home; 0 without one. */
+    std::int64_t trapped = 0;
     /* stolen: a 🐶 at the house caught the raider, who takes nothing. */
     bool intercepted = false;
     /* stolen: a 🥷 took the raider past the 🎈 or the 🐶 that were there, unnoticed. */

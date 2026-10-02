@@ -872,6 +872,11 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     boarded.boarded = "🍕";
     boarded.seconds = 5;
     CHECK(raid_event_reply(boarded).value_or("").ends_with("\nArrembaggio: ti porti via anche 🍕 da casa sua."));
+    RaidEvent snared = robbed;
+    snared.trapped = 90;
+    snared.seconds = 500;
+    CHECK(raid_event_reply(snared).value_or("").starts_with(
+        "Finisci nelle trappole di Bob: il ritorno dura 1 minuto e 30 secondi in più.\nCarol hai rubato 3 palle"));
     RaidEvent caught = robbed;
     caught.loot = 0;
     caught.intercepted = true;
@@ -1076,6 +1081,10 @@ TEST_CASE("/buyballoon hands the free 🎈 once, and a full name can try again")
     const CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
 
     CHECK(command_is_for_bot("/buyballoon"));
+    /* Every emoji with a power can be written in a command. */
+    for (const Power &power : powers) {
+        CHECK(command_is_for_bot(std::format("We @Alice {}", power.emoji)));
+    }
     REQUIRE(command_dispatch(alice, "/profile"));
     storage.transaction([](StorageSession &session) {
         session.state().furniture["tg:1"] = "⚡⚡⚡";
