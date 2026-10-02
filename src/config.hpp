@@ -34,8 +34,8 @@ struct AppConfig {
     static constexpr int default_bomb_dud_percent = 10;
     /* What the ☢️ that starts the game over costs. */
     static constexpr int default_nuke_cost = 1'000'000;
-    /* What the 🌀 that flings a player far away costs. */
-    static constexpr int default_vortex_cost = 1'000'000;
+    /* What the 🌀 that flings a player far away costs: nothing, since only the admins can have one. */
+    static constexpr int default_vortex_cost = 0;
     /* The chance, in percent, that each 🐶 on a name gives of stopping a raid on the house. */
     static constexpr int default_dog_percent = 10;
     /* What a new 🎈 costs once the one everybody starts with has popped. */
