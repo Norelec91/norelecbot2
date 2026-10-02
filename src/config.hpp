@@ -29,7 +29,7 @@ struct AppConfig {
     /* How much faster every 🚀 on the name makes a ride, in percent. */
     static constexpr int default_rocket_percent = 25;
     /* How much less a raider takes for every 🥺 on the target's name, in percent. */
-    static constexpr int default_pleading_percent = 5;
+    static constexpr int default_pleading_percent = 10;
     /* How often, in percent, a 💣 is a dud that goes off in the thrower's hand. */
     static constexpr int default_bomb_dud_percent = 10;
     /* What the ☢️ that starts the game over costs. */
@@ -59,7 +59,7 @@ struct AppConfig {
     /* The chance, in percent, that a grown-up girl and boy of the same house have a child. */
     static constexpr int default_mating_percent = 50;
     /* How much longer each 🪤 at a house makes a raider's ride home, in percent. */
-    static constexpr int default_trap_percent = 20;
+    static constexpr int default_trap_percent = 10;
     static constexpr int default_api_port = 8000;
     static constexpr int default_irc_port = 6697;
     static constexpr std::string_view default_irc_nick = "NorelecBot";

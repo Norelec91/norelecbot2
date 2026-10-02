@@ -1205,7 +1205,7 @@ TEST_CASE("/emoji tells every emoji with a power, where it is and what can hit i
         REQUIRE(at != std::string::npos);
         CHECK(help.at(at + power.emoji.size() + 2) != '\n');
     }
-    CHECK(help.contains("\n🥺 chi ti razzia ruba il 5% in meno per ognuna\n"));
+    CHECK(help.contains("\n🥺 chi ti razzia ruba il 10% in meno per ognuna\n"));
     CHECK(help.contains("\n⚡ +25% di palle in @TheConquister37 per ognuno\n"));
     CHECK(help.contains("🎈 il palloncino: difende il posto dove sei; bucato torna nuovo; uno nuovo costa 1000 palle. "
                         "Invincibile: né bombe né furti\n"));
