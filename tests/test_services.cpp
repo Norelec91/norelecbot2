@@ -1086,6 +1086,8 @@ TEST_CASE("every emoji with a power is listed once, with its kind") {
     CHECK(power::trap.kind == PowerKind::home);
     CHECK(power::ice.kind == PowerKind::thrown);
     CHECK(power::kaaba.untouchable);
+    CHECK(power::fire.kind == PowerKind::carried);
+    CHECK(power::hourglass.kind == PowerKind::carried);
     /* Whatever the tone of its skin, it is the same emoji. */
     CHECK(is_power("🥷🏿", power::ninja));
     CHECK(is_power("🥷", power::ninja));
@@ -1888,6 +1890,35 @@ TEST_CASE("a 🧊 freezes whoever it hits: no place and no setting off until he 
     CHECK(storage.transaction([](StorageSession &session) { return session.state().frozen.empty(); }));
     CHECK(raid_start(storage, 0, "bob", "alice", 305, rules).status == RaidStatus::started);
 
+    /* Each 🔥 he has with him melts a share of it, and enough of them melt it all. */
+    rules.fire_percent = 20;
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["bob"] = "🔥🔥";
+        session.state().furniture["alice"] = "🧊🧊🧊🧊";
+        session.state().raids.clear();
+        return 0;
+    });
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 310, rules, RaidTargetKind::any, 0, "🧊").status ==
+            RaidStatus::started);
+    std::vector<RaidEvent> melted = raid_due(storage, 315, rules);
+    REQUIRE(melted.size() == 1);
+    CHECK(melted[0].froze == 180);
+    CHECK(melted[0].melted);
+    static_cast<void>(raid_due(storage, 320, rules));
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["bob"] = "🔥🔥🔥🔥🔥";
+        session.state().frozen.clear();
+        return 0;
+    });
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 330, rules, RaidTargetKind::any, 0, "🧊").status ==
+            RaidStatus::started);
+    melted = raid_due(storage, 335, rules);
+    REQUIRE(melted.size() == 1);
+    CHECK(melted[0].froze == 0);
+    CHECK(player_profile_of(storage, "bob", 335).frozen_for == 0);
+    static_cast<void>(raid_due(storage, 340, rules));
+    rules.fire_percent = 0;
+
     /* Thrown at the place it freezes the holder, who stays where he is. */
     const FurnitureBurnResult onto = furniture_burn(storage, "alice", "🧊", 400, rules);
     CHECK(onto.hit == "carol");
@@ -1951,6 +1982,45 @@ TEST_CASE("the Ummah's house is robbed, bombed and defended as one, and a ☢️
     CHECK(after.furniture.at("alice") == "🎈");
     CHECK(after.furniture.at("bob") == "🎈");
     std::filesystem::remove(paths.conquister + ".before-reset-200");
+}
+
+TEST_CASE("every ⏳ with the claimer takes a share off the penalty of a failed attempt") {
+    const TestPaths paths{"hourglass-test"};
+    {
+        /* alice holds the place behind a fresh 🎈 that cannot pop on the first attempt here: each of the
+           three tries below is made against a balloon nobody has touched yet. */
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":0,"username":"alice","since":0},"scores":{},"quotes_added":{},)"
+             << R"("furniture":{"alice":"🎈","bob":"⏳⏳⏳","carol":"⏳⏳⏳⏳⏳⏳⏳⏳⏳⏳"}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    const ClaimRules rules{.cooldown_seconds = 300, .signs = {}, .hourglass = 10};
+    const auto failed = [&](const char *who, std::int64_t now) -> std::optional<ClaimResult> {
+        for (int attempt = 0; attempt < 40; ++attempt) {
+            storage.transaction([who](StorageSession &session) {
+                ConquisterState &state = session.state();
+                state.current = Holder{.user_id = 0, .username = "alice", .since = 0};
+                state.balloons.clear();
+                state.cooldowns.erase(who);
+                return 0;
+            });
+            ClaimResult result = conquister_claim(storage, 0, who, now, rules);
+            if (result.status == ClaimStatus::defended) {
+                return result;
+            }
+        }
+        return std::nullopt;
+    };
+    /* Three of them: three tenths off the five minutes. */
+    const std::optional<ClaimResult> bob = failed("bob", 100);
+    REQUIRE(bob);
+    CHECK(bob->penalty_seconds == 210);
+    CHECK(conquister_claim(storage, 0, "bob", 200, rules).status == ClaimStatus::cooldown);
+    /* Ten of them: no wait at all. */
+    const std::optional<ClaimResult> carol = failed("carol", 100);
+    REQUIRE(carol);
+    CHECK(carol->penalty_seconds == 0);
+    CHECK(storage.transaction([](StorageSession &session) { return session.state().cooldowns.count("carol"); }) == 0);
 }
 
 TEST_CASE("a pile of poo is thrown, not hung: a full name takes it and keeps nothing") {

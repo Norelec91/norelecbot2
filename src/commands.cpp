@@ -309,6 +309,7 @@ RaidRules raid_rules(const CommandContext &context) {
         .mating_percent = context.config.mating_percent,
         .trap_percent = context.config.trap_percent,
         .frozen_seconds = context.config.frozen_seconds,
+        .fire_percent = context.config.fire_percent,
     };
 }
 
@@ -557,7 +558,11 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
         return poo_throw(own_name(context), burnt.hit.empty() ? std::string{conquister_place}
             : std::format("{}{} in {}", burnt.hit_on_telegram ? "@" : "", burnt.hit, conquister_place));
     }
-    if (burnt.froze > 0) {
+    if (is_power(emoji, power::ice) && !burnt.hit.empty()) {
+        if (burnt.froze == 0) {
+            return std::format("{} il 🔥 di {}{} scioglie subito la tua 🧊 in {}.", context.username,
+                               burnt.hit_on_telegram ? "@" : "", burnt.hit, conquister_place);
+        }
         return std::format("{} congeli {}{} in {}: per {} non può partire e, se lo cacciano, non può rientrare.",
                            context.username, burnt.hit_on_telegram ? "@" : "", burnt.hit, conquister_place,
                            format_wait(burnt.froze));
@@ -618,6 +623,7 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
                 .signs = context.config.zodiac_signs,
                 .lightning = context.config.lightning_percent,
                 .ninja = context.config.ninja_percent,
+                .hourglass = context.config.hourglass_percent,
             }
         );
     /* A name that came from IRC must not be written as a mention: on Telegram it would tag a stranger. */
@@ -947,6 +953,13 @@ std::string power_help(const Power &power, const AppConfig &config) {
     if (is(power::ice)) {
         return std::format("chi la prende resta congelato per {}: non può entrare in {} né partire",
                            format_wait(config.frozen_seconds), conquister_place);
+    }
+    if (is(power::hourglass)) {
+        return std::format("ognuna accorcia del {}% la penalità dopo un tentativo fallito di entrare in {}",
+                           config.hourglass_percent, conquister_place);
+    }
+    if (is(power::fire)) {
+        return std::format("ognuno accorcia del {}% il tempo che resti congelato da una 🧊", config.fire_percent);
     }
     if (is(power::kaaba)) {
         return std::format("comprarla ti fa entrare nella {0}: palle ed emoji diventano di tutti i membri e la {0} "
@@ -1279,7 +1292,8 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
                 blown += emoji;
             }
             const std::string what = is_power(event.gift_emoji, power::ice)
-                ? std::format("resti congelato per {}", format_wait(event.froze))
+                ? (event.froze == 0 ? std::string{"il tuo 🔥 la scioglie subito"}
+                                    : std::format("resti congelato per {}", format_wait(event.froze)))
                 : is_power(event.gift_emoji, power::seed)
                 ? std::format("tra {} si vedrà, e sarà tutto tuo", format_wait(event.expecting))
                 : is_power(event.gift_emoji, power::vortex)
@@ -1298,10 +1312,14 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
             return std::format("{} a casa di {}{} non c'è nessuno: la {} te la riporti a casa. Torni in {} tra {}.",
                                raider, mention, target, event.gift_emoji, home, format_wait(event.seconds));
         }
-        if (event.froze > 0 && !event.sent_back) {
-            return std::format("{} congeli {}{}: per {} non può entrare in {} né partire. Torni in {} tra {}.", raider,
-                               mention, event.target, format_wait(event.froze), conquister_place, home,
-                               format_wait(event.seconds));
+        if (is_power(event.gift_emoji, power::ice) && !event.sent_back) {
+            if (event.froze == 0) {
+                return std::format("{} il 🔥 di {}{} scioglie subito la tua 🧊: non resta congelato. Torni in {} tra {}.",
+                                   raider, mention, event.target, home, format_wait(event.seconds));
+            }
+            return std::format("{} congeli {}{}{}: per {} non può entrare in {} né partire. Torni in {} tra {}.", raider,
+                               mention, event.target, event.melted ? ", ma il suo 🔥 accorcia il gelo" : "",
+                               format_wait(event.froze), conquister_place, home, format_wait(event.seconds));
         }
         if (event.expecting > 0 && !event.sent_back) {
             return std::format("{} la tua 💦 è arrivata a casa di {}{}: tra {} si vedrà. Torni in {} tra {}.", raider,

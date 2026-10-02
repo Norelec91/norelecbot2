@@ -69,6 +69,10 @@ inline constexpr Power ice{"🧊", PowerKind::thrown, "when it lands",
 inline constexpr Power kaaba{"🕋", PowerKind::home, "when it is bought",
                              "takes its buyer into the Ummah: one purse and one name's worth of emoji for all members",
                              true};
+inline constexpr Power fire{"🔥", PowerKind::carried, "when a 🧊 hits him",
+                            "each melts a share of the time he stays frozen"};
+inline constexpr Power hourglass{"⏳", PowerKind::carried, "when a 🎈 holds off his attempt at the place",
+                                 "each takes a share off the penalty he is left with"};
 inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries to get past it, where its owner is",
                                "holds off whoever comes for his place or his house until it pops, then is as good as new",
                                true};
@@ -80,7 +84,8 @@ inline constexpr std::array powers{power::pleading, power::rocket, power::bolt, 
                                    power::poo,      power::bomb,   power::nuke, power::dog,
                                    power::balloon,  power::mailbox, power::ninja, power::alarm,
                                    power::vortex,   power::pirate,  power::seed,  power::hen,
-                                   power::trap,     power::ice,     power::kaaba};
+                                   power::trap,     power::ice,     power::kaaba, power::fire,
+                                   power::hourglass};
 
 /* The name the Ummah goes by, and the key its purse and its emoji are kept under. */
 inline constexpr std::string_view ummah_name = "Ummah";
@@ -247,6 +252,8 @@ struct RaidRules {
     std::int64_t trap_percent = 0;
     /* How long a player hit by a 🧊 stays frozen. */
     std::int64_t frozen_seconds = 300;
+    /* How much of the time a 🧊 freezes him each 🔥 he has with him melts away, in percent: they add up. */
+    std::int64_t fire_percent = 0;
 };
 
 struct RaidResult {
@@ -302,8 +309,10 @@ struct RaidEvent {
     bool flung = false;
     /* delivered, with a 💦: a child is on the way, born after this many seconds. */
     std::int64_t expecting = 0;
-    /* delivered, with a 🧊: whoever it hit is frozen for this many seconds. */
+    /* delivered, with a 🧊: whoever it hit is frozen for this many seconds; melted, his 🔥 shortened it,
+       to nothing when froze is 0. */
     std::int64_t froze = 0;
+    bool melted = false;
     /* delivered, with a 💦: nobody was home to receive it, and the raider takes it back with him. */
     bool nobody_home = false;
     /* delivered, with something thrown: a 📮 sent it back, and what it did it did to the raider, at his
@@ -382,6 +391,8 @@ struct ClaimRules {
     std::int64_t lightning = 0;
     /* The chance, in percent, that each 🥷 on the claimer's name gives of slipping past the holder's 🎈. */
     std::int64_t ninja = 0;
+    /* How much of the penalty each ⏳ on the claimer's name takes off, in percent: they add up. */
+    std::int64_t hourglass = 0;
 };
 
 [[nodiscard]] ClaimResult conquister_claim(
@@ -521,8 +532,10 @@ struct FurnitureBurnResult {
     std::int64_t expecting = 0;
     /* It was a child of his, left at the place: the one way to part with it. */
     bool abandoned = false;
-    /* It was a 🧊: the holder is frozen for this many seconds. */
+    /* It was a 🧊: the holder is frozen for this many seconds; melted, his 🔥 shortened it, to nothing
+       when froze is 0. */
     std::int64_t froze = 0;
+    bool melted = false;
     /* It was the 🕋 of a member: he left the Ummah, and what he had stays with it. */
     bool left_ummah = false;
 };

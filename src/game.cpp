@@ -36,8 +36,9 @@ struct Landing {
     bool flung = false;
     /* A 💦 left the victim expecting: the seconds until the child is born. */
     std::int64_t expecting = 0;
-    /* A 🧊 froze the victim for this many seconds. */
+    /* A 🧊 froze the victim for this many seconds; his 🔥 shortened it, or melted it away. */
     std::int64_t froze = 0;
+    bool melted = false;
     std::vector<std::string> blown;
 };
 /* A thrown emoji lands where somebody is, his house or @TheConquister37, and works on what is there. */
@@ -705,9 +706,12 @@ ClaimResult conquister_claim(
             const BalloonRoll balloon = outcome.sneaked
                 ? BalloonRoll::none : balloon_attempt(session, state, holder, Whereabouts::conquister);
             if (balloon == BalloonRoll::held) {
-                if (rules.cooldown_seconds > 0) {
-                    state.cooldowns[username] = now + rules.cooldown_seconds;
-                    outcome.penalty_seconds = rules.cooldown_seconds;
+                /* Every ⏳ he has with him takes its share off the wait: enough of them and there is none. */
+                const std::int64_t spared = std::min<std::int64_t>(
+                    100, carried_copies(state, username, power::hourglass) * std::max<std::int64_t>(rules.hourglass, 0));
+                if (const std::int64_t wait = rules.cooldown_seconds * (100 - spared) / 100; wait > 0) {
+                    state.cooldowns[username] = now + wait;
+                    outcome.penalty_seconds = wait;
                 }
                 outcome.status = ClaimStatus::defended;
                 outcome.previous_username = display_name(state, holder);
@@ -1521,6 +1525,7 @@ FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, 
             outcome.flung = landing.flung;
             outcome.expecting = landing.expecting;
             outcome.froze = landing.froze;
+            outcome.melted = landing.melted;
             outcome.blown = std::move(landing.blown);
             outcome.shown = shown_furniture(state, player);
             outcome.hit = display_name(state, holder);
@@ -2174,7 +2179,11 @@ Landing land(StorageSession &session, ConquisterState &state, std::string_view t
         state.pregnancies.push_back(Pregnancy{.mother = owner_of(state, victim), .father = thrower, .due = now + wait});
         landing.expecting = std::max<std::int64_t>(wait, 1);
     } else if (is_power(thrown, power::ice)) {
-        landing.froze = std::max<std::int64_t>(rules.frozen_seconds, 0);
+        /* Every 🔥 he has with him melts its share of it: enough of them and it melts away. */
+        const std::int64_t melt = std::min<std::int64_t>(
+            100, carried_copies(state, victim, power::fire) * std::max<std::int64_t>(rules.fire_percent, 0));
+        landing.melted = melt > 0;
+        landing.froze = std::max<std::int64_t>(rules.frozen_seconds, 0) * (100 - melt) / 100;
         if (landing.froze > 0) {
             state.frozen[victim] = now + landing.froze;
         }
@@ -2257,6 +2266,7 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                             event.flung = landing.flung;
                             event.expecting = landing.expecting;
                             event.froze = landing.froze;
+                            event.melted = landing.melted;
                             event.blown = std::move(landing.blown);
                             event.raider_emoji = worn(state, raid.raider);
                             event.target_emoji = worn(state, raid.target);
