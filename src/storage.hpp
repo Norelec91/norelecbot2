@@ -151,6 +151,9 @@ struct ConquisterState {
        emoji for all of them, kept under the key "ummah". Each of them brought ten slots. */
     std::vector<std::string> ummah_members;
     std::int64_t ummah_slots = 0;
+    /* The same for the players a ⛪ took into the Chiesa, kept under the key "chiesa". */
+    std::vector<std::string> church_members;
+    std::int64_t church_slots = 0;
 
     bool operator==(const ConquisterState &) const = default;
 };

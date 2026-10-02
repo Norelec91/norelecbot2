@@ -45,7 +45,8 @@ struct Landing {
 Landing land(StorageSession &session, ConquisterState &state, std::string_view thrown, const std::string &thrower,
              const std::string &victim, Whereabouts site, std::int64_t now, const RaidRules &rules);
 /* Whether a 🕋 took the player into the Ummah. */
-bool in_ummah(const ConquisterState &state, const std::string &player);
+const Community *community_of(const ConquisterState &state, const std::string &player);
+const Community *community_for(std::string_view emoji);
 /* The key his palle and his emoji are kept under: the Ummah's for a member, his own otherwise. */
 std::string owner_of(const ConquisterState &state, const std::string &player);
 /* How many slots that name has: the Ummah's grow by ten with every member. */
@@ -60,8 +61,8 @@ bool is_flung(const ConquisterState &state, const std::string &player);
 Whereabouts site_of(const ConquisterState &state, const std::string &player, std::size_t slot, const Power &power);
 /* Hands a player the 🎈 everybody starts with, once, if he has none and a free slot. */
 void welcome(ConquisterState &state, const std::string &player, std::size_t limit);
-void join_ummah(ConquisterState &state, const std::string &player, std::size_t limit);
-void leave_ummah(ConquisterState &state, const std::string &player);
+void join(ConquisterState &state, const Community &community, const std::string &player, std::size_t limit);
+void leave(ConquisterState &state, const Community &community, const std::string &player);
 bool has_balloon(const ConquisterState &state, const std::string &player);
 bool has_room(const ConquisterState &state, const std::string &player, std::size_t limit);
 bool hang_with_him(ConquisterState &state, const std::string &player, const std::string &emoji, std::size_t limit);
@@ -110,17 +111,61 @@ Counters::iterator find_entry(Counters &counters, const std::string &username) {
     });
 }
 
-bool in_ummah(const ConquisterState &state, const std::string &player) {
-    return std::ranges::find(state.ummah_members, player) != state.ummah_members.end();
+/* Where each community's members and slots are kept. */
+const std::vector<std::string> &members_of(const ConquisterState &state, const Community &community) {
+    return community.key == ummah_key ? state.ummah_members : state.church_members;
+}
+
+std::vector<std::string> &members_of(ConquisterState &state, const Community &community) {
+    return community.key == ummah_key ? state.ummah_members : state.church_members;
+}
+
+std::int64_t slots_in(const ConquisterState &state, const Community &community) {
+    return community.key == ummah_key ? state.ummah_slots : state.church_slots;
+}
+
+std::int64_t &slots_in(ConquisterState &state, const Community &community) {
+    return community.key == ummah_key ? state.ummah_slots : state.church_slots;
+}
+
+/* The community a player is a member of, or the one a key is the purse of; nothing for anybody else. */
+const Community *community_of(const ConquisterState &state, const std::string &player) {
+    for (const Community &community : communities) {
+        const std::vector<std::string> &members = members_of(state, community);
+        if (player == community.key || std::ranges::find(members, player) != members.end()) {
+            return &community;
+        }
+    }
+    return nullptr;
+}
+
+/* The community an emoji takes its buyer into. */
+const Community *community_for(std::string_view emoji) {
+    /* Drawn in colour or not, it is the same emoji. */
+    const auto plain = [](std::string_view text) {
+        std::string bare{text};
+        for (std::size_t at = bare.find("\xEF\xB8\x8F"); at != std::string::npos; at = bare.find("\xEF\xB8\x8F")) {
+            bare.erase(at, 3);
+        }
+        return bare;
+    };
+    for (const Community &community : communities) {
+        if (plain(emoji) == plain(community.emoji)) {
+            return &community;
+        }
+    }
+    return nullptr;
 }
 
 std::string owner_of(const ConquisterState &state, const std::string &player) {
-    return in_ummah(state, player) ? std::string{ummah_key} : player;
+    const Community *community = community_of(state, player);
+    return community != nullptr ? std::string{community->key} : player;
 }
 
 std::size_t capacity(const ConquisterState &state, const std::string &player, std::size_t limit) {
-    return owner_of(state, player) == ummah_key
-        ? std::max(limit, static_cast<std::size_t>(std::max<std::int64_t>(state.ummah_slots, 0))) : limit;
+    const Community *community = community_of(state, player);
+    return community != nullptr
+        ? std::max(limit, static_cast<std::size_t>(std::max<std::int64_t>(slots_in(state, *community), 0))) : limit;
 }
 
 /* What somebody hung beside his name, or nothing: for a member of the Ummah, what the Ummah has. */
@@ -402,24 +447,33 @@ std::optional<std::string> known_player(const ConquisterState &state, std::strin
     return std::nullopt;
 }
 
-/* A member of the Ummah has no palle of his own on file to be known by: his name is enough. */
-std::optional<std::string> ummah_member(const ConquisterState &state, std::string_view name) {
-    const auto found = std::ranges::find_if(state.ummah_members, [&](const std::string &member) {
-        return text::equals_ignore_case(member, name) || text::equals_ignore_case(display_name(state, member), name);
-    });
-    return found == state.ummah_members.end() ? std::nullopt : std::optional<std::string>{*found};
+/* A member of a community has no palle of his own on file to be known by: his name is enough. */
+std::optional<std::string> community_member(const ConquisterState &state, std::string_view name) {
+    for (const Community &community : communities) {
+        for (const std::string &member : members_of(state, community)) {
+            if (text::equals_ignore_case(member, name) || text::equals_ignore_case(display_name(state, member), name)) {
+                return member;
+            }
+        }
+    }
+    return std::nullopt;
 }
 
-/* Whether a name, with or without the mention, is the Ummah's. */
-bool names_ummah(std::string_view name) {
-    return text::equals_ignore_case(name.starts_with('@') ? name.substr(1) : name, ummah_name);
+/* The community a name, with or without the mention, is the name of. */
+const Community *community_named(std::string_view name) {
+    const std::string_view bare = name.starts_with('@') ? name.substr(1) : name;
+    const auto found = std::ranges::find_if(communities, [bare](const Community &community) {
+        return text::equals_ignore_case(bare, community.name);
+    });
+    return found == communities.end() ? nullptr : &*found;
 }
 
 std::optional<std::string> player_by_name(const ConquisterState &state, std::string_view name,
                                           RaidTargetKind platform) {
-    /* The Ummah is one name on every platform, for as long as there is one. */
-    if (names_ummah(name) && (!state.ummah_members.empty() || state.ummah_slots > 0)) {
-        return std::string{ummah_key};
+    /* A community is one name on every platform, for as long as there is one. */
+    if (const Community *community = community_named(name);
+        community != nullptr && (!members_of(state, *community).empty() || slots_in(state, *community) > 0)) {
+        return std::string{community->key};
     }
     if (platform != RaidTargetKind::any) {
         const Authors &names = platform == RaidTargetKind::telegram ? state.telegram_names : state.irc_nicks;
@@ -427,7 +481,7 @@ std::optional<std::string> player_by_name(const ConquisterState &state, std::str
         if (found != names.end()) {
             return found->second;
         }
-        if (const std::optional<std::string> member = ummah_member(state, name)) {
+        if (const std::optional<std::string> member = community_member(state, name)) {
             return member;
         }
         /* Read-only compatibility for players in pre-identity saves who have not spoken yet. */
@@ -452,7 +506,7 @@ std::optional<std::string> player_by_name(const ConquisterState &state, std::str
     if (const auto irc = state.irc_nicks.find(lower_name(name)); irc != state.irc_nicks.end()) {
         return irc->second;
     }
-    if (const std::optional<std::string> member = ummah_member(state, name)) {
+    if (const std::optional<std::string> member = community_member(state, name)) {
         return member;
     }
     return known_player(state, name);
@@ -823,7 +877,9 @@ Profile profile_from(ConquisterState &state, const std::string &key, std::int64_
     profile.flung = is_flung(state, key);
     profile.hens = copies_of(state, key, power::hen);
     profile.frozen_for = frozen_for(state, key, now);
-    profile.in_ummah = in_ummah(state, key);
+    if (const Community *community = community_of(state, key); community != nullptr && key != community->key) {
+        profile.community = community->name;
+    }
     profile.on_telegram = counter(state.telegram_ids, key) != 0;
     profile.players = state.scores.size();
     if (const Counters::value_type *score = find_ignore_case(state.scores, owner_of(state, key)); score != nullptr) {
@@ -1059,7 +1115,9 @@ std::int64_t carried_copies(const ConquisterState &state, const std::string &pla
 }
 
 std::string worn(const ConquisterState &state, const std::string &player) {
-    return in_ummah(state, player) ? std::string{ummah_name} : shown_furniture(state, player);
+    const Community *community = community_of(state, player);
+    return community != nullptr && player != community->key ? std::string{community->name}
+                                                            : shown_furniture(state, player);
 }
 
 std::int64_t copies_of(const ConquisterState &state, const std::string &player, const Power &power) {
@@ -1272,22 +1330,23 @@ void welcome(ConquisterState &state, const std::string &player, std::size_t limi
 
 namespace {
 
-/* A 🕋 takes a player into the Ummah. His ten slots, as they are, are added after the ones the Ummah
-   already has, his palle go into its purse, and from now on he hangs, spends and earns as the Ummah
+/* Its emoji takes a player into a community. His ten slots, as they are, are added after the ones it
+   already has, his palle go into its purse, and from now on he hangs, spends and earns as the community
    while he goes about on his own. The first to come founds it where he lives. */
-void join_ummah(ConquisterState &state, const std::string &player, std::size_t limit) {
-    const std::string ummah{ummah_key};
-    const auto offset = static_cast<std::size_t>(std::max<std::int64_t>(state.ummah_slots, 0));
+void join(ConquisterState &state, const Community &community, const std::string &player, std::size_t limit) {
+    const std::string ummah{community.key};
+    std::vector<std::string> &members = members_of(state, community);
+    const auto offset = static_cast<std::size_t>(std::max<std::int64_t>(slots_in(state, community), 0));
     std::vector<std::string> mine = slots_of(state, player);
     mine.resize(limit);
     std::vector<std::string> shared = slots_of(state, ummah);
     shared.resize(offset);
     shared.insert(shared.end(), mine.begin(), mine.end());
-    if (state.ummah_members.empty() && find_entry(state.ids, ummah) == state.ids.end()) {
+    if (members.empty() && find_entry(state.ids, ummah) == state.ids.end()) {
         if (const auto home = find_entry(state.ids, player); home != state.ids.end()) {
             state.ids[ummah] = home->second;
         }
-        state.display_names[ummah] = std::string{ummah_name};
+        state.display_names[ummah] = std::string{community.name};
     }
     state.scores[ummah] = counter(state.scores, ummah) + counter(state.scores, player);
     state.scores.erase(player);
@@ -1312,15 +1371,15 @@ void join_ummah(ConquisterState &state, const std::string &player, std::size_t l
         }
         state.current->lobsters = std::move(moved);
     }
-    state.ummah_slots = static_cast<std::int64_t>(offset + limit);
+    slots_in(state, community) = static_cast<std::int64_t>(offset + limit);
     hang(state, ummah, std::move(shared));
-    state.ummah_members.push_back(player);
+    members.push_back(player);
 }
 
-/* Burning the 🕋 is the way out: what he brought and what he made stay with the Ummah, and he starts
-   again with nothing but a 🎈. The slots he brought stay too. */
-void leave_ummah(ConquisterState &state, const std::string &player) {
-    std::erase(state.ummah_members, player);
+/* Burning the emoji is the way out: what he brought and what he made stay with the community, and he
+   starts again with nothing but a 🎈. The slots he brought stay too. */
+void leave(ConquisterState &state, const Community &community, const std::string &player) {
+    std::erase(members_of(state, community), player);
     state.scores[player] = 0;
     state.furniture[player] = std::string{power::balloon.emoji};
     state.balloons.erase(player);
@@ -1417,13 +1476,15 @@ namespace {
 /* A ☢️ on @TheConquister37 starts the game over: everybody back to no palle and no emoji, nobody in
    the place or on the road, every balloon new. Who the players are, where they live and the quotes stay. */
 void start_over(ConquisterState &state) {
-    /* The Ummah is no more: its members are players of their own again, like everybody else. */
-    const std::string ummah{ummah_key};
-    state.ummah_members.clear();
-    state.ummah_slots = 0;
-    state.scores.erase(ummah);
-    state.ids.erase(ummah);
-    state.display_names.erase(ummah);
+    /* The communities are no more: their members are players of their own again, like everybody else. */
+    for (const Community &community : communities) {
+        const std::string purse{community.key};
+        members_of(state, community).clear();
+        slots_in(state, community) = 0;
+        state.scores.erase(purse);
+        state.ids.erase(purse);
+        state.display_names.erase(purse);
+    }
     for (auto &[player, score] : state.scores) {
         score = 0;
     }
@@ -1503,9 +1564,10 @@ FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, 
             outcome.shown = shown_furniture(state, player);
             return outcome;
         }
-        if (is_power(emoji, power::kaaba) && in_ummah(state, player)) {
-            leave_ummah(state, player);
-            outcome.left_ummah = true;
+        if (const Community *community = community_for(emoji);
+            community != nullptr && community_of(state, player) == community && player != community->key) {
+            leave(state, *community, player);
+            outcome.left = community->name;
             outcome.shown = shown_furniture(state, player);
             return outcome;
         }
@@ -1616,8 +1678,17 @@ FurnitureResult furniture_buy(
             index = static_cast<std::size_t>(position - 1);
         }
         outcome.position = index + 1;
-        /* Nothing is hung over a child, nor over a 🕋: that one goes only when its member burns it. */
-        if (is_child(state, username, index) || (index < slots.size() && is_power(slots[index], power::kaaba))) {
+        /* A player in one community cannot take up the emoji of another: he would be in neither. */
+        const bool was_member = community_of(state, username) != nullptr;
+        if (const Community *other = community_for(emoji);
+            other != nullptr && was_member && community_of(state, username) != other) {
+            outcome.status = FurnitureStatus::in_community;
+            return outcome;
+        }
+        /* Nothing is hung over a child, nor over the emoji of a community: that one goes only when its
+           member burns it. */
+        if (is_child(state, username, index) ||
+            (index < slots.size() && community_for(slots[index]) != nullptr)) {
             outcome.status = FurnitureStatus::child_there;
             outcome.replaced = index < slots.size() ? slots[index] : std::string{};
             return outcome;
@@ -1653,13 +1724,13 @@ FurnitureResult furniture_buy(
         state.scores[owner_of(state, username)] = outcome.available_score;
         hang(state, username, std::move(slots));
         outcome.status = FurnitureStatus::bought;
-        /* The 🕋 takes whoever buys his first one into the Ummah, with all he has. */
-        if (is_power(emoji, power::kaaba) && !in_ummah(state, username)) {
-            join_ummah(state, username, limit);
-            outcome.joined_ummah = true;
-            outcome.ummah_slots = static_cast<std::size_t>(state.ummah_slots);
+        /* Its emoji takes whoever buys it, and is in no community yet, into that one, with all he has. */
+        if (const Community *community = community_for(emoji); community != nullptr && !was_member) {
+            join(state, *community, username, limit);
+            outcome.joined = community->name;
+            outcome.community_slots = static_cast<std::size_t>(slots_in(state, *community));
             outcome.shown = shown_furniture(state, username);
-            outcome.available_score = counter(state.scores, std::string{ummah_key});
+            outcome.available_score = counter(state.scores, std::string{community->key});
         }
         return outcome;
     });
@@ -1689,8 +1760,10 @@ Authors furniture_all(Storage &storage) {
             }
         }
         /* A member has nothing beside his own name: he goes by the Ummah's. */
-        for (const std::string &member : state.ummah_members) {
-            shown[member] = std::string{ummah_name};
+        for (const Community &community : communities) {
+            for (const std::string &member : members_of(state, community)) {
+                shown[member] = std::string{community.name};
+            }
         }
         return shown;
     });
@@ -1750,7 +1823,7 @@ RaidResult raid_start(
         /* For a member of the Ummah, the Ummah is home as much as his own name is. */
         const bool homewards = (self_on_requested_platform &&
             text::equals_ignore_case(display_name(state, username), target)) ||
-            (in_ummah(state, username) && names_ummah(target));
+            (community_of(state, username) != nullptr && community_named(target) == community_of(state, username));
         const std::optional<std::string> known = homewards ? std::optional<std::string>{username}
             : player_by_name(state, target, target_kind);
         if (!known) {
@@ -1758,9 +1831,11 @@ RaidResult raid_start(
             return outcome;
         }
         /* Nobody in the Ummah is reached under his own name: there is only the Ummah to go to. */
-        if (!homewards && in_ummah(state, *known)) {
-            outcome.status = RaidStatus::in_ummah;
+        if (const Community *theirs = community_of(state, *known);
+            !homewards && theirs != nullptr && *known != theirs->key) {
+            outcome.status = RaidStatus::in_community;
             outcome.target = display_name(state, *known);
+            outcome.community = theirs->name;
             return outcome;
         }
         const bool holds_place = whereabouts(state, username) == Whereabouts::conquister;
@@ -1827,7 +1902,7 @@ RaidResult raid_start(
         /* An emoji taken along leaves his name as he sets off, if the target has somewhere to hang it. */
         if (!gift_emoji.empty()) {
             /* A 🕋 is not something to hand over: it leaves a name only when its member burns it. */
-            if (!has_emoji(state, username, gift_emoji) || is_power(gift_emoji, power::kaaba)) {
+            if (!has_emoji(state, username, gift_emoji) || community_for(gift_emoji) != nullptr) {
                 outcome.status = RaidStatus::no_such_emoji;
                 return outcome;
             }

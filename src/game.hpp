@@ -73,6 +73,9 @@ inline constexpr Power fire{"🔥", PowerKind::carried, "when a 🧊 hits him",
                             "each melts a share of the time he stays frozen"};
 inline constexpr Power hourglass{"⏳", PowerKind::carried, "when a 🎈 holds off his attempt at the place",
                                  "each takes a share off the penalty he is left with"};
+inline constexpr Power church{"⛪", PowerKind::home, "when it is bought",
+                              "takes its buyer into the Chiesa: one purse and one name's worth of emoji for all members",
+                              true};
 inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries to get past it, where its owner is",
                                "holds off whoever comes for his place or his house until it pops, then is as good as new",
                                true};
@@ -85,11 +88,22 @@ inline constexpr std::array powers{power::pleading, power::rocket, power::bolt, 
                                    power::balloon,  power::mailbox, power::ninja, power::alarm,
                                    power::vortex,   power::pirate,  power::seed,  power::hen,
                                    power::trap,     power::ice,     power::kaaba, power::fire,
-                                   power::hourglass};
+                                   power::hourglass, power::church};
+
+/* A community of players: whoever buys its emoji joins it, and from then on its members share one
+   purse and one name's worth of emoji, kept under its key, while each goes about on his own. Nobody
+   reaches a member under his own name, only as the community. Burning the emoji is the way out. */
+struct Community {
+    std::string_view emoji;
+    std::string_view name;
+    std::string_view key;
+};
+
+inline constexpr std::array communities{Community{"🕋", "Ummah", "ummah"}, Community{"⛪", "Chiesa", "chiesa"}};
 
 /* The name the Ummah goes by, and the key its purse and its emoji are kept under. */
-inline constexpr std::string_view ummah_name = "Ummah";
-inline constexpr std::string_view ummah_key = "ummah";
+inline constexpr std::string_view ummah_name = communities[0].name;
+inline constexpr std::string_view ummah_key = communities[0].key;
 
 /* Whether an emoji is that power's, drawn in colour or not and whatever the tone of its skin. */
 [[nodiscard]] bool is_power(std::string_view emoji, const Power &power);
@@ -146,7 +160,9 @@ enum class FurnitureStatus {
     already_there,
     insufficient_score,
     not_home,
-    child_there
+    child_there,
+    /* The emoji is another community's, and he is in one already. */
+    in_community
 };
 
 struct FurnitureResult {
@@ -157,9 +173,9 @@ struct FurnitureResult {
     /* The slot, from 1, and what was hanging there before, empty if nothing was. */
     std::size_t position = 0;
     std::string replaced;
-    /* The purchase was a 🕋 and took him into the Ummah, which now has this many slots. */
-    bool joined_ummah = false;
-    std::size_t ummah_slots = 0;
+    /* The purchase took him into this community, which now has this many slots; empty when it did not. */
+    std::string_view joined;
+    std::size_t community_slots = 0;
     /* How many of that emoji already hung from anybody's name, and what it cost for that. */
     std::size_t copies = 0;
     std::int64_t charged = 0;
@@ -193,8 +209,8 @@ enum class RaidStatus {
     no_room,
     /* A 🧊 hit him not long ago: he cannot set off until he thaws. */
     frozen,
-    /* The target is in the Ummah: nobody is reached under his own name, only as the Ummah. */
-    in_ummah
+    /* The target is in a community: nobody is reached under his own name, only as the community. */
+    in_community
 };
 
 enum class RaidTargetKind { any, telegram, irc };
@@ -268,6 +284,8 @@ struct RaidResult {
     int zodiac_percent = 100;
     /* What is left after the palle taken along were picked up, or what there was when they were too few. */
     std::int64_t score = 0;
+    /* in_community: the community the target is in. */
+    std::string_view community;
 };
 
 struct RaidEvent {
@@ -419,8 +437,8 @@ struct Profile {
     std::int64_t hens = 0;
     /* Seconds until he thaws after a 🧊; 0 when he is not frozen. */
     std::int64_t frozen_for = 0;
-    /* He is in the Ummah: the palle and the emoji shown are the Ummah's, and so is the number of slots. */
-    bool in_ummah = false;
+    /* The community he is in, whose palle and emoji are the ones shown; empty for a player of his own. */
+    std::string_view community;
     /* Whether he plays from Telegram, where his home is written with the mention. */
     bool on_telegram = false;
     std::int64_t score = 0;
@@ -536,8 +554,8 @@ struct FurnitureBurnResult {
        when froze is 0. */
     std::int64_t froze = 0;
     bool melted = false;
-    /* It was the 🕋 of a member: he left the Ummah, and what he had stays with it. */
-    bool left_ummah = false;
+    /* It was the emoji of his community: he left it, and what he had stays with it. */
+    std::string_view left;
 };
 
 /* An emoji brought back to @TheConquister37 leaves the game too: the first slot that holds it is

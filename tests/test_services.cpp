@@ -1088,6 +1088,11 @@ TEST_CASE("every emoji with a power is listed once, with its kind") {
     CHECK(power::kaaba.untouchable);
     CHECK(power::fire.kind == PowerKind::carried);
     CHECK(power::hourglass.kind == PowerKind::carried);
+    CHECK(power::church.untouchable);
+    /* Every community's emoji is in the table, and takes its buyer nowhere else. */
+    for (const Community &community : communities) {
+        CHECK(power_of(community.emoji) != nullptr);
+    }
     /* Whatever the tone of its skin, it is the same emoji. */
     CHECK(is_power("🥷🏿", power::ninja));
     CHECK(is_power("🥷", power::ninja));
@@ -1954,7 +1959,7 @@ TEST_CASE("the Ummah's house is robbed, bombed and defended as one, and a ☢️
     };
     CHECK(purse() == 200);
     /* A member is not somebody to go to. */
-    CHECK(raid_start(storage, 0, "carol", "bob", 10, rules).status == RaidStatus::in_ummah);
+    CHECK(raid_start(storage, 0, "carol", "bob", 10, rules).status == RaidStatus::in_community);
     /* The house is never empty: what a member would carry is there for a 💣 too, but never a 🕋. */
     for (int round = 0; round < 3; ++round) {
         storage.transaction([](StorageSession &session) {

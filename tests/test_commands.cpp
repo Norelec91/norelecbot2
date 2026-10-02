@@ -1298,13 +1298,39 @@ TEST_CASE("a 🕋 takes its buyer into the Ummah: one purse, one name, ten slots
 
     /* Burning a 🕋 is the way out, empty-handed: what he brought stays, slots and all. */
     CHECK(command_dispatch(bob, "We @TheConquister37 🕋") ==
-          "Bob hai bruciato la 🕋: esci dalla Ummah e le lasci palle ed emoji. Riparti da zero con il tuo 🎈.");
+          "Bob hai bruciato 🕋: esci dalla Ummah e le lasci palle ed emoji. Riparti da zero con il tuo 🎈.");
     CHECK(state().ummah_members == std::vector<std::string>{"tg:1"});
     CHECK(state().furniture.at("tg:2") == "🎈");
     CHECK(state().scores.at("tg:2") == 0);
     CHECK(state().ummah_slots == 20);
     CHECK(state().scores.at("ummah") == 4950);
     CHECK(state().furniture.at("ummah") == "⚡🍕[][][][][][][][]🐶🕋[][]🐟");
+    /* The Chiesa is another community, with its own purse and name: carol founds it, and bob, free
+       again, joins her. A member of one cannot take up the emoji of the other. */
+    storage.transaction([](StorageSession &session) {
+        session.state().raids.clear();
+        session.state().scores["tg:2"] = 2000;
+        return 0;
+    });
+    CHECK(command_dispatch(carol, "We @Carol ⛪").value_or("").contains("Carol entri nella Chiesa"));
+    CHECK(command_dispatch(bob, "We @Bob ⛪").value_or("").contains("la Chiesa ha 20 posti"));
+    CHECK(state().church_members == std::vector<std::string>{"tg:3", "tg:2"});
+    CHECK(state().furniture.at("chiesa") == "⛪[][][][][][][][][]🎈⛪");
+    CHECK(state().ummah_members == std::vector<std::string>{"tg:1"});
+    CHECK(command_dispatch(bob, "We @Bob 🕋") ==
+          "Bob sei già in un'altra comunità: per entrare in questa devi prima uscire dalla tua. Nessun addebito.");
+    CHECK(command_dispatch(alice, "/profile @Carol").value_or("").contains("nella Chiesa"));
+    CHECK(command_dispatch(carol, "/leaderboard").value_or("").contains(" Chiesa (⛪"));
+    /* Each is reached only as what she is part of. */
+    CHECK(command_dispatch(bob, "We @Alice") ==
+          "Bob Alice è nella Ummah: nessuno lo raggiunge col suo nome. Scrivi We @Ummah.");
+    CHECK(command_dispatch(bob, "We @Ummah").value_or("").starts_with("Bob parti per Ummah: arrivi tra "));
+    storage.transaction([](StorageSession &session) {
+        session.state().raids.clear();
+        return 0;
+    });
+    CHECK(command_dispatch(bob, "We @TheConquister37 ⛪") ==
+          "Bob hai bruciato ⛪: esci dalla Chiesa e le lasci palle ed emoji. Riparti da zero con il tuo 🎈.");
     /* He is a player of his own again. */
     CHECK(command_dispatch(alice, "/profile @Bob").value_or("").starts_with("Bob (🎈)\n"));
 }

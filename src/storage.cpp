@@ -233,6 +233,9 @@ ConquisterState parse_state(const Json &json) {
         json.contains("ummah_members") ? json.at("ummah_members").get<std::vector<std::string>>()
                                        : std::vector<std::string>{},
         json.contains("ummah_slots") ? integer(json.at("ummah_slots")) : 0,
+        json.contains("church_members") ? json.at("church_members").get<std::vector<std::string>>()
+                                        : std::vector<std::string>{},
+        json.contains("church_slots") ? integer(json.at("church_slots")) : 0,
     };
     return state;
 }
@@ -308,6 +311,8 @@ Json state_to_json(const ConquisterState &state) {
         {"eggs_at", state.eggs_at},
         {"ummah_members", state.ummah_members},
         {"ummah_slots", state.ummah_slots},
+        {"church_members", state.church_members},
+        {"church_slots", state.church_slots},
     };
 }
 

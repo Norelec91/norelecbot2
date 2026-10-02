@@ -375,9 +375,9 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
         return std::format("{} {} non ha posti liberi per {}.", username, target, gift_emoji);
     case RaidStatus::frozen:
         return frozen_reply(username, result.seconds);
-    case RaidStatus::in_ummah:
+    case RaidStatus::in_community:
         return std::format("{} {} è nella {}: nessuno lo raggiunge col suo nome. Scrivi We {}{}.", username,
-                           result.target, ummah_name, context.user_id != 0 ? "@" : "", ummah_name);
+                           result.target, result.community, context.user_id != 0 ? "@" : "", result.community);
     case RaidStatus::started:
         break;
     }
@@ -541,9 +541,9 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
     case FurnitureBurnStatus::burned:
         break;
     }
-    if (burnt.left_ummah) {
-        return std::format("{} hai bruciato la 🕋: esci dalla {} e le lasci palle ed emoji. Riparti da zero con il tuo "
-                           "🎈.", context.username, ummah_name);
+    if (!burnt.left.empty()) {
+        return std::format("{} hai bruciato {}: esci dalla {} e le lasci palle ed emoji. Riparti da zero con il tuo 🎈.",
+                           context.username, emoji, burnt.left);
     }
     if (burnt.abandoned) {
         return std::format("{} hai abbandonato {} in {}: non è più sul tuo nome.", context.username, emoji,
@@ -822,6 +822,9 @@ std::string handle_furniture(const CommandContext &context, std::string_view wan
         return departure + std::format("{} i posti vanno da 1 a {}: nessun addebito.", username, limit);
     case FurnitureStatus::already_there:
         return departure + std::format("{} nel posto {} c'è già {}: nessun addebito.", username, result.position, result.replaced);
+    case FurnitureStatus::in_community:
+        return departure + std::format("{} sei già in un'altra comunità: per entrare in questa devi prima uscire dalla "
+                                       "tua. Nessun addebito.", username);
     case FurnitureStatus::child_there:
         return departure + std::format("{} nel posto {} c'è {}, che non si tocca: se ne andrà da solo. Nessun addebito.",
                                        username, result.position, result.replaced);
@@ -853,10 +856,10 @@ std::string handle_furniture(const CommandContext &context, std::string_view wan
                              multiplier_text(cost > 0 ? result.charged * 100 / cost : 100));
     }
     reply += ".";
-    if (result.joined_ummah) {
+    if (!result.joined.empty()) {
         reply += std::format("\n{0} entri nella {1}: le tue palle e le tue emoji ora sono di tutti i membri, e la {1} "
-                             "ha {2} posti. Chi vuole colpirti deve mirare a {1}. Per uscire brucia la 🕋: lascerai "
-                             "tutto.", username, ummah_name, result.ummah_slots);
+                             "ha {2} posti. Chi vuole colpirti deve mirare a {1}. Per uscire brucia {3}: lascerai "
+                             "tutto.", username, result.joined, result.community_slots, emoji);
     }
     return departure + reply;
 }
@@ -961,10 +964,12 @@ std::string power_help(const Power &power, const AppConfig &config) {
     if (is(power::fire)) {
         return std::format("ognuno accorcia del {}% il tempo che resti congelato da una 🧊", config.fire_percent);
     }
-    if (is(power::kaaba)) {
-        return std::format("comprarla ti fa entrare nella {0}: palle ed emoji diventano di tutti i membri e la {0} "
-                           "guadagna {1} posti. Nessuno ti colpisce più col tuo nome, solo come {0}. Bruciarla ti fa "
-                           "uscire a mani vuote", ummah_name, config.furniture_limit);
+    for (const Community &community : communities) {
+        if (power.emoji == community.emoji) {
+            return std::format("comprarla ti fa entrare nella {0}: palle ed emoji diventano di tutti i membri e la {0} "
+                               "guadagna {1} posti. Nessuno ti colpisce più col tuo nome, solo come {0}. Bruciarla ti "
+                               "fa uscire a mani vuote", community.name, config.furniture_limit);
+        }
     }
     if (is(power::vortex)) {
         return "solo amministratori: scaraventa un giocatore a un anno di viaggio da tutti";
@@ -1034,8 +1039,8 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
     if (profile.flung) {
         card += "scaraventato lontano da una 🌀: a un anno di viaggio da tutti\n";
     }
-    if (profile.in_ummah) {
-        card += std::format("nella {}: palle ed emoji sono in comune con gli altri membri\n", ummah_name);
+    if (!profile.community.empty()) {
+        card += std::format("nella {}: palle ed emoji sono in comune con gli altri membri\n", profile.community);
     }
     if (profile.frozen_for > 0) {
         card += std::format("congelato da una 🧊 ancora per {}\n", format_wait(profile.frozen_for));
