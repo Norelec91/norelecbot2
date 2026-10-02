@@ -54,6 +54,8 @@ struct AppConfig {
     static constexpr int default_child_stage_seconds = 24 * 60 * 60;
     /* The palle each 🐔 on a name lays for its owner every minute. */
     static constexpr int default_hen_per_minute = 1;
+    /* The palle a child makes every second of its grown-up age. */
+    static constexpr int default_adult_per_second = 1;
     static constexpr int default_api_port = 8000;
     static constexpr int default_irc_port = 6697;
     static constexpr std::string_view default_irc_nick = "NorelecBot";
@@ -94,6 +96,7 @@ struct AppConfig {
     int pregnancy_seconds = default_pregnancy_seconds;
     int child_stage_seconds = default_child_stage_seconds;
     int hen_per_minute = default_hen_per_minute;
+    int adult_per_second = default_adult_per_second;
     /* Whether a player seen for the first time is handed a 🎈. */
     bool starter_balloon = true;
     /* Players whose real sign the owner knows, instead of the one their name gives. */

@@ -217,6 +217,8 @@ struct RaidRules {
     std::int64_t child_stage_seconds = 24 * 60 * 60;
     /* The palle each 🐔 on a name lays for its owner every minute. */
     std::int64_t hen_per_minute = 0;
+    /* The palle a child makes for the name it lives on every second of its grown-up age. */
+    std::int64_t adult_per_second = 0;
 };
 
 struct RaidResult {
@@ -479,6 +481,8 @@ struct FurnitureBurnResult {
     bool flung = false;
     /* It was a 💦: the holder is expecting, and the child is born after this many seconds. */
     std::int64_t expecting = 0;
+    /* It was a child of his, left at the place: the one way to part with it. */
+    bool abandoned = false;
 };
 
 /* An emoji brought back to @TheConquister37 leaves the game too: the first slot that holds it is

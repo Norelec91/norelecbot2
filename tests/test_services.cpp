@@ -1685,9 +1685,12 @@ TEST_CASE("a child grows through its ages where it was born, then leaves, and no
     RaidRules rules = quick_rides();
     rules.child_stage_seconds = 100;
     rules.pirate_percent = 50;
+    rules.adult_per_second = 3;
+    const auto score = [&storage] {
+        return storage.transaction([](StorageSession &session) { return session.state().scores.at("bob"); });
+    };
 
-    /* It is not his to burn or to hand over, and nothing can be hung in its place. */
-    CHECK(furniture_burn(storage, "bob", "👶", 10, rules).status == FurnitureBurnStatus::not_owned);
+    /* It is not his to hand over, and nothing can be hung in its place. */
     CHECK(raid_start(storage, 0, "bob", "alice", 10, rules, RaidTargetKind::any, 0, "👶").status ==
           RaidStatus::no_such_emoji);
     CHECK(furniture_buy(storage, "bob", "🍕", 1, 0, 10, 10).status == FurnitureStatus::child_there);
@@ -1702,12 +1705,19 @@ TEST_CASE("a child grows through its ages where it was born, then leaves, and no
     /* Moved, it is the same child in another slot, and it goes on growing there. */
     CHECK(furniture_move(storage, "bob", 1, 3, 10, 30).status == FurnitureMoveStatus::moved);
     CHECK(furniture_all(storage).at("bob") == "[][]👶");
+    const std::int64_t before = score();
     CHECK(raid_due(storage, 100, rules).empty());
     CHECK(furniture_all(storage).at("bob") == "[][]👦");
     CHECK(raid_due(storage, 200, rules).empty());
     CHECK(furniture_all(storage).at("bob") == "[][]👨");
+    /* Only as a grown-up does it earn: nothing before, so much a second while it lasts. */
+    CHECK(score() == before);
+    CHECK(raid_due(storage, 240, rules).empty());
+    CHECK(score() == before + 120);
     CHECK(raid_due(storage, 399, rules).empty());
     CHECK(furniture_all(storage).at("bob") == "[][]👴");
+    /* The whole of that age is paid, and not a second of the next. */
+    CHECK(score() == before + 300);
     /* A whole life lived, it leaves by itself and the slot is free again. */
     events = raid_due(storage, 400, rules);
     REQUIRE(events.size() == 1);
@@ -1715,6 +1725,20 @@ TEST_CASE("a child grows through its ages where it was born, then leaves, and no
     CHECK(events[0].target == "bob");
     CHECK(events[0].gift_emoji == "👴");
     CHECK(furniture_all(storage).count("bob") == 0);
+    CHECK(storage.transaction([](StorageSession &session) { return session.state().children.empty(); }));
+
+    /* The one way to part with a child is to leave it at the place: it is gone, and so is what it would
+       have earned. */
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["bob"] = "🍕👩";
+        session.state().children.push_back(Child{.owner = "bob", .slot = 1, .male = false, .born = 1000, .paid = 0});
+        return 0;
+    });
+    CHECK(furniture_burn(storage, "bob", "👶", 1250, rules).status == FurnitureBurnStatus::not_owned);
+    const FurnitureBurnResult left = furniture_burn(storage, "bob", "👩", 1250, rules);
+    CHECK(left.status == FurnitureBurnStatus::burned);
+    CHECK(left.abandoned);
+    CHECK(left.shown == "🍕");
     CHECK(storage.transaction([](StorageSession &session) { return session.state().children.empty(); }));
 }
 

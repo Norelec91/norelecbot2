@@ -251,10 +251,9 @@ std::string too_far_reply(std::string_view username) {
                        conquister_place);
 }
 
-/* The 🌀 and the 💦 are the admins' alone, to buy and to throw: nobody else can use one, however he came
-   by it. */
+/* The 🌀 is the admins' alone, to buy and to throw: nobody else can use one, however he came by it. */
 bool admins_only(const CommandContext &context, std::string_view emoji) {
-    return (is_power(emoji, power::vortex) || is_power(emoji, power::seed)) && !context.owner && !context.admin;
+    return is_power(emoji, power::vortex) && !context.owner && !context.admin;
 }
 
 std::string admins_only_reply(std::string_view username, std::string_view emoji) {
@@ -300,6 +299,7 @@ RaidRules raid_rules(const CommandContext &context) {
         .pregnancy_seconds = context.config.pregnancy_seconds,
         .child_stage_seconds = context.config.child_stage_seconds,
         .hen_per_minute = context.config.hen_per_minute,
+        .adult_per_second = context.config.adult_per_second,
     };
 }
 
@@ -524,6 +524,10 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
         return too_far_reply(context.username);
     case FurnitureBurnStatus::burned:
         break;
+    }
+    if (burnt.abandoned) {
+        return std::format("{} hai abbandonato {} in {}: non è più sul tuo nome.", context.username, emoji,
+                           conquister_place);
     }
     if (burnt.reset) {
         return std::format("{} ha sganciato la bomba nucleare su {}: il gioco riparte da zero. Tutti senza palle e "
@@ -1193,7 +1197,7 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
         : std::string{};
     if (event.balloon_held) {
         return alarm + std::format(
-            "{} il palloncino di {}{} ha resistito: niente bottino. "
+            "{} il palloncino di {}{} ha resistito. "
             "Ora il palloncino ha il {}% di probabilità di essere bucato. Torni in {} tra {}.",
             raider,
             mention,

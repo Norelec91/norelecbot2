@@ -568,7 +568,7 @@ TEST_CASE("the raids tell what happened") {
     event.balloon_held = true;
     event.next_chance = 50;
     CHECK(raid_event_reply(event) ==
-          "bob il palloncino di @alice ha resistito: niente bottino. "
+          "bob il palloncino di @alice ha resistito. "
           "Ora il palloncino ha il 50% di probabilità di essere bucato. Torni in bob tra 52 secondi.");
     event.balloon_held = false;
     event.balloon_popped = true;
@@ -1166,10 +1166,12 @@ TEST_CASE("the 🌀 is for the admins alone, to buy and to throw") {
     CHECK(command_dispatch(alice, "We @TheConquister37 🌀") == "Alice la 🌀 è riservata agli amministratori.");
     CHECK(furniture_all(storage).at("tg:1") == "🌀🌀");
 
-    /* The 💦 is theirs alone as well. */
-    CHECK(command_dispatch(alice, "We @Alice 💦") == "Alice la 💦 è riservata agli amministratori.");
-    CHECK(command_dispatch(alice, "We @Bob 💦") == "Alice la 💦 è riservata agli amministratori.");
-    CHECK(command_dispatch(alice, "We @TheConquister37 💦") == "Alice la 💦 è riservata agli amministratori.");
+    /* The 💦 is everybody's. */
+    storage.transaction([](StorageSession &session) {
+        session.state().scores["tg:1"] = 1'000'000;
+        return 0;
+    });
+    CHECK(command_dispatch(alice, "We @Alice 💦").value_or("").contains("hai speso"));
 
     alice.admin = true;
     CHECK(command_dispatch(alice, "We @Alice 🌀").value_or("").contains("hai speso"));
