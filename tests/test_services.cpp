@@ -1085,6 +1085,7 @@ TEST_CASE("every emoji with a power is listed once, with its kind") {
     CHECK(power::hen.kind == PowerKind::home);
     CHECK(power::trap.kind == PowerKind::home);
     CHECK(power::ice.kind == PowerKind::thrown);
+    CHECK(power::kaaba.untouchable);
     /* Whatever the tone of its skin, it is the same emoji. */
     CHECK(is_power("🥷🏿", power::ninja));
     CHECK(is_power("🥷", power::ninja));
@@ -1893,6 +1894,63 @@ TEST_CASE("a 🧊 freezes whoever it hits: no place and no setting off until he 
     CHECK(onto.froze == 300);
     CHECK(player_profile_of(storage, "carol", 400).place == Whereabouts::conquister);
     CHECK(player_profile_of(storage, "carol", 400).frozen_for == 300);
+}
+
+TEST_CASE("the Ummah's house is robbed, bombed and defended as one, and a ☢️ on the game ends it") {
+    const TestPaths paths{"ummah-house-test"};
+    {
+        /* alice and bob are the Ummah, living where alice lived; alice is out, holding the place. */
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":0,"username":"alice","since":0},)"
+             << R"("scores":{"ummah":1000,"carol":0},"quotes_added":{},"ids":{"ummah":5000,"alice":5000,"carol":0},)"
+             << R"("display_names":{"ummah":"Ummah","alice":"alice","bob":"bob"},)"
+             << R"("furniture":{"ummah":"🚀🕋🥺🥺[][][][][][]🕋","carol":"💣☢️"},)"
+             << R"("ummah_members":["alice","bob"],"ummah_slots":20})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    RaidRules rules = full_rides();
+    rules.pleading_percent = 10;
+    /* A raid goes to the Ummah, and what guards its house is what all of them hung there. */
+    REQUIRE(raid_start(storage, 0, "carol", "Ummah", 0, rules).status == RaidStatus::started);
+    std::vector<RaidEvent> events = raid_due(storage, 5, rules);
+    REQUIRE(events.size() == 1);
+    CHECK(events[0].target == "Ummah");
+    CHECK(events[0].pleaded_percent == 20);
+    CHECK(events[0].loot == 800);
+    static_cast<void>(raid_due(storage, 10, rules));
+    const auto purse = [&storage] {
+        return storage.transaction([](StorageSession &session) { return session.state().scores.at("ummah"); });
+    };
+    CHECK(purse() == 200);
+    /* A member is not somebody to go to. */
+    CHECK(raid_start(storage, 0, "carol", "bob", 10, rules).status == RaidStatus::in_ummah);
+    /* The house is never empty: what a member would carry is there for a 💣 too, but never a 🕋. */
+    for (int round = 0; round < 3; ++round) {
+        storage.transaction([](StorageSession &session) {
+            session.state().furniture["carol"] = "💣☢️";
+            return 0;
+        });
+        const std::int64_t now = 20 + round * 20;
+        REQUIRE(raid_start(storage, 0, "carol", "Ummah", now, rules, RaidTargetKind::any, 0, "💣").status ==
+                RaidStatus::started);
+        events = raid_due(storage, now + 5, rules);
+        REQUIRE(events.size() == 1);
+        REQUIRE(events[0].blown.size() == 1);
+        CHECK(events[0].blown[0] != "🕋");
+        static_cast<void>(raid_due(storage, now + 10, rules));
+    }
+    CHECK(furniture_all(storage).at("ummah") == "[]🕋[][][][][][][][]🕋");
+    CHECK(furniture_all(storage).at("alice") == "Ummah");
+
+    /* A ☢️ on the place ends the Ummah with everything else: its members are players of their own again. */
+    CHECK(furniture_burn(storage, "carol", "☢️", 200, rules).reset);
+    const ConquisterState after = storage.transaction([](StorageSession &session) { return session.state(); });
+    CHECK(after.ummah_members.empty());
+    CHECK(after.ummah_slots == 0);
+    CHECK(after.scores.count("ummah") == 0);
+    CHECK(after.furniture.at("alice") == "🎈");
+    CHECK(after.furniture.at("bob") == "🎈");
+    std::filesystem::remove(paths.conquister + ".before-reset-200");
 }
 
 TEST_CASE("a pile of poo is thrown, not hung: a full name takes it and keeps nothing") {

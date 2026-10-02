@@ -374,6 +374,9 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
         return std::format("{} {} non ha posti liberi per {}.", username, target, gift_emoji);
     case RaidStatus::frozen:
         return frozen_reply(username, result.seconds);
+    case RaidStatus::in_ummah:
+        return std::format("{} {} è nella {}: nessuno lo raggiunge col suo nome. Scrivi We {}{}.", username,
+                           result.target, ummah_name, context.user_id != 0 ? "@" : "", ummah_name);
     case RaidStatus::started:
         break;
     }
@@ -491,10 +494,11 @@ std::string_view command_prefix(const CommandContext &context) {
 /* "We yourname from to": the emoji in one slot goes to another, swapping with what hangs there. */
 std::string handle_furniture_move(const CommandContext &context, const ParsedMove &move) {
     const std::string username{context.username};
-    const auto limit = static_cast<std::size_t>(context.config.furniture_limit);
+    const auto base = static_cast<std::size_t>(context.config.furniture_limit);
+    const std::size_t limit = furniture_capacity(context.storage, std::string{context.player_key}, base);
     const std::int64_t now = seconds_now();
     const FurnitureMoveResult result = furniture_move(context.storage, std::string{context.player_key}, move.from,
-                                                      move.to, limit, now, context.config.zodiac_signs);
+                                                      move.to, base, now, context.config.zodiac_signs);
     const std::string departure = departure_line(context, result.departure, now);
     switch (result.status) {
     case FurnitureMoveStatus::invalid_position:
@@ -535,6 +539,10 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
         return too_far_reply(context.username);
     case FurnitureBurnStatus::burned:
         break;
+    }
+    if (burnt.left_ummah) {
+        return std::format("{} hai bruciato la 🕋: esci dalla {} e le lasci palle ed emoji. Riparti da zero con il tuo "
+                           "🎈.", context.username, ummah_name);
     }
     if (burnt.abandoned) {
         return std::format("{} hai abbandonato {} in {}: non è più sul tuo nome.", context.username, emoji,
@@ -781,7 +789,9 @@ std::string handle_furniture(const CommandContext &context, std::string_view wan
         : is_power(wanted, power::balloon) ? std::optional{context.config.balloon_cost} : std::nullopt;
     const int cost = price(context, fixed.value_or(context.config.furniture_cost));
     const int inflation = fixed ? 0 : context.config.furniture_inflation;
-    const auto limit = static_cast<std::size_t>(context.config.furniture_limit);
+    /* A member of the Ummah hangs on the Ummah's name, which has ten slots for every member. */
+    const auto base = static_cast<std::size_t>(context.config.furniture_limit);
+    const std::size_t limit = furniture_capacity(context.storage, std::string{context.player_key}, base);
     if (slot && (*slot < 1 || static_cast<std::uint64_t>(*slot) > limit)) {
         return std::format("{} i posti vanno da 1 a {}: nessun addebito.", username, limit);
     }
@@ -789,7 +799,7 @@ std::string handle_furniture(const CommandContext &context, std::string_view wan
     const std::string emoji{wanted};
     const std::int64_t now = seconds_now();
     const FurnitureResult result = furniture_buy(context.storage, std::string{context.player_key}, emoji, position,
-                                                 cost, limit, now, context.config.zodiac_signs, inflation);
+                                                 cost, base, now, context.config.zodiac_signs, inflation);
     const std::string departure = departure_line(context, result.departure, now);
     switch (result.status) {
     case FurnitureStatus::not_home:
@@ -836,7 +846,13 @@ std::string handle_furniture(const CommandContext &context, std::string_view wan
                              result.copies,
                              multiplier_text(cost > 0 ? result.charged * 100 / cost : 100));
     }
-    return departure + reply + ".";
+    reply += ".";
+    if (result.joined_ummah) {
+        reply += std::format("\n{0} entri nella {1}: le tue palle e le tue emoji ora sono di tutti i membri, e la {1} "
+                             "ha {2} posti. Chi vuole colpirti deve mirare a {1}. Per uscire brucia la 🕋: lascerai "
+                             "tutto.", username, ummah_name, result.ummah_slots);
+    }
+    return departure + reply;
 }
 
 /* Every line the game understands, one example each, written the way the asker has to write it. */
@@ -932,6 +948,11 @@ std::string power_help(const Power &power, const AppConfig &config) {
         return std::format("chi la prende resta congelato per {}: non può entrare in {} né partire",
                            format_wait(config.frozen_seconds), conquister_place);
     }
+    if (is(power::kaaba)) {
+        return std::format("comprarla ti fa entrare nella {0}: palle ed emoji diventano di tutti i membri e la {0} "
+                           "guadagna {1} posti. Nessuno ti colpisce più col tuo nome, solo come {0}. Bruciarla ti fa "
+                           "uscire a mani vuote", ummah_name, config.furniture_limit);
+    }
     if (is(power::vortex)) {
         return "solo amministratori: scaraventa un giocatore a un anno di viaggio da tutti";
     }
@@ -999,6 +1020,9 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
                         multiplier_text(percent));
     if (profile.flung) {
         card += "scaraventato lontano da una 🌀: a un anno di viaggio da tutti\n";
+    }
+    if (profile.in_ummah) {
+        card += std::format("nella {}: palle ed emoji sono in comune con gli altri membri\n", ummah_name);
     }
     if (profile.frozen_for > 0) {
         card += std::format("congelato da una 🧊 ancora per {}\n", format_wait(profile.frozen_for));

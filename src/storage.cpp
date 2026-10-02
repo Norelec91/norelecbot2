@@ -230,6 +230,9 @@ ConquisterState parse_state(const Json &json) {
         parse_pregnancies(json),
         parse_children(json),
         json.contains("eggs_at") ? integer(json.at("eggs_at")) : 0,
+        json.contains("ummah_members") ? json.at("ummah_members").get<std::vector<std::string>>()
+                                       : std::vector<std::string>{},
+        json.contains("ummah_slots") ? integer(json.at("ummah_slots")) : 0,
     };
     return state;
 }
@@ -303,6 +306,8 @@ Json state_to_json(const ConquisterState &state) {
         {"pregnancies", std::move(pregnancies)},
         {"children", std::move(children)},
         {"eggs_at", state.eggs_at},
+        {"ummah_members", state.ummah_members},
+        {"ummah_slots", state.ummah_slots},
     };
 }
 

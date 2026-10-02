@@ -66,6 +66,9 @@ inline constexpr Power trap{"🪤", PowerKind::home, "when a raider reaches the 
                             "each makes his ride home longer by a share, robbed or not"};
 inline constexpr Power ice{"🧊", PowerKind::thrown, "when it lands",
                            "freezes whoever it hits for a while: no entering the place, no setting off"};
+inline constexpr Power kaaba{"🕋", PowerKind::home, "when it is bought",
+                             "takes its buyer into the Ummah: one purse and one name's worth of emoji for all members",
+                             true};
 inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries to get past it, where its owner is",
                                "holds off whoever comes for his place or his house until it pops, then is as good as new",
                                true};
@@ -77,7 +80,11 @@ inline constexpr std::array powers{power::pleading, power::rocket, power::bolt, 
                                    power::poo,      power::bomb,   power::nuke, power::dog,
                                    power::balloon,  power::mailbox, power::ninja, power::alarm,
                                    power::vortex,   power::pirate,  power::seed,  power::hen,
-                                   power::trap,     power::ice};
+                                   power::trap,     power::ice,     power::kaaba};
+
+/* The name the Ummah goes by, and the key its purse and its emoji are kept under. */
+inline constexpr std::string_view ummah_name = "Ummah";
+inline constexpr std::string_view ummah_key = "ummah";
 
 /* Whether an emoji is that power's, drawn in colour or not and whatever the tone of its skin. */
 [[nodiscard]] bool is_power(std::string_view emoji, const Power &power);
@@ -145,6 +152,9 @@ struct FurnitureResult {
     /* The slot, from 1, and what was hanging there before, empty if nothing was. */
     std::size_t position = 0;
     std::string replaced;
+    /* The purchase was a 🕋 and took him into the Ummah, which now has this many slots. */
+    bool joined_ummah = false;
+    std::size_t ummah_slots = 0;
     /* How many of that emoji already hung from anybody's name, and what it cost for that. */
     std::size_t copies = 0;
     std::int64_t charged = 0;
@@ -177,7 +187,9 @@ enum class RaidStatus {
     no_such_emoji,
     no_room,
     /* A 🧊 hit him not long ago: he cannot set off until he thaws. */
-    frozen
+    frozen,
+    /* The target is in the Ummah: nobody is reached under his own name, only as the Ummah. */
+    in_ummah
 };
 
 enum class RaidTargetKind { any, telegram, irc };
@@ -396,6 +408,8 @@ struct Profile {
     std::int64_t hens = 0;
     /* Seconds until he thaws after a 🧊; 0 when he is not frozen. */
     std::int64_t frozen_for = 0;
+    /* He is in the Ummah: the palle and the emoji shown are the Ummah's, and so is the number of slots. */
+    bool in_ummah = false;
     /* Whether he plays from Telegram, where his home is written with the mention. */
     bool on_telegram = false;
     std::int64_t score = 0;
@@ -478,6 +492,8 @@ void debug_set(Storage &storage, const std::string &username, bool wanted);
 [[nodiscard]] FurnitureMoveResult furniture_move(Storage &storage, const std::string &username,
                                                  std::int64_t from, std::int64_t to, std::size_t limit,
                                                  std::int64_t now, zodiac::Overrides signs = {});
+/* How many slots the name a player hangs his emoji on has: his own ten, or the Ummah's. */
+[[nodiscard]] std::size_t furniture_capacity(Storage &storage, const std::string &player, std::size_t limit);
 /* Everybody's emoji, for whoever only has names to write. */
 [[nodiscard]] Authors furniture_all(Storage &storage);
 
@@ -507,6 +523,8 @@ struct FurnitureBurnResult {
     bool abandoned = false;
     /* It was a 🧊: the holder is frozen for this many seconds. */
     std::int64_t froze = 0;
+    /* It was the 🕋 of a member: he left the Ummah, and what he had stays with it. */
+    bool left_ummah = false;
 };
 
 /* An emoji brought back to @TheConquister37 leaves the game too: the first slot that holds it is
