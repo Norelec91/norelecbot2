@@ -464,7 +464,7 @@ std::string handle_burn(const CommandContext &context, std::int64_t amount) {
         break;
     }
     return std::format(
-        "{} hai riportato {} in {}: {} dal gioco. Te ne {} {}.",
+        "{} hai portato {} in {}: {} dal gioco. Te ne {} {}.",
         context.username,
         palle(result.amount),
         conquister_place,
@@ -565,7 +565,7 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
             : std::format("{} la tua bomba esplode addosso a {} in {} e si porta via {}!", context.username, holder,
                           conquister_place, blown);
     }
-    return std::format("{} hai riportato {} in {}: è uscita dal gioco.", context.username, emoji, conquister_place);
+    return std::format("{} hai portato {} in {}: è uscita dal gioco.", context.username, emoji, conquister_place);
 }
 
 /* "We nome numero" toward somebody else: the palle travel with him and change hands when he arrives. */

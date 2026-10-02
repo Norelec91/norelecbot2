@@ -727,7 +727,7 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     CHECK(command_dispatch(alice, "We @Nessuno 🍕") == "Alice non conosco nessun giocatore di nome @Nessuno.");
 
     CHECK(command_dispatch(alice, "We @TheConquister37 🐟") ==
-          "Alice hai riportato 🐟 in @TheConquister37: è uscita dal gioco.");
+          "Alice hai portato 🐟 in @TheConquister37: è uscita dal gioco.");
     CHECK(command_dispatch(alice, "We @TheConquister37 🐟") == "Alice non hai 🐟 in casa.");
     /* Two slots on her own name: the emoji change places. */
     CHECK(command_is_for_bot("We @Alice 1 2"));
@@ -1261,7 +1261,7 @@ TEST_CASE("We with a number for the place destroys the palle") {
     CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 1000);
 
     CHECK(command_dispatch(alice, "We @TheConquister37 400") ==
-          "Alice hai riportato 400 palle in @TheConquister37: sono uscite dal gioco. Te ne restano 600.");
+          "Alice hai portato 400 palle in @TheConquister37: sono uscite dal gioco. Te ne restano 600.");
     CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 600);
     /* The place is the place however it is written, and taking it is still a claim. */
     CHECK(command_dispatch(alice, "We theconquister37 100")->contains("uscite dal gioco"));
