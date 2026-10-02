@@ -847,9 +847,103 @@ std::string handle_help(const CommandContext &context, std::string_view) {
                         "Razzie e consegne partono solo da casa tua: da {0} esci prima con We {1}. "
                         "In viaggio si può solo tornare indietro: We {1}.\n", conquister_place, me);
     help += std::format("\n{0}leaderboard — classifica\n{0}profile [nome] — il tuo profilo o quello di un altro\n"
+                        "{0}emoji — cosa fa ogni emoji con un potere, dove sta e cosa la può colpire\n"
                         "{0}addquote <testo> — aggiungi una citazione\n"
                         "{0}link <nome> — collega account Telegram e nick IRC Azzurra registrato",
                         slash);
+    return help;
+}
+
+/* What one emoji with a power does, in the players' words and with the numbers of this game; nothing
+   for one this list has not been told about, which the tests refuse. */
+std::string power_help(const Power &power, const AppConfig &config) {
+    const auto is = [&power](const Power &other) { return is_power(power.emoji, other); };
+    if (is(power::pleading)) {
+        return std::format("chi ti razzia ruba il {}% in meno per ognuna", config.pleading_percent);
+    }
+    if (is(power::dog)) {
+        return std::format("ognuno ha il {}% di fermare una razzia: il ladro torna a mani vuote", config.dog_percent);
+    }
+    if (is(power::mailbox)) {
+        return std::format("ognuna ha il {}% di rispedire al mittente quello che ti lanciano a casa",
+                           config.mailbox_percent);
+    }
+    if (is(power::alarm)) {
+        return std::format("ognuno toglie {} punti alla probabilità che un 🥷 passi di nascosto", config.alarm_percent);
+    }
+    if (is(power::hen)) {
+        return std::format("ognuna fa {} al minuto, anche quando sei fuori", palle(config.hen_per_minute));
+    }
+    if (is(power::trap)) {
+        return std::format("chi ti razzia ci mette il {}% in più a tornare a casa per ognuna", config.trap_percent);
+    }
+    if (is(power::bolt)) {
+        return std::format("+{}% di palle in {} per ognuno", config.lightning_percent, conquister_place);
+    }
+    if (is(power::rocket)) {
+        return std::format("viaggi il {}% più veloce per ognuno", config.rocket_percent);
+    }
+    if (is(power::lobster)) {
+        return std::format("in {} diventa l'emoji che chi hai cacciato ha nello stesso posto", conquister_place);
+    }
+    if (is(power::balloon)) {
+        return std::format("il palloncino: difende il posto dove sei; bucato torna nuovo; uno nuovo costa {}",
+                           palle(config.balloon_cost));
+    }
+    if (is(power::ninja)) {
+        return std::format("ognuno ha il {}% di farti passare oltre 🎈 e 🐶 senza toccarli", config.ninja_percent);
+    }
+    if (is(power::pirate)) {
+        return std::format("ognuna ha il {}% di rubare un'emoji da casa di chi razzi", config.pirate_percent);
+    }
+    if (is(power::poo)) {
+        return std::format("chi la prende è \"lo smerdato\" per {}", format_wait(config.smeared_seconds));
+    }
+    if (is(power::bomb)) {
+        return std::format("distrugge un'emoji con un potere dove esplode; il {}% sono difettose e scoppiano in mano",
+                           config.bomb_dud_percent);
+    }
+    if (is(power::seed)) {
+        return std::format("dopo {} nasce un bambino sul nome di chi la riceve; a casa sua solo se lui è in casa",
+                           format_wait(config.pregnancy_seconds));
+    }
+    if (is(power::nuke)) {
+        return std::format("costa {}: azzera un giocatore, o tutto il gioco se lanciata a {}", palle(config.nuke_cost),
+                           conquister_place);
+    }
+    if (is(power::vortex)) {
+        return "solo amministratori: scaraventa un giocatore a un anno di viaggio da tutti";
+    }
+    return {};
+}
+
+/* "/emoji": every emoji with a power, by where it is, with what can and cannot hit it. */
+std::string handle_emoji_help(const CommandContext &context, std::string_view) {
+    const auto list = [&context](PowerKind kind) {
+        std::string lines;
+        for (const Power &power : powers) {
+            if (power.kind == kind) {
+                lines += std::format("{} {}{}\n", power.emoji, power_help(power, context.config),
+                                     power.untouchable ? ". Invincibile: né bombe né furti" : "");
+            }
+        }
+        return lines;
+    };
+    std::string help = "Emoji con un potere\n\n";
+    help += "Restano a casa: funzionano anche quando sei fuori. Sempre colpibili da una 💣 lanciata a casa tua e "
+            "rubabili da una 🏴‍☠️.\n" + list(PowerKind::home);
+    help += std::format("\nVengono con te: valgono dove sei tu. Colpibili a casa solo se ci sei anche tu; in {0} solo "
+                        "da una 💣 lanciata lì. Quelle che ti regalano mentre sei fuori restano a casa finché non "
+                        "riparti.\n", conquister_place) + list(PowerKind::carried);
+    help += std::format("\nSi lanciano: We nome emoji su casa sua, We {} emoji su chi è dentro. Si consumano. Finché "
+                        "le tieni stanno a casa e sono colpibili. 🎈 e 🐶 non le fermano, solo la 📮.\n",
+                        conquister_place) + list(PowerKind::thrown);
+    help += std::format("\nI bambini (👶 👦 👧 👨 👩 👴 👵) nascono da una 💦, crescono di un'età ogni {}, da adulti "
+                        "fanno {} al secondo e poi se ne vanno. Sono intoccabili: si possono solo spostare o "
+                        "abbandonare in {}.\n", format_wait(context.config.child_stage_seconds),
+                        palle(context.config.adult_per_second), conquister_place);
+    help += "\nTutte le altre emoji sono decorative: non fanno niente, le bombe non le toccano, ma una 🏴‍☠️ può "
+            "rubarle.";
     return help;
 }
 
@@ -1063,6 +1157,7 @@ std::string handle_link(const CommandContext &context, std::string_view argument
 constexpr std::array commands{
     CommandDefinition{"/leaderboard", handle_leaderboard},
     CommandDefinition{"/help", handle_help},
+    CommandDefinition{"/emoji", handle_emoji_help},
     CommandDefinition{"/profile", handle_profile},
     CommandDefinition{"/addquote", handle_add_quote},
     CommandDefinition{"/link", handle_link},

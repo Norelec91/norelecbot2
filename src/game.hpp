@@ -29,6 +29,8 @@ struct Power {
     /* The moment the copies on the name are counted: nothing hung or burnt afterwards changes it. */
     std::string_view counted;
     std::string_view effect;
+    /* Nothing takes it off a name against its owner's will: no explosion, no theft, no newborn. */
+    bool untouchable = false;
 };
 
 namespace power {
@@ -63,7 +65,8 @@ inline constexpr Power hen{"🐔", PowerKind::home, "every minute", "each lays p
 inline constexpr Power trap{"🪤", PowerKind::home, "when a raider reaches the house",
                             "each makes his ride home longer by a share, robbed or not"};
 inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries to get past it, where its owner is",
-                               "holds off whoever comes for his place or his house until it pops, then is as good as new"};
+                               "holds off whoever comes for his place or his house until it pops, then is as good as new",
+                               true};
 
 }
 

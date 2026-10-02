@@ -1702,10 +1702,13 @@ std::string board(StorageSession &session, ConquisterState &state, const Raid &r
     std::vector<std::string> slots = slots_of(state, raid.target);
     std::vector<std::size_t> there;
     for (std::size_t slot = 0; slot < slots.size(); ++slot) {
-        if (slots[slot].empty() || is_power(slots[slot], power::balloon) || is_child(state, raid.target, slot)) {
+        if (slots[slot].empty() || is_child(state, raid.target, slot)) {
             continue;
         }
         const Power *power = power_of(slots[slot]);
+        if (power != nullptr && power->untouchable) {
+            continue;
+        }
         if (power == nullptr || site_of(state, raid.target, slot, *power) == Whereabouts::home) {
             there.push_back(slot);
         }
@@ -1788,7 +1791,8 @@ std::vector<RaidEvent> births(StorageSession &session, ConquisterState &state, s
         if (!place) {
             std::vector<std::size_t> others;
             for (std::size_t slot = 0; slot < slots.size(); ++slot) {
-                if (!is_power(slots[slot], power::balloon) && !is_child(state, mother, slot)) {
+                const Power *power = power_of(slots[slot]);
+                if (!(power != nullptr && power->untouchable) && !is_child(state, mother, slot)) {
                     others.push_back(slot);
                 }
             }
@@ -1932,8 +1936,8 @@ std::vector<std::string> blow_up(StorageSession &session, ConquisterState &state
     std::vector<std::string> slots = slots_of(state, target);
     const auto exposed = [&](std::size_t slot) {
         const Power *power = slots[slot].empty() ? nullptr : power_of(slots[slot]);
-        /* No explosion takes a 🎈. */
-        return power != nullptr && !is_power(slots[slot], power::balloon) &&
+        /* No explosion takes what is untouchable. */
+        return power != nullptr && !power->untouchable &&
             site_of(state, target, slot, *power) == site && (!carried_only || power->kind == PowerKind::carried);
     };
     std::vector<std::size_t> there;

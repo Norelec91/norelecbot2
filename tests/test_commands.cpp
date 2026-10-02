@@ -1190,6 +1190,34 @@ TEST_CASE("the 🌀 is for the admins alone, to buy and to throw") {
     CHECK(command_dispatch(alice, "We @Bob 🌀").value_or("").starts_with("Alice parti per Bob con 🌀 da consegnare"));
 }
 
+TEST_CASE("/emoji tells every emoji with a power, where it is and what can hit it") {
+    const TestPaths paths{"emoji-help-test"};
+    AppConfig config;
+    config.starter_balloon = false;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{config.conquister_path, config.quotes_path};
+    const CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
+    const std::string help = command_dispatch(alice, "/emoji").value_or("");
+    /* None is left out, and none is listed without its words. */
+    for (const Power &power : powers) {
+        const std::size_t at = help.find(std::format("\n{} ", power.emoji));
+        REQUIRE(at != std::string::npos);
+        CHECK(help.at(at + power.emoji.size() + 2) != '\n');
+    }
+    CHECK(help.contains("\n🥺 chi ti razzia ruba il 5% in meno per ognuna\n"));
+    CHECK(help.contains("\n⚡ +25% di palle in @TheConquister37 per ognuno\n"));
+    CHECK(help.contains("🎈 il palloncino: difende il posto dove sei; bucato torna nuovo; uno nuovo costa 1000 palle. "
+                        "Invincibile: né bombe né furti\n"));
+    CHECK(help.contains("\n💩 chi la prende è \"lo smerdato\" per 1 giorno\n"));
+    CHECK(help.contains("Restano a casa"));
+    CHECK(help.contains("Vengono con te"));
+    CHECK(help.contains("Si lanciano"));
+    CHECK(command_dispatch(alice, "/help").value_or("").contains("\n/emoji — "));
+    /* It fits in one Telegram message. */
+    CHECK(help.size() < 4096);
+}
+
 TEST_CASE("the quotes are open to the admins as well as to the owner") {
     const TestPaths paths{"admin-command-test"};
     AppConfig config;
