@@ -140,6 +140,8 @@ struct ConquisterState {
     Counters balloon_ported;
     /* The players a 🌀 flung far away, and when: a year of road from everybody and from @TheConquister37. */
     Counters flung;
+    /* The players a 🧊 froze, mapped to the instant they thaw: until then no place and no leaving. */
+    Counters frozen;
     /* The children on the way, in the order they were conceived. */
     std::vector<Pregnancy> pregnancies;
     std::vector<Child> children;

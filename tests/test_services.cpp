@@ -1084,6 +1084,7 @@ TEST_CASE("every emoji with a power is listed once, with its kind") {
     CHECK(power::seed.kind == PowerKind::thrown);
     CHECK(power::hen.kind == PowerKind::home);
     CHECK(power::trap.kind == PowerKind::home);
+    CHECK(power::ice.kind == PowerKind::thrown);
     /* Whatever the tone of its skin, it is the same emoji. */
     CHECK(is_power("🥷🏿", power::ninja));
     CHECK(is_power("🥷", power::ninja));
@@ -1851,6 +1852,47 @@ TEST_CASE("every 🪤 at the house makes a raider's ride home longer") {
     CHECK(events[0].kind == RaidEvent::Kind::delivered);
     CHECK(events[0].trapped == 0);
     CHECK(events[0].seconds == 1000);
+}
+
+TEST_CASE("a 🧊 freezes whoever it hits: no place and no setting off until he thaws") {
+    const TestPaths paths{"ice-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":0,"username":"carol","since":0},)"
+             << R"("scores":{"alice":0,"bob":10,"carol":10},"quotes_added":{},)"
+             << R"("furniture":{"alice":"🧊🧊","bob":"🍕"}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    RaidRules rules = quick_rides();
+    rules.frozen_seconds = 300;
+    /* At a house it freezes whoever lives there. */
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 0, rules, RaidTargetKind::any, 0, "🧊").status ==
+            RaidStatus::started);
+    const std::vector<RaidEvent> arrival = raid_due(storage, 5, rules);
+    REQUIRE(arrival.size() == 1);
+    CHECK(arrival[0].froze == 300);
+    CHECK(player_profile_of(storage, "bob", 5).frozen_for == 300);
+    REQUIRE(raid_due(storage, 10, rules).size() == 1);
+    const ClaimResult claim = conquister_claim(storage, 0, "bob", 105);
+    CHECK(claim.status == ClaimStatus::frozen);
+    CHECK(claim.penalty_seconds == 200);
+    const RaidResult leaving = raid_start(storage, 0, "bob", "alice", 105, rules);
+    CHECK(leaving.status == RaidStatus::frozen);
+    CHECK(leaving.seconds == 200);
+    /* He can still do what is done at home. */
+    CHECK(furniture_buy(storage, "bob", "🐟", 0, 0, 10, 105).status == FurnitureStatus::bought);
+    /* Thawed, he is free again, and nothing of it is left on file. */
+    CHECK(raid_due(storage, 305, rules).empty());
+    CHECK(player_profile_of(storage, "bob", 305).frozen_for == 0);
+    CHECK(storage.transaction([](StorageSession &session) { return session.state().frozen.empty(); }));
+    CHECK(raid_start(storage, 0, "bob", "alice", 305, rules).status == RaidStatus::started);
+
+    /* Thrown at the place it freezes the holder, who stays where he is. */
+    const FurnitureBurnResult onto = furniture_burn(storage, "alice", "🧊", 400, rules);
+    CHECK(onto.hit == "carol");
+    CHECK(onto.froze == 300);
+    CHECK(player_profile_of(storage, "carol", 400).place == Whereabouts::conquister);
+    CHECK(player_profile_of(storage, "carol", 400).frozen_for == 300);
 }
 
 TEST_CASE("a pile of poo is thrown, not hung: a full name takes it and keeps nothing") {

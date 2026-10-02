@@ -64,6 +64,8 @@ inline constexpr Power seed{"💦", PowerKind::thrown, "when it lands on somebod
 inline constexpr Power hen{"🐔", PowerKind::home, "every minute", "each lays palle for its owner, whether he is in or out"};
 inline constexpr Power trap{"🪤", PowerKind::home, "when a raider reaches the house",
                             "each makes his ride home longer by a share, robbed or not"};
+inline constexpr Power ice{"🧊", PowerKind::thrown, "when it lands",
+                           "freezes whoever it hits for a while: no entering the place, no setting off"};
 inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries to get past it, where its owner is",
                                "holds off whoever comes for his place or his house until it pops, then is as good as new",
                                true};
@@ -75,15 +77,15 @@ inline constexpr std::array powers{power::pleading, power::rocket, power::bolt, 
                                    power::poo,      power::bomb,   power::nuke, power::dog,
                                    power::balloon,  power::mailbox, power::ninja, power::alarm,
                                    power::vortex,   power::pirate,  power::seed,  power::hen,
-                                   power::trap};
+                                   power::trap,     power::ice};
 
 /* Whether an emoji is that power's, drawn in colour or not and whatever the tone of its skin. */
 [[nodiscard]] bool is_power(std::string_view emoji, const Power &power);
 /* The power an emoji has, or nothing for one that only hangs there. */
 [[nodiscard]] const Power *power_of(std::string_view emoji);
 
-/* too_far: a 🌀 flung him a year of road away from the place. */
-enum class ClaimStatus { taken, already_held, defended, cooldown, travelling, too_far };
+/* too_far: a 🌀 flung him a year of road away from the place. frozen: a 🧊 hit him not long ago. */
+enum class ClaimStatus { taken, already_held, defended, cooldown, travelling, too_far, frozen };
 
 /* How far a 🌀 flings a player from everything: every ride to or from him takes this long. */
 inline constexpr std::int64_t flung_seconds = std::int64_t{365} * 24 * 60 * 60;
@@ -173,7 +175,9 @@ enum class RaidStatus {
     invalid_amount,
     /* Only when an emoji is taken along: he has none like it, or the target has no empty slot. */
     no_such_emoji,
-    no_room
+    no_room,
+    /* A 🧊 hit him not long ago: he cannot set off until he thaws. */
+    frozen
 };
 
 enum class RaidTargetKind { any, telegram, irc };
@@ -229,6 +233,8 @@ struct RaidRules {
     std::int64_t mating_percent = 0;
     /* How much longer each 🪤 at the house makes a raider's ride home, in percent: they add up. */
     std::int64_t trap_percent = 0;
+    /* How long a player hit by a 🧊 stays frozen. */
+    std::int64_t frozen_seconds = 300;
 };
 
 struct RaidResult {
@@ -284,6 +290,8 @@ struct RaidEvent {
     bool flung = false;
     /* delivered, with a 💦: a child is on the way, born after this many seconds. */
     std::int64_t expecting = 0;
+    /* delivered, with a 🧊: whoever it hit is frozen for this many seconds. */
+    std::int64_t froze = 0;
     /* delivered, with a 💦: nobody was home to receive it, and the raider takes it back with him. */
     bool nobody_home = false;
     /* delivered, with something thrown: a 📮 sent it back, and what it did it did to the raider, at his
@@ -386,6 +394,8 @@ struct Profile {
     bool flung = false;
     /* How many 🐔 lay for him. */
     std::int64_t hens = 0;
+    /* Seconds until he thaws after a 🧊; 0 when he is not frozen. */
+    std::int64_t frozen_for = 0;
     /* Whether he plays from Telegram, where his home is written with the mention. */
     bool on_telegram = false;
     std::int64_t score = 0;
@@ -495,6 +505,8 @@ struct FurnitureBurnResult {
     std::int64_t expecting = 0;
     /* It was a child of his, left at the place: the one way to part with it. */
     bool abandoned = false;
+    /* It was a 🧊: the holder is frozen for this many seconds. */
+    std::int64_t froze = 0;
 };
 
 /* An emoji brought back to @TheConquister37 leaves the game too: the first slot that holds it is

@@ -245,6 +245,12 @@ std::string format_wait(std::int64_t seconds) {
     return text;
 }
 
+/* What whoever a 🧊 froze is told when he tries for the place or to set off. */
+std::string frozen_reply(std::string_view username, std::int64_t seconds) {
+    return std::format("{} una 🧊 ti ha congelato: non puoi entrare in {} né partire per altri {}.", username,
+                       conquister_place, format_wait(seconds));
+}
+
 /* What whoever a 🌀 flung away is told when he tries for the place. */
 std::string too_far_reply(std::string_view username) {
     return std::format("{} una 🌀 ti ha scaraventato lontano: {} è a un anno di viaggio, da lì non ci arrivi.", username,
@@ -302,6 +308,7 @@ RaidRules raid_rules(const CommandContext &context) {
         .adult_per_second = context.config.adult_per_second,
         .mating_percent = context.config.mating_percent,
         .trap_percent = context.config.trap_percent,
+        .frozen_seconds = context.config.frozen_seconds,
     };
 }
 
@@ -365,6 +372,8 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
         return std::format("{} non hai {} in casa.", username, gift_emoji);
     case RaidStatus::no_room:
         return std::format("{} {} non ha posti liberi per {}.", username, target, gift_emoji);
+    case RaidStatus::frozen:
+        return frozen_reply(username, result.seconds);
     case RaidStatus::started:
         break;
     }
@@ -540,6 +549,11 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
         return poo_throw(own_name(context), burnt.hit.empty() ? std::string{conquister_place}
             : std::format("{}{} in {}", burnt.hit_on_telegram ? "@" : "", burnt.hit, conquister_place));
     }
+    if (burnt.froze > 0) {
+        return std::format("{} congeli {}{} in {}: per {} non può partire e, se lo cacciano, non può rientrare.",
+                           context.username, burnt.hit_on_telegram ? "@" : "", burnt.hit, conquister_place,
+                           format_wait(burnt.froze));
+    }
     if (burnt.expecting > 0) {
         return std::format("{} la tua 💦 è arrivata addosso a {}{} in {}: tra {} si vedrà.", context.username,
                            burnt.hit_on_telegram ? "@" : "", burnt.hit, conquister_place,
@@ -602,6 +616,9 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
     const std::string_view mention = result.previous_user_id != 0 ? "@" : "";
     if (result.status == ClaimStatus::too_far) {
         return too_far_reply(username);
+    }
+    if (result.status == ClaimStatus::frozen) {
+        return frozen_reply(username, result.penalty_seconds);
     }
     if (result.status == ClaimStatus::travelling) {
         return std::format(
@@ -911,6 +928,10 @@ std::string power_help(const Power &power, const AppConfig &config) {
         return std::format("costa {}: azzera un giocatore, o tutto il gioco se lanciata a {}", palle(config.nuke_cost),
                            conquister_place);
     }
+    if (is(power::ice)) {
+        return std::format("chi la prende resta congelato per {}: non può entrare in {} né partire",
+                           format_wait(config.frozen_seconds), conquister_place);
+    }
     if (is(power::vortex)) {
         return "solo amministratori: scaraventa un giocatore a un anno di viaggio da tutti";
     }
@@ -978,6 +999,9 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
                         multiplier_text(percent));
     if (profile.flung) {
         card += "scaraventato lontano da una 🌀: a un anno di viaggio da tutti\n";
+    }
+    if (profile.frozen_for > 0) {
+        card += std::format("congelato da una 🧊 ancora per {}\n", format_wait(profile.frozen_for));
     }
     if (profile.hens > 0 && context.config.hen_per_minute > 0) {
         card += std::format("{} 🐔: {} all'ora\n", profile.hens, palle(profile.hens * context.config.hen_per_minute * 60));
@@ -1230,7 +1254,9 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
             for (const std::string &emoji : event.blown) {
                 blown += emoji;
             }
-            const std::string what = is_power(event.gift_emoji, power::seed)
+            const std::string what = is_power(event.gift_emoji, power::ice)
+                ? std::format("resti congelato per {}", format_wait(event.froze))
+                : is_power(event.gift_emoji, power::seed)
                 ? std::format("tra {} si vedrà, e sarà tutto tuo", format_wait(event.expecting))
                 : is_power(event.gift_emoji, power::vortex)
                 ? "vieni scaraventato lontanissimo, a un anno di viaggio da tutti e dal posto"
@@ -1247,6 +1273,11 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
         if (event.nobody_home) {
             return std::format("{} a casa di {}{} non c'è nessuno: la {} te la riporti a casa. Torni in {} tra {}.",
                                raider, mention, target, event.gift_emoji, home, format_wait(event.seconds));
+        }
+        if (event.froze > 0 && !event.sent_back) {
+            return std::format("{} congeli {}{}: per {} non può entrare in {} né partire. Torni in {} tra {}.", raider,
+                               mention, event.target, format_wait(event.froze), conquister_place, home,
+                               format_wait(event.seconds));
         }
         if (event.expecting > 0 && !event.sent_back) {
             return std::format("{} la tua 💦 è arrivata a casa di {}{}: tra {} si vedrà. Torni in {} tra {}.", raider,

@@ -36,6 +36,8 @@ struct Landing {
     bool flung = false;
     /* A 💦 left the victim expecting: the seconds until the child is born. */
     std::int64_t expecting = 0;
+    /* A 🧊 froze the victim for this many seconds. */
+    std::int64_t froze = 0;
     std::vector<std::string> blown;
 };
 /* A thrown emoji lands where somebody is, his house or @TheConquister37, and works on what is there. */
@@ -200,6 +202,11 @@ Settlement leave_place(ConquisterState &state, std::int64_t now, zodiac::Overrid
     const Holder holder = *state.current;
     state.current.reset();
     return settle_hold(state, holder, now, signs);
+}
+
+/* Seconds until a player hit by a 🧊 thaws; 0 when he is not frozen. */
+std::int64_t frozen_for(const ConquisterState &state, const std::string &player, std::int64_t now) {
+    return std::max<std::int64_t>(counter(state.frozen, player) - now, 0);
 }
 
 bool is_flung(const ConquisterState &state, const std::string &player) {
@@ -631,6 +638,11 @@ ClaimResult conquister_claim(
             outcome.status = ClaimStatus::too_far;
             return outcome;
         }
+        if (const std::int64_t wait = frozen_for(state, username, now); wait > 0) {
+            outcome.status = ClaimStatus::frozen;
+            outcome.penalty_seconds = wait;
+            return outcome;
+        }
         if (state.current && !state.current->username.empty()) {
             const std::string holder = state.current->username;
             outcome.previous_user_id = !ambiguous_legacy(state, holder) &&
@@ -717,6 +729,9 @@ ClaimResult conquister_claim(
     case ClaimStatus::too_far:
         log_info("claim refused user={} flung", username);
         break;
+    case ClaimStatus::frozen:
+        log_info("claim refused user={} frozen={}", username, result.penalty_seconds);
+        break;
     case ClaimStatus::already_held:
         break;
     }
@@ -754,6 +769,7 @@ Profile profile_from(ConquisterState &state, const std::string &key, std::int64_
     profile.smeared = is_smeared(state, key, now);
     profile.flung = is_flung(state, key);
     profile.hens = copies_of(state, key, power::hen);
+    profile.frozen_for = frozen_for(state, key, now);
     profile.on_telegram = counter(state.telegram_ids, key) != 0;
     profile.players = state.scores.size();
     if (const Counters::value_type *score = find_ignore_case(state.scores, key); score != nullptr) {
@@ -1015,6 +1031,15 @@ void wash(ConquisterState &state, std::int64_t now) {
     }
     for (const std::string &player : clean) {
         state.smeared.erase(player);
+    }
+    std::vector<std::string> thawed;
+    for (const auto &[player, until] : state.frozen) {
+        if (until <= now) {
+            thawed.push_back(player);
+        }
+    }
+    for (const std::string &player : thawed) {
+        state.frozen.erase(player);
     }
 }
 
@@ -1291,6 +1316,7 @@ void start_over(ConquisterState &state) {
     state.stayed.clear();
     /* And where he first lived: nobody is far away any more. */
     state.flung.clear();
+    state.frozen.clear();
     state.pregnancies.clear();
     state.children.clear();
 }
@@ -1365,6 +1391,7 @@ FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, 
             outcome.backfired = landing.backfired;
             outcome.flung = landing.flung;
             outcome.expecting = landing.expecting;
+            outcome.froze = landing.froze;
             outcome.blown = std::move(landing.blown);
             outcome.shown = shown_furniture(state, player);
             outcome.hit = display_name(state, holder);
@@ -1612,6 +1639,11 @@ RaidResult raid_start(
         if (travelling != nullptr) {
             outcome.status = RaidStatus::already_travelling;
             outcome.seconds = std::max<std::int64_t>(travelling->back - now, 0);
+            return outcome;
+        }
+        if (const std::int64_t wait = frozen_for(state, username, now); wait > 0) {
+            outcome.status = RaidStatus::frozen;
+            outcome.seconds = wait;
             return outcome;
         }
         /* Whoever holds the place stays in it: leaving would be leaving it behind. */
@@ -1986,6 +2018,11 @@ Landing land(StorageSession &session, ConquisterState &state, std::string_view t
         const std::int64_t wait = std::max<std::int64_t>(rules.pregnancy_seconds, 0);
         state.pregnancies.push_back(Pregnancy{.mother = victim, .father = thrower, .due = now + wait});
         landing.expecting = std::max<std::int64_t>(wait, 1);
+    } else if (is_power(thrown, power::ice)) {
+        landing.froze = std::max<std::int64_t>(rules.frozen_seconds, 0);
+        if (landing.froze > 0) {
+            state.frozen[victim] = now + landing.froze;
+        }
     }
     return landing;
 }
@@ -2064,6 +2101,7 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                             event.reset = landing.reset;
                             event.flung = landing.flung;
                             event.expecting = landing.expecting;
+                            event.froze = landing.froze;
                             event.blown = std::move(landing.blown);
                             event.raider_emoji = shown_furniture(state, raid.raider);
                             event.target_emoji = shown_furniture(state, raid.target);

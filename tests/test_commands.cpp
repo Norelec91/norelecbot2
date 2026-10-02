@@ -821,6 +821,11 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     empty_house.nobody_home = true;
     CHECK(raid_event_reply(empty_house) ==
           "Alice a casa di @Bob (🍕) non c'è nessuno: la 💦 te la riporti a casa. Torni in Alice tra 5 secondi.");
+    RaidEvent iced = given;
+    iced.gift_emoji = "🧊";
+    iced.froze = 300;
+    CHECK(raid_event_reply(iced) == "Alice congeli @Bob: per 5 minuti non può entrare in @TheConquister37 né partire. "
+                                    "Torni in Alice tra 5 secondi.");
     RaidEvent birth;
     birth.kind = RaidEvent::Kind::born;
     birth.raider = "Alice";
