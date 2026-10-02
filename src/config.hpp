@@ -56,6 +56,8 @@ struct AppConfig {
     static constexpr int default_hen_per_minute = 1;
     /* The palle a child makes every second of its grown-up age. */
     static constexpr int default_adult_per_second = 1;
+    /* The chance, in percent, that a grown-up girl and boy of the same house have a child. */
+    static constexpr int default_mating_percent = 50;
     static constexpr int default_api_port = 8000;
     static constexpr int default_irc_port = 6697;
     static constexpr std::string_view default_irc_nick = "NorelecBot";
@@ -97,6 +99,7 @@ struct AppConfig {
     int child_stage_seconds = default_child_stage_seconds;
     int hen_per_minute = default_hen_per_minute;
     int adult_per_second = default_adult_per_second;
+    int mating_percent = default_mating_percent;
     /* Whether a player seen for the first time is handed a 🎈. */
     bool starter_balloon = true;
     /* Players whose real sign the owner knows, instead of the one their name gives. */

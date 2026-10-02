@@ -835,6 +835,9 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     birth.blown = {"🍕"};
     CHECK(raid_event_reply(birth) ==
           "@Bob (👶) è nato un maschio 👶: il padre è @Alice. Non c'era un posto libero: ha preso quello di 🍕.");
+    birth.raider.clear();
+    birth.blown.clear();
+    CHECK(raid_event_reply(birth) == "@Bob (👶) è nato un maschio 👶: i genitori sono il 👨 e la 👩 di casa.");
     RaidEvent left;
     left.kind = RaidEvent::Kind::gone;
     left.target = "Bob";

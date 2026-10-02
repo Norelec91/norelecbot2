@@ -72,7 +72,8 @@ struct Raid {
     bool operator==(const Raid &) const = default;
 };
 
-/* A child on the way: the player a 💦 landed on, whoever threw it, and when it is born. */
+/* A child on the way: the player a 💦 landed on, whoever threw it, and when it is born. With no father
+   named it is the child of two grown-up children of the house itself. */
 struct Pregnancy {
     std::string mother;
     std::string father;
@@ -90,6 +91,8 @@ struct Child {
     std::int64_t born = 0;
     /* Up to when its grown-up age has been paid to the owner; 0 before the first time. */
     std::int64_t paid = 0;
+    /* A grown-up girl who already had her chance with a grown-up boy of the same house. */
+    bool courted = false;
 
     bool operator==(const Child &) const = default;
 };

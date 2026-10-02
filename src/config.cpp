@@ -178,6 +178,9 @@ constexpr std::array settings{
     Setting{"NORELECBOT_ADULT_PER_SECOND", [](AppConfig &config, std::string_view value) {
         return set_number(config.adult_per_second, value, AppConfig::default_adult_per_second, 0);
     }},
+    Setting{"NORELECBOT_MATING_PERCENT", [](AppConfig &config, std::string_view value) {
+        return set_number(config.mating_percent, value, AppConfig::default_mating_percent, 0, 100);
+    }},
     Setting{"NORELECBOT_CONQUISTER_CHAT_ID", [](AppConfig &config, std::string_view value) {
         return set_number(config.conquister_chat_id, value, std::int64_t{0});
     }},

@@ -300,6 +300,7 @@ RaidRules raid_rules(const CommandContext &context) {
         .child_stage_seconds = context.config.child_stage_seconds,
         .hen_per_minute = context.config.hen_per_minute,
         .adult_per_second = context.config.adult_per_second,
+        .mating_percent = context.config.mating_percent,
     };
 }
 
@@ -1100,9 +1101,10 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
     }
     if (event.kind == RaidEvent::Kind::born) {
         const bool boy = event.gift != 0;
-        std::string news = std::format("{}{} {} {}: il padre è {}{}.", mention, target,
-                                       boy ? "è nato un maschio" : "è nata una femmina", event.gift_emoji,
-                                       event.raider_on_telegram ? "@" : "", event.raider);
+        std::string news = std::format("{}{} {} {}: ", mention, target,
+                                       boy ? "è nato un maschio" : "è nata una femmina", event.gift_emoji);
+        news += event.raider.empty() ? std::string{"i genitori sono il 👨 e la 👩 di casa."}
+                                     : std::format("il padre è {}{}.", event.raider_on_telegram ? "@" : "", event.raider);
         if (!event.blown.empty()) {
             news += std::format(" Non c'era un posto libero: ha preso quello di {}.", event.blown.front());
         }

@@ -1774,10 +1774,12 @@ std::vector<RaidEvent> births(StorageSession &session, ConquisterState &state, s
         const bool male = session.random_index(2) == 0;
         RaidEvent event;
         event.kind = RaidEvent::Kind::born;
-        event.raider = display_name(state, pregnancy.father);
+        if (!pregnancy.father.empty()) {
+            event.raider = display_name(state, pregnancy.father);
+            event.raider_on_telegram = counter(state.telegram_ids, pregnancy.father) != 0;
+        }
         event.target = display_name(state, mother);
         event.target_on_telegram = counter(state.telegram_ids, mother) != 0;
-        event.raider_on_telegram = counter(state.telegram_ids, pregnancy.father) != 0;
         event.gift_emoji = child_emoji(male, 0);
         /* Whether it is a boy or a girl: the newborn looks the same either way. */
         event.gift = male ? 1 : 0;
@@ -1802,7 +1804,7 @@ std::vector<RaidEvent> births(StorageSession &session, ConquisterState &state, s
         slots[*place] = event.gift_emoji;
         hang(state, mother, std::move(slots));
         state.children.push_back(Child{.owner = mother, .slot = static_cast<std::int64_t>(*place), .male = male,
-                                       .born = now, .paid = 0});
+                                       .born = now, .paid = 0, .courted = false});
         event.target_emoji = shown_furniture(state, mother);
         born.push_back(std::move(event));
     }
@@ -1811,7 +1813,8 @@ std::vector<RaidEvent> births(StorageSession &session, ConquisterState &state, s
 }
 
 /* The children grow where they were born, one age after the other, and after the last they leave. */
-std::vector<RaidEvent> grow(ConquisterState &state, std::int64_t now, const RaidRules &rules) {
+std::vector<RaidEvent> grow(StorageSession &session, ConquisterState &state, std::int64_t now,
+                            const RaidRules &rules) {
     std::vector<RaidEvent> gone;
     std::vector<Child> staying;
     const std::vector<Child> children = state.children;
@@ -1849,6 +1852,27 @@ std::vector<RaidEvent> grow(ConquisterState &state, std::int64_t now, const Raid
             hang(state, child.owner, std::move(slots));
         }
         staying.push_back(child);
+    }
+    /* A grown-up girl and a grown-up boy under the same roof may have a child of their own: each girl
+       has one chance, the first time there is a boy of that age in the house. */
+    const auto grown = [&](const Child &child) {
+        return std::max<std::int64_t>(now - child.born, 0) / stage == 2;
+    };
+    for (Child &girl : staying) {
+        if (girl.male || girl.courted || !grown(girl)) {
+            continue;
+        }
+        const bool boy = std::ranges::any_of(staying, [&](const Child &other) {
+            return other.male && other.owner == girl.owner && grown(other);
+        });
+        if (!boy) {
+            continue;
+        }
+        girl.courted = true;
+        if (rules.mating_percent > 0 && static_cast<std::int64_t>(session.random_index(100)) < rules.mating_percent) {
+            state.pregnancies.push_back(Pregnancy{
+                .mother = girl.owner, .father = {}, .due = now + std::max<std::int64_t>(rules.pregnancy_seconds, 0)});
+        }
     }
     state.children = std::move(staying);
     return gone;
@@ -1968,7 +1992,7 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
         ConquisterState &state = session.state();
         wash(state, now);
         lay_eggs(state, now, rules);
-        std::vector<RaidEvent> settled = grow(state, now, rules);
+        std::vector<RaidEvent> settled = grow(session, state, now, rules);
         std::ranges::move(births(session, state, now, rules), std::back_inserter(settled));
         for (Raid &raid : state.raids) {
             if (!raid.arrived && now >= raid.arrive) {

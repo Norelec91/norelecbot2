@@ -219,6 +219,8 @@ struct RaidRules {
     std::int64_t hen_per_minute = 0;
     /* The palle a child makes for the name it lives on every second of its grown-up age. */
     std::int64_t adult_per_second = 0;
+    /* The chance, in percent, that a grown-up girl and a grown-up boy of the same house have a child. */
+    std::int64_t mating_percent = 0;
 };
 
 struct RaidResult {
@@ -238,7 +240,7 @@ struct RaidResult {
 struct RaidEvent {
     /* gone: a child that lived all its ages leaves the target's name; gift_emoji is what it was last.
        born: a child conceived by a 💦 comes into the world. The raider is the father, the target the
-       mother; gift_emoji is the child, blown what it took the slot of when the name was full. */
+       mother; with no raider its parents are two grown-up children of the target's own house; gift_emoji is the child, blown what it took the slot of when the name was full. */
     enum class Kind { stolen, delivered, returned, born, gone };
 
     Kind kind = Kind::stolen;

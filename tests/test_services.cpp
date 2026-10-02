@@ -1731,7 +1731,8 @@ TEST_CASE("a child grows through its ages where it was born, then leaves, and no
        have earned. */
     storage.transaction([](StorageSession &session) {
         session.state().furniture["bob"] = "🍕👩";
-        session.state().children.push_back(Child{.owner = "bob", .slot = 1, .male = false, .born = 1000, .paid = 0});
+        session.state().children.push_back(
+            Child{.owner = "bob", .slot = 1, .male = false, .born = 1000, .paid = 0, .courted = false});
         return 0;
     });
     CHECK(furniture_burn(storage, "bob", "👶", 1250, rules).status == FurnitureBurnStatus::not_owned);
@@ -1777,6 +1778,46 @@ TEST_CASE("every 🐔 on a name lays palle for its owner minute after minute") {
     rules.hen_per_minute = 0;
     static_cast<void>(raid_due(storage, 5000, rules));
     CHECK(score("bob") == 5 + 6 * 2);
+}
+
+TEST_CASE("a grown-up girl and a grown-up boy of the same house may have a child of their own") {
+    const TestPaths paths{"mating-test"};
+    {
+        /* On bob's name a boy and a girl of the same age; on carol's only a girl. */
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"bob":0,"carol":0},"quotes_added":{},)"
+             << R"("furniture":{"bob":"👶👶","carol":"👶"},)"
+             << R"("children":[{"owner":"bob","slot":0,"male":true,"born":0},)"
+             << R"({"owner":"bob","slot":1,"male":false,"born":0},)"
+             << R"({"owner":"carol","slot":0,"male":false,"born":0}]})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    RaidRules rules = quick_rides();
+    rules.child_stage_seconds = 1000;
+    rules.pregnancy_seconds = 100;
+    rules.mating_percent = 100;
+    const auto pregnancies = [&storage] {
+        return storage.transaction([](StorageSession &session) { return session.state().pregnancies; });
+    };
+    /* Not before they are grown up. */
+    CHECK(raid_due(storage, 1500, rules).empty());
+    CHECK(pregnancies().empty());
+    /* Then once, and only where there is a boy too. */
+    CHECK(raid_due(storage, 2000, rules).empty());
+    REQUIRE(pregnancies().size() == 1);
+    CHECK(pregnancies()[0].mother == "bob");
+    CHECK(pregnancies()[0].father.empty());
+    CHECK(pregnancies()[0].due == 2100);
+    CHECK(raid_due(storage, 2050, rules).empty());
+    CHECK(pregnancies().size() == 1);
+    /* The child of the house is born like any other. */
+    const std::vector<RaidEvent> events = raid_due(storage, 2100, rules);
+    REQUIRE(events.size() == 1);
+    CHECK(events[0].kind == RaidEvent::Kind::born);
+    CHECK(events[0].raider.empty());
+    CHECK(events[0].target == "bob");
+    CHECK(furniture_all(storage).at("bob") == "👨👩👶");
+    CHECK(furniture_all(storage).at("carol") == "👩");
 }
 
 TEST_CASE("a pile of poo is thrown, not hung: a full name takes it and keeps nothing") {
