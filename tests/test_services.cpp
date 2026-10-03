@@ -2189,3 +2189,26 @@ TEST_CASE("a 🦖 at the house eats one of the emoji the raider has with him") {
     CHECK(events[0].eaten.empty());
     CHECK(furniture_all(storage).at("alice") == "🎈[]🍕");
 }
+
+TEST_CASE("every 🧲 the raider has with him wins back a share of what the 🥺 spare") {
+    const TestPaths paths{"magnet-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":0,"lucy":100},"quotes_added":{},)"
+             << R"("ids":{"alice":0,"lucy":90000},"balloons":{"lucy":3},)"
+             << R"("furniture":{"alice":"🧲🧲🧲","lucy":"🥺🥺🥺🥺🥺🥺🥺🥺🥺🥺"}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    RaidRules rules = quick_rides();
+    rules.loot_divisor = 1;
+    rules.pleading_percent = 10;
+    rules.magnet_percent = 10;
+
+    /* Ten 🥺 would spare her everything: three 🧲 take thirty points off. */
+    REQUIRE(raid_start(storage, 0, "alice", "lucy", 0, rules).status == RaidStatus::started);
+    std::vector<RaidEvent> arrival = raid_due(storage, 5, rules);
+    REQUIRE(arrival.size() == 1);
+    CHECK(arrival[0].pleaded_percent == 70);
+    CHECK(arrival[0].spared == 70);
+    CHECK(arrival[0].loot == 30);
+}

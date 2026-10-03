@@ -67,6 +67,8 @@ inline constexpr Power seed{"💦", PowerKind::thrown, "when it lands on somebod
 inline constexpr Power hen{"🐔", PowerKind::home, "every minute", "each lays palle for its owner, whether he is in or out"};
 inline constexpr Power dino{"🦖", PowerKind::home, "when a raider reaches the house",
                             "each may eat one of the emoji the raider has with him, robbed or not"};
+inline constexpr Power magnet{"🧲", PowerKind::carried, "when a raider reaches the house",
+                              "each takes a share off what the 🥺 of the house talk him out of"};
 inline constexpr Power trap{"🪤", PowerKind::home, "when a raider reaches the house",
                             "each makes his ride home longer by a share, robbed or not"};
 inline constexpr Power ice{"🧊", PowerKind::thrown, "when it lands",
@@ -87,7 +89,7 @@ inline constexpr std::array powers{power::pleading, power::rocket, power::bolt, 
                                    power::balloon,  power::mailbox, power::ninja, power::alarm,
                                    power::vortex,   power::pirate,  power::seed,  power::hen,
                                    power::trap,     power::ice,     power::fire,  power::hourglass,
-                                   power::dino};
+                                   power::dino,     power::magnet};
 
 /* Whether an emoji is that power's, drawn in colour or not and whatever the tone of its skin. */
 [[nodiscard]] bool is_power(std::string_view emoji, const Power &power);
@@ -246,6 +248,9 @@ struct RaidRules {
     /* The chance, in percent, that each 🦖 at the house gives of eating one of the emoji the raider has
        with him: they add up. */
     std::int64_t dino_percent = 0;
+    /* What each 🧲 the raider has with him takes off the share the 🥺 of the house spare, in percent
+       points: they add up. */
+    std::int64_t magnet_percent = 0;
     /* How long a player hit by a 🧊 stays frozen. */
     std::int64_t frozen_seconds = 300;
     /* How much of the time a 🧊 freezes him each 🔥 he has with him melts away, in percent: they add up. */

@@ -2169,11 +2169,14 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                         rules.loot_divisor > 0 ? event.distance / rules.loot_divisor : event.distance;
                     const std::int64_t carried = walked * event.raider_percent / event.target_percent;
                     /* The road says what can be taken, and nobody loses more than he has; every 🥺
-                       on his name as the raider arrives makes him take a share less. */
+                       on his name as the raider arrives makes him take a share less, and every 🧲 the
+                       raider has with him wins some of it back. */
                     const std::int64_t taken = std::min(theirs, carried);
                     const std::int64_t pleas = copies_of(state, raid.target, power::pleading);
-                    event.pleaded_percent = std::min<std::int64_t>(100, pleas * std::max<std::int64_t>(
-                        rules.pleading_percent, 0));
+                    const std::int64_t pull = carried_copies(state, raid.raider, power::magnet) *
+                        std::max<std::int64_t>(rules.magnet_percent, 0);
+                    event.pleaded_percent = std::clamp<std::int64_t>(
+                        pleas * std::max<std::int64_t>(rules.pleading_percent, 0) - pull, 0, 100);
                     event.spared = taken * event.pleaded_percent / 100;
                     event.loot = taken - event.spared;
                     if (event.loot > 0) {
