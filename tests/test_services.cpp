@@ -2220,3 +2220,31 @@ TEST_CASE("a hold saved with a whole multiplier keeps it as a percent") {
     CHECK(kicked.lightning == 300);
     CHECK(kicked.earned == earnings("alice", 1000, 1000, 300));
 }
+
+TEST_CASE("a 🦖 at the house eats one of the emoji the raider has with him") {
+    const TestPaths paths{"dino-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":0,"bob":100},"quotes_added":{},)"
+             << R"("ids":{"alice":0,"bob":1000},)"
+             << R"("furniture":{"alice":"🎈🏴‍☠️🍕","bob":"🦖"}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    const RaidRules rules{.loot_divisor = 50, .travel_divisor = 1, .signs = {}, .dino_percent = 100};
+
+    /* The 🏴‍☠️ goes with her and is eaten; the 🍕 stayed at home, and no 🎈 is ever eaten. */
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 0, rules).status == RaidStatus::started);
+    std::vector<RaidEvent> events = raid_due(storage, 1000, rules);
+    REQUIRE(events.size() == 1);
+    CHECK(events[0].eaten == "🏴‍☠️");
+    CHECK(furniture_all(storage).at("alice") == "🎈[]🍕");
+    REQUIRE(raid_due(storage, 2000, rules).size() == 1);
+
+    /* With nothing left to eat, it finds nothing. */
+    REQUIRE(raid_start(storage, 3000, "alice", "bob", 0, rules).status == RaidStatus::started);
+    events = raid_due(storage, 4000, rules);
+    REQUIRE(!events.empty());
+    CHECK(events[0].kind == RaidEvent::Kind::stolen);
+    CHECK(events[0].eaten.empty());
+    CHECK(furniture_all(storage).at("alice") == "🎈[]🍕");
+}

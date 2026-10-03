@@ -65,6 +65,8 @@ inline constexpr Power pirate{"🏴‍☠️", PowerKind::carried, "when a raid 
 inline constexpr Power seed{"💦", PowerKind::thrown, "when it lands on somebody who is there",
                             "in time a child is born on the name of whoever it hits, taking a slot"};
 inline constexpr Power hen{"🐔", PowerKind::home, "every minute", "each lays palle for its owner, whether he is in or out"};
+inline constexpr Power dino{"🦖", PowerKind::home, "when a raider reaches the house",
+                            "each may eat one of the emoji the raider has with him, robbed or not"};
 inline constexpr Power trap{"🪤", PowerKind::home, "when a raider reaches the house",
                             "each makes his ride home longer by a share, robbed or not"};
 inline constexpr Power ice{"🧊", PowerKind::thrown, "when it lands",
@@ -91,7 +93,7 @@ inline constexpr std::array powers{power::pleading, power::rocket, power::bolt, 
                                    power::balloon,  power::mailbox, power::ninja, power::alarm,
                                    power::vortex,   power::pirate,  power::seed,  power::hen,
                                    power::trap,     power::ice,     power::kaaba, power::fire,
-                                   power::hourglass, power::church};
+                                   power::hourglass, power::church, power::dino};
 
 /* A community of players: whoever buys its emoji joins it, and from then on its members share one
    purse and one name's worth of emoji, kept under its key, while each goes about on his own. Nobody
@@ -269,6 +271,9 @@ struct RaidRules {
     std::int64_t mating_percent = 0;
     /* How much longer each 🪤 at the house makes a raider's ride home, in percent: they add up. */
     std::int64_t trap_percent = 0;
+    /* The chance, in percent, that each 🦖 at the house gives of eating one of the emoji the raider has
+       with him: they add up. */
+    std::int64_t dino_percent = 0;
     /* How long a player hit by a 🧊 stays frozen. */
     std::int64_t frozen_seconds = 300;
     /* How much of the time a 🧊 freezes him each 🔥 he has with him melts away, in percent: they add up. */
@@ -311,6 +316,8 @@ struct RaidEvent {
     bool alarmed = false;
     /* stolen: the emoji his 🏴‍☠️ carried off from the house and onto his own name; empty when none. */
     std::string boarded{};
+    /* stolen: the emoji he had with him that a 🦖 at the house ate; empty when none. */
+    std::string eaten{};
     /* stolen: what the 🥺 on the target's name talked the raider out of, and by how much in percent. */
     std::int64_t spared = 0;
     std::int64_t pleaded_percent = 0;

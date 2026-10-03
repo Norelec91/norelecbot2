@@ -2298,6 +2298,17 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                     event.trapped = std::max<std::int64_t>(raid.back - raid.arrive, 0) * share / 100;
                     raid.back += event.trapped;
                     event.seconds = std::max<std::int64_t>(raid.back - now, 0);
+                    /* And the 🦖 of the house may eat one of the emoji he has with him, never a 🎈. */
+                    const std::int64_t jaws = std::min<std::int64_t>(
+                        100, copies_of(state, raid.target, power::dino) * std::max<std::int64_t>(rules.dino_percent, 0));
+                    if (jaws > 0 && static_cast<std::int64_t>(session.random_index(100)) < jaws) {
+                        const std::vector<std::string> eaten =
+                            blow_up(session, state, raid.raider, Whereabouts::road, true);
+                        if (!eaten.empty()) {
+                            event.eaten = eaten.front();
+                            event.raider_emoji = worn(state, raid.raider);
+                        }
+                    }
                 }
                 /* Whoever came to give hands the palle or the emoji over and robs nothing. */
                 if (raid.gift > 0 || !raid.gift_emoji.empty()) {
@@ -2431,6 +2442,12 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
     });
 
     for (const RaidEvent &event : events) {
+        if (!event.boarded.empty()) {
+            log_info("raid boarded user={} target={} emoji={}", event.raider, event.target, event.boarded);
+        }
+        if (!event.eaten.empty()) {
+            log_info("raid eaten user={} target={} emoji={}", event.raider, event.target, event.eaten);
+        }
         switch (event.kind) {
         case RaidEvent::Kind::stolen:
             log_info(

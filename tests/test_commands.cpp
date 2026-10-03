@@ -879,6 +879,10 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     found.seconds = 5;
     CHECK(raid_event_reply(found).value_or("").starts_with(
         "L'allarme di Bob ti scopre: devi vedertela con le sue difese.\nCarol hai rubato 3 palle a Bob lo smerdato"));
+    RaidEvent eaten = robbed;
+    eaten.eaten = "⚡";
+    CHECK(raid_event_reply(eaten).value_or("").starts_with("Il 🦖 di "));
+    CHECK(raid_event_reply(eaten).value_or("").contains(" ti mangia ⚡.\n"));
     RaidEvent boarded = robbed;
     boarded.boarded = "🍕";
     boarded.seconds = 5;

@@ -60,6 +60,8 @@ struct AppConfig {
     static constexpr int default_mating_percent = 50;
     /* How much longer each 🪤 at a house makes a raider's ride home, in percent. */
     static constexpr int default_trap_percent = 10;
+    /* The chance, in percent, that each 🦖 at a house eats one of the emoji a raider has with him. */
+    static constexpr int default_dino_percent = 10;
     /* How long a player hit by a 🧊 stays frozen: five minutes. */
     static constexpr int default_frozen_seconds = 300;
     /* How much of the time a 🧊 freezes him each 🔥 a player has with him melts away, in percent. */
@@ -109,6 +111,7 @@ struct AppConfig {
     int adult_per_second = default_adult_per_second;
     int mating_percent = default_mating_percent;
     int trap_percent = default_trap_percent;
+    int dino_percent = default_dino_percent;
     int frozen_seconds = default_frozen_seconds;
     int fire_percent = default_fire_percent;
     int hourglass_percent = default_hourglass_percent;
