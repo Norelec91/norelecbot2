@@ -87,7 +87,6 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
         .mating_percent = config.mating_percent,
         .trap_percent = config.trap_percent,
         .dino_percent = config.dino_percent,
-        .magnet_percent = config.magnet_percent,
         .frozen_seconds = config.frozen_seconds,
         .fire_percent = config.fire_percent,
     };

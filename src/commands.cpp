@@ -309,7 +309,6 @@ RaidRules raid_rules(const CommandContext &context) {
         .mating_percent = context.config.mating_percent,
         .trap_percent = context.config.trap_percent,
         .dino_percent = context.config.dino_percent,
-        .magnet_percent = context.config.magnet_percent,
         .frozen_seconds = context.config.frozen_seconds,
         .fire_percent = context.config.fire_percent,
     };
@@ -899,9 +898,6 @@ std::string power_help(const Power &power, const AppConfig &config) {
     }
     if (is(power::hen)) {
         return std::format("ognuna fa {} al minuto, anche quando sei fuori", palle(config.hen_per_minute));
-    }
-    if (is(power::magnet)) {
-        return std::format("ognuna toglie {} punti allo sconto delle 🥺 di chi razzi", config.magnet_percent);
     }
     if (is(power::dino)) {
         return std::format("ognuno ha il {}% di mangiare a chi ti razzia un'emoji che ha con sé", config.dino_percent);
