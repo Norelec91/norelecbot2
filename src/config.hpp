@@ -23,11 +23,11 @@ struct AppConfig {
     static constexpr int default_furniture_limit = 10;
     static constexpr int default_cooldown_seconds = 300;
     static constexpr int default_travel_divisor = 350;
-    static constexpr int default_lightning_percent = 25;
+    static constexpr int default_lightning_percent = 10;
     /* How long a player hit by a 💩 stays "lo smerdato": a day. */
     static constexpr int default_smeared_seconds = 86400;
     /* How much faster every 🚀 on the name makes a ride, in percent. */
-    static constexpr int default_rocket_percent = 25;
+    static constexpr int default_rocket_percent = 10;
     /* How much less a raider takes for every 🥺 on the target's name, in percent. */
     static constexpr int default_pleading_percent = 10;
     /* How often, in percent, a 💣 is a dud that goes off in the thrower's hand. */

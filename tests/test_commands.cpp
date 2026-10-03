@@ -1247,7 +1247,7 @@ TEST_CASE("/emoji tells every emoji with a power, where it is and what can hit i
         CHECK(help.at(at + power.emoji.size() + 2) != '\n');
     }
     CHECK(help.contains("\n🥺 chi ti razzia ruba il 10% in meno per ognuna\n"));
-    CHECK(help.contains("\n⚡ +25% di palle in @TheConquister37 per ognuno\n"));
+    CHECK(help.contains("\n⚡ +10% di palle in @TheConquister37 per ognuno\n"));
     CHECK(help.contains("🎈 il palloncino: difende il posto dove sei; bucato torna nuovo; uno nuovo costa 1000 palle. "
                         "Invincibile: né bombe né furti\n"));
     CHECK(help.contains("\n💩 🇷🇺 🇮🇱 chi la prende è \"lo smerdato\" per 1 giorno\n"));
@@ -1323,7 +1323,7 @@ TEST_CASE("a 🕋 takes its buyer into the Ummah: one purse, one name, ten slots
 
     /* Each member goes about on her own, with what the Ummah has: its ⚡ is hers in the place. */
     CHECK(command_dispatch(alice, "We @TheConquister37").value_or("").contains("Alice (Ummah) sei in @TheConquister37!"));
-    CHECK(state().current->lightning_percent == 125);
+    CHECK(state().current->lightning_percent == 110);
     CHECK(command_dispatch(bob, "We @Ummah") == "Bob sei già in @Bob!");
 
     /* Burning a 🕋 is the way out, empty-handed: what he brought stays, slots and all. */
