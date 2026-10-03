@@ -887,11 +887,6 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     boarded.boarded = "🍕";
     boarded.seconds = 5;
     CHECK(raid_event_reply(boarded).value_or("").ends_with("\nArrembaggio: ti porti via anche 🍕 da casa sua."));
-    RaidEvent snared = robbed;
-    snared.trapped = 90;
-    snared.seconds = 500;
-    CHECK(raid_event_reply(snared).value_or("").starts_with(
-        "Finisci nelle trappole di Bob: il ritorno dura 1 minuto e 30 secondi in più.\nCarol hai rubato 3 palle"));
     RaidEvent caught = robbed;
     caught.loot = 0;
     caught.intercepted = true;

@@ -181,9 +181,6 @@ constexpr std::array settings{
     Setting{"NORELECBOT_MATING_PERCENT", [](AppConfig &config, std::string_view value) {
         return set_number(config.mating_percent, value, AppConfig::default_mating_percent, 0, 100);
     }},
-    Setting{"NORELECBOT_TRAP_PERCENT", [](AppConfig &config, std::string_view value) {
-        return set_number(config.trap_percent, value, AppConfig::default_trap_percent, 0, 1000);
-    }},
     Setting{"NORELECBOT_DINO_PERCENT", [](AppConfig &config, std::string_view value) {
         return set_number(config.dino_percent, value, AppConfig::default_dino_percent, 0, 100);
     }},

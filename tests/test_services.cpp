@@ -1083,7 +1083,8 @@ TEST_CASE("every emoji with a power is listed once, with its kind") {
     CHECK(power::pirate.kind == PowerKind::carried);
     CHECK(power::seed.kind == PowerKind::thrown);
     CHECK(power::hen.kind == PowerKind::home);
-    CHECK(power::trap.kind == PowerKind::home);
+    /* The 🪤 is an emoji like any other. */
+    CHECK(power_of("🪤") == nullptr);
     CHECK(power::ice.kind == PowerKind::thrown);
     CHECK(power::fire.kind == PowerKind::carried);
     CHECK(power::hourglass.kind == PowerKind::carried);
@@ -1826,38 +1827,6 @@ TEST_CASE("a grown-up girl and a grown-up boy of the same house may have a child
     CHECK(events[0].target == "bob");
     CHECK(furniture_all(storage).at("bob") == "👨👩👶");
     CHECK(furniture_all(storage).at("carol") == "👩");
-}
-
-TEST_CASE("every 🪤 at the house makes a raider's ride home longer") {
-    const TestPaths paths{"trap-test"};
-    {
-        /* A thousand units apart: a thousand seconds each way at one unit a second. */
-        std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":null,"scores":{"alice":0,"bob":100,"carol":100},"quotes_added":{},)"
-             << R"("ids":{"alice":0,"bob":1000,"carol":1000},)"
-             << R"("furniture":{"alice":"🍕","bob":"🪤🪤🍕","carol":"🪤"}})";
-    }
-    Storage storage{paths.conquister, paths.quotes};
-    const RaidRules rules{.loot_divisor = 50, .travel_divisor = 1, .signs = {}, .trap_percent = 20};
-
-    REQUIRE(raid_start(storage, 0, "alice", "bob", 0, rules).seconds == 1000);
-    std::vector<RaidEvent> events = raid_due(storage, 1000, rules);
-    REQUIRE(events.size() == 1);
-    /* Two of them: two fifths more road home, and she still takes what she came for. */
-    CHECK(events[0].trapped == 400);
-    CHECK(events[0].seconds == 1400);
-    CHECK(events[0].loot > 0);
-    CHECK(raid_due(storage, 2399, rules).empty());
-    REQUIRE(raid_due(storage, 2400, rules).size() == 1);
-
-    /* A present does not spring them. */
-    REQUIRE(raid_start(storage, 0, "alice", "carol", 3000, rules, RaidTargetKind::any, 0, "🍕").status ==
-            RaidStatus::started);
-    events = raid_due(storage, 4000, rules);
-    REQUIRE(events.size() == 1);
-    CHECK(events[0].kind == RaidEvent::Kind::delivered);
-    CHECK(events[0].trapped == 0);
-    CHECK(events[0].seconds == 1000);
 }
 
 TEST_CASE("a 🧊 freezes whoever it hits: no place and no setting off until he thaws") {

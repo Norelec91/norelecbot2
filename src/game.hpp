@@ -67,8 +67,6 @@ inline constexpr Power seed{"💦", PowerKind::thrown, "when it lands on somebod
 inline constexpr Power hen{"🐔", PowerKind::home, "every minute", "each lays palle for its owner, whether he is in or out"};
 inline constexpr Power dino{"🦖", PowerKind::home, "when a raider reaches the house",
                             "each may eat one of the emoji the raider has with him, robbed or not"};
-inline constexpr Power trap{"🪤", PowerKind::home, "when a raider reaches the house",
-                            "each makes his ride home longer by a share, robbed or not"};
 inline constexpr Power ice{"🧊", PowerKind::thrown, "when it lands",
                            "freezes whoever it hits for a while: no entering the place, no setting off"};
 inline constexpr Power fire{"🔥", PowerKind::carried, "when a 🧊 hits him",
@@ -86,7 +84,7 @@ inline constexpr std::array powers{power::pleading, power::rocket, power::bolt, 
                                    power::poo,      power::bomb,   power::nuke, power::dog,
                                    power::balloon,  power::mailbox, power::ninja, power::alarm,
                                    power::vortex,   power::pirate,  power::seed,  power::hen,
-                                   power::trap,     power::ice,     power::fire,  power::hourglass,
+                                   power::ice,      power::fire,    power::hourglass,
                                    power::dino};
 
 /* Whether an emoji is that power's, drawn in colour or not and whatever the tone of its skin. */
@@ -241,8 +239,6 @@ struct RaidRules {
     std::int64_t adult_per_second = 0;
     /* The chance, in percent, that a grown-up girl and a grown-up boy of the same house have a child. */
     std::int64_t mating_percent = 0;
-    /* How much longer each 🪤 at the house makes a raider's ride home, in percent: they add up. */
-    std::int64_t trap_percent = 0;
     /* The chance, in percent, that each 🦖 at the house gives of eating one of the emoji the raider has
        with him: they add up. */
     std::int64_t dino_percent = 0;
@@ -276,8 +272,6 @@ struct RaidEvent {
     std::string raider;
     std::string target;
     std::int64_t loot = 0;
-    /* stolen: the seconds the 🪤 at the house added to the raider's ride home; 0 without one. */
-    std::int64_t trapped = 0;
     /* stolen: a 🐶 at the house caught the raider, who takes nothing. */
     bool intercepted = false;
     /* stolen: a 🥷 took the raider past the 🎈 or the 🐶 that were there, unnoticed. */

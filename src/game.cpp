@@ -2068,15 +2068,9 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 event.target_emoji = worn(state, raid.target);
                 event.raider_smeared = is_smeared(state, raid.raider, now);
                 event.target_smeared = is_smeared(state, raid.target, now);
-                /* Whoever comes to rob walks into the 🪤 of the house, whatever else happens to him there:
-                   his ride home is that much longer, and his own house that much longer empty. */
+                /* Whoever comes to rob may meet the 🦖 of the house, whatever else happens to him there:
+                   it may eat one of the emoji he has with him, never a 🎈. */
                 if (raid.gift == 0 && raid.gift_emoji.empty()) {
-                    const std::int64_t share = copies_of(state, raid.target, power::trap) *
-                        std::max<std::int64_t>(rules.trap_percent, 0);
-                    event.trapped = std::max<std::int64_t>(raid.back - raid.arrive, 0) * share / 100;
-                    raid.back += event.trapped;
-                    event.seconds = std::max<std::int64_t>(raid.back - now, 0);
-                    /* And the 🦖 of the house may eat one of the emoji he has with him, never a 🎈. */
                     const std::int64_t jaws = std::min<std::int64_t>(
                         100, copies_of(state, raid.target, power::dino) * std::max<std::int64_t>(rules.dino_percent, 0));
                     if (jaws > 0 && static_cast<std::int64_t>(session.random_index(100)) < jaws) {

@@ -307,7 +307,6 @@ RaidRules raid_rules(const CommandContext &context) {
         .hen_per_minute = context.config.hen_per_minute,
         .adult_per_second = context.config.adult_per_second,
         .mating_percent = context.config.mating_percent,
-        .trap_percent = context.config.trap_percent,
         .dino_percent = context.config.dino_percent,
         .frozen_seconds = context.config.frozen_seconds,
         .fire_percent = context.config.fire_percent,
@@ -902,9 +901,6 @@ std::string power_help(const Power &power, const AppConfig &config) {
     if (is(power::dino)) {
         return std::format("ognuno ha il {}% di mangiare a chi ti razzia un'emoji che ha con sé", config.dino_percent);
     }
-    if (is(power::trap)) {
-        return std::format("chi ti razzia ci mette il {}% in più a tornare a casa per ognuna", config.trap_percent);
-    }
     if (is(power::bolt)) {
         return std::format("+{}% di palle in {} per ognuno", config.lightning_percent, conquister_place);
     }
@@ -1355,10 +1351,6 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
         : std::string{};
     if (!event.eaten.empty()) {
         alarm += std::format("Il 🦖 di {}{} ti mangia {}.\n", mention, event.target, event.eaten);
-    }
-    if (event.trapped > 0) {
-        alarm += std::format("Finisci nelle trappole di {}{}: il ritorno dura {} in più.\n", mention, event.target,
-                             format_wait(event.trapped));
     }
     if (event.balloon_held) {
         return alarm + std::format(
