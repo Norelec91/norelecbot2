@@ -966,6 +966,36 @@ TEST_CASE("a 💩 thrown at the place makes the holder \"lo smerdato\" for a day
     CHECK(storage.transaction([](StorageSession &session) { return session.state().smeared.empty(); }));
 }
 
+TEST_CASE("a 🇷🇺 or a 🇮🇱 is a 💩 in all but looks") {
+    for (const std::string_view flag : {"🇷🇺", "🇮🇱"}) {
+        const Power *power = power_of(flag);
+        REQUIRE(power != nullptr);
+        CHECK(power->emoji == power::poo.emoji);
+    }
+    CHECK(power_of("🇮🇹") == nullptr);
+
+    const TestPaths paths{"flag-poo-command-test"};
+    AppConfig config;
+    config.starter_balloon = false;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{config.conquister_path, config.quotes_path};
+    const CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
+    const CommandContext bob{.storage = storage, .config = config, .user_id = 2, .username = "Bob"};
+
+    REQUIRE(command_dispatch(bob, "We @TheConquister37"));
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["tg:1"] = "🇷🇺🇮🇱";
+        session.state().scores.emplace("tg:1", 0);
+        return 0;
+    });
+    CHECK(command_dispatch(alice, "We @TheConquister37 🇷🇺") ==
+          "@Alice, tiri una palla di cacca a @Bob in @TheConquister37, bravo hai fatto centro, "
+          "l'hai completamente smerdato!");
+    CHECK(command_dispatch(bob, "/profile").value_or("").starts_with("Bob lo smerdato\n"));
+    CHECK(command_dispatch(alice, "/emoji").value_or("").contains("💩 🇷🇺 🇮🇱 chi la prende"));
+}
+
 TEST_CASE("the ☢️ costs a million and starts the game over from the place") {
     const TestPaths paths{"nuke-command-test"};
     AppConfig config;
@@ -1220,7 +1250,7 @@ TEST_CASE("/emoji tells every emoji with a power, where it is and what can hit i
     CHECK(help.contains("\n⚡ +25% di palle in @TheConquister37 per ognuno\n"));
     CHECK(help.contains("🎈 il palloncino: difende il posto dove sei; bucato torna nuovo; uno nuovo costa 1000 palle. "
                         "Invincibile: né bombe né furti\n"));
-    CHECK(help.contains("\n💩 chi la prende è \"lo smerdato\" per 1 giorno\n"));
+    CHECK(help.contains("\n💩 🇷🇺 🇮🇱 chi la prende è \"lo smerdato\" per 1 giorno\n"));
     CHECK(help.contains("Restano a casa"));
     CHECK(help.contains("Vengono con te"));
     CHECK(help.contains("Si lanciano"));

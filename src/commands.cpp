@@ -983,7 +983,13 @@ std::string handle_emoji_help(const CommandContext &context, std::string_view) {
         std::string lines;
         for (const Power &power : powers) {
             if (power.kind == kind) {
-                lines += std::format("{} {}{}\n", power.emoji, power_help(power, context.config),
+                std::string looks{power.emoji};
+                for (const std::string_view also : power.also) {
+                    if (!also.empty()) {
+                        looks += std::format(" {}", also);
+                    }
+                }
+                lines += std::format("{} {}{}\n", looks, power_help(power, context.config),
                                      power.untouchable ? ". Invincibile: né bombe né furti" : "");
             }
         }

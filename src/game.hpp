@@ -31,6 +31,8 @@ struct Power {
     std::string_view effect;
     /* Nothing takes it off a name against its owner's will: no explosion, no theft, no newborn. */
     bool untouchable = false;
+    /* Other emoji that are this one in all but looks: they do exactly what it does. */
+    std::array<std::string_view, 2> also{};
 };
 
 namespace power {
@@ -42,7 +44,8 @@ inline constexpr Power bolt{"⚡", PowerKind::carried, "when he enters @TheConqu
                             "each makes the hold worth a share more"};
 inline constexpr Power lobster{"🦞", PowerKind::carried, "when he enters @TheConquister37 kicking somebody out",
                                "becomes what the kicked holder has in the same slot until he leaves"};
-inline constexpr Power poo{"💩", PowerKind::thrown, "when it lands", "makes whoever it hits \"lo smerdato\" for a while"};
+inline constexpr Power poo{"💩", PowerKind::thrown, "when it lands", "makes whoever it hits \"lo smerdato\" for a while",
+                           false, {"🇷🇺", "🇮🇱"}};
 inline constexpr Power bomb{"💣", PowerKind::thrown, "when it lands",
                             "takes one emoji with a power among those that are where it lands"};
 inline constexpr Power nuke{"☢️", PowerKind::thrown, "when it lands",

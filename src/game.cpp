@@ -1047,7 +1047,9 @@ std::string without_tone(std::string emoji) {
 }
 
 bool is_power(std::string_view emoji, const Power &power) {
-    return without_tone(without_variation(emoji)) == without_tone(without_variation(power.emoji));
+    const std::string bare = without_tone(without_variation(emoji));
+    return bare == without_tone(without_variation(power.emoji)) ||
+           std::ranges::any_of(power.also, [&bare](std::string_view also) { return !also.empty() && bare == also; });
 }
 
 const Power *power_of(std::string_view emoji) {
