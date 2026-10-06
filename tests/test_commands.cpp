@@ -687,7 +687,8 @@ TEST_CASE("the help lists every We line with the asker's own name") {
     const std::string on_irc = command_dispatch(irc, "/help").value_or("");
     CHECK(on_irc.contains("\nWe Bob 1 2 — sposti l'emoji dal posto 1 al posto 2\n"));
     CHECK(on_irc.contains("\nWe giocatore — parti per razziarlo\n"));
-    CHECK(on_irc.contains("We @TheConquister37 — entri nel posto"));
+    CHECK(on_irc.contains("We @TheConquister37 (o !avventura) — entri nel posto"));
+    CHECK(help.contains("We @TheConquister37 (o /avventura) — entri nel posto"));
     CHECK(on_irc.contains("\n!addquote <testo> — "));
 
     /* Every reply that names a command names it the way it is typed there. */
@@ -1547,4 +1548,21 @@ TEST_CASE("everything costs its list price, however rich the group is") {
     CHECK(conquister_user(storage, "d")->score == 39000);
     REQUIRE(command_dispatch(context, "/addquote una citazione qualunque"));
     CHECK(conquister_user(storage, "d")->score == 38000);
+}
+
+TEST_CASE("/avventura is another way to write We @TheConquister37") {
+    const TestPaths paths{"adventure-command-test"};
+    AppConfig config;
+    config.starter_balloon = false;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{config.conquister_path, config.quotes_path};
+    const CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice",
+                               .claims_allowed = true};
+
+    CHECK(command_is_for_bot("/avventura"));
+    CHECK(command_is_for_bot("/Avventura 💩"));
+    CHECK(command_dispatch(alice, "/avventura").value_or("").contains("Alice sei in @TheConquister37!"));
+    /* Whatever follows it follows the place, as it would after We @TheConquister37. */
+    CHECK(command_dispatch(alice, "/avventura 💩") == command_dispatch(alice, "We @TheConquister37 💩"));
 }

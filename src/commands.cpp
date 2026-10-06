@@ -141,6 +141,18 @@ ParsedCommand parse_command(std::string_view message) {
     return {std::move(name), text::trim(message.substr(length))};
 }
 
+/* "/avventura" is another way to write "We @TheConquister37", with whatever follows it. */
+constexpr std::string_view adventure_command = "/avventura";
+
+std::string expand_adventure(std::string_view message) {
+    const ParsedCommand command = parse_command(message);
+    if (command.name != adventure_command) {
+        return std::string{message};
+    }
+    return command.argument.empty() ? std::string{conquister_trigger}
+                                    : std::format("{} {}", conquister_trigger, command.argument);
+}
+
 /* What is actually paid: the list price, or nothing for whoever turned the debug switch on. */
 int price(const CommandContext &context, int cost) {
     return debug_on(context.storage, std::string{context.player_key}) ? 0 : cost;
@@ -857,7 +869,8 @@ std::string handle_help(const CommandContext &context, std::string_view) {
     const auto line = [&help](std::string_view example, std::string_view meaning) {
         help += std::format("{} — {}\n", example, meaning);
     };
-    line(std::format("We {}", conquister_place), "entri nel posto: 1 palla al secondo finché lo tieni");
+    line(std::format("We {} (o {}avventura)", conquister_place, slash),
+         "entri nel posto: 1 palla al secondo finché lo tieni");
     line(std::format("We {}", me), "torni a casa tua, dal posto o dal viaggio");
     line(std::format("We {} 🍕", me), "appendi 🍕 al nome nel primo posto libero, da casa tua");
     line(std::format("We {} 🍕 3", me), "appendi 🍕 nel posto 3");
@@ -1222,7 +1235,8 @@ const CommandDefinition *find_command(std::string_view name) {
 }
 
 bool command_is_for_bot(std::string_view text) {
-    const std::string_view message = text::trim(text);
+    const std::string expanded = expand_adventure(text::trim(text));
+    const std::string_view message = expanded;
     return message == conquister_trigger || !raid_target(message).empty() || amount_target(message).has_value() ||
            emoji_target(message).has_value() || slot_move(message).has_value() ||
            (!message.empty() && find_command(parse_command(message).name) != nullptr);
@@ -1391,7 +1405,8 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
 
 std::optional<std::string> command_dispatch(const CommandContext &context, std::string_view text) {
     try {
-        const std::string_view message = text::trim(text);
+        const std::string expanded = expand_adventure(text::trim(text));
+        const std::string_view message = expanded;
         CommandContext bound = context;
         std::string bound_key;
         const auto remember_sender = [&] {
