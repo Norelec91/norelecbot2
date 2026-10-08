@@ -148,8 +148,6 @@ struct ConquisterState {
     Slots stayed;
     /* The players who were handed the 🎈 everybody starts with: nobody gets it twice. */
     Counters welcomed;
-    /* The players who took the free 🎈 of /buyballoon: it is given once. */
-    Counters balloon_ported;
     /* The players a 🧊 froze, mapped to the instant they thaw: until then no place and no leaving. */
     Counters frozen;
     /* The children on the way, in the order they were conceived. */

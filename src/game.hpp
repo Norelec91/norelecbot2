@@ -452,17 +452,6 @@ struct Profile {
                                       std::string_view account_name = {},
                                       /* A player seen for the first time is handed his 🎈, if it fits. */
                                       std::size_t furniture_limit = 10);
-enum class BalloonPortStatus { given, has_one, taken_already, full };
-
-struct BalloonPortResult {
-    BalloonPortStatus status = BalloonPortStatus::given;
-    /* How his name reads now. */
-    std::string shown;
-};
-
-/* The free 🎈 for whoever was left without one when balloons became emoji: once per player, and only
-   a try that hangs it counts. One with a full name can make room and ask again. */
-[[nodiscard]] BalloonPortResult balloon_port(Storage &storage, const std::string &player, std::size_t furniture_limit);
 /* Everybody starts with a 🎈: hands one, once, to every known player who has none and a free slot. */
 void balloons_hand_out(Storage &storage, std::size_t furniture_limit);
 enum class LinkStatus { pending, linked, unknown_account, conflict, self, already_linked };
@@ -528,10 +517,10 @@ struct FurnitureBurnResult {
 
 /* An emoji brought back to @TheConquister37 leaves the game too: the first slot that holds it is
    emptied. Not from the road. One that is thrown lands on the holder instead: a 💩 makes him "lo
-   smerdato", a 💣 takes the emoji he carries. */
+   smerdato", a 💣 takes the emoji he carries. Destroyed, it only goes up in smoke, whatever it is. */
 [[nodiscard]] FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player,
                                                  const std::string &emoji, std::int64_t now = 0,
-                                                 const RaidRules &rules = {});
+                                                 const RaidRules &rules = {}, bool destroy = false);
 /* The players who are "lo smerdato" right now. */
 [[nodiscard]] std::vector<std::string> smeared_all(Storage &storage, std::int64_t now);
 

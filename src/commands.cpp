@@ -421,7 +421,7 @@ std::string expand_buy(const CommandContext &context, std::string message) {
 /* The three things a ride to somebody can be, each with its command: "/raid name" robs him, "/give
    name emoji|palle" makes him a present, "/throw name emoji" lands it on him. Each is a "We name ..."
    line underneath, which the verb then holds to its own meaning. */
-enum class Verb { none, raid, give, throw_ };
+enum class Verb { none, raid, give, throw_, burn };
 
 struct Verbed {
     Verb verb = Verb::none;
@@ -434,9 +434,14 @@ Verbed expand_verb(std::string message) {
     const Verb verb = command.name == "/raid" ? Verb::raid
         : command.name == "/give"             ? Verb::give
         : command.name == "/throw"            ? Verb::throw_
+        : command.name == "/burn"             ? Verb::burn
                                               : Verb::none;
     if (verb == Verb::none || command.argument.empty()) {
         return {Verb::none, std::move(message)};
+    }
+    /* What is burnt goes back where it came from, which is @TheConquister37. */
+    if (verb == Verb::burn) {
+        return {verb, std::format("{} {}", conquister_trigger, command.argument)};
     }
     return {verb, std::format("{}{}", raid_trigger, command.argument)};
 }
@@ -547,13 +552,14 @@ std::string handle_furniture_move(const CommandContext &context, const ParsedMov
                        username, result.shown, result.moved, move.from, move.to);
 }
 
-/* "We @TheConquister37 emoji": the first copy on his name goes back to the place, out of the game. */
-std::string handle_emoji_burn(const CommandContext &context, std::string_view emoji) {
+/* "We @TheConquister37 emoji": the first copy on his name goes back to the place, out of the game.
+   "/burn emoji" destroys it there and then: even one meant to be thrown hits nobody. */
+std::string handle_emoji_burn(const CommandContext &context, std::string_view emoji, bool destroy = false) {
     if (context.username.empty()) {
         return missing_username_reply();
     }
     const FurnitureBurnResult burnt = furniture_burn(context.storage, std::string{context.player_key}, std::string{emoji},
-                                                     seconds_now(), raid_rules(context));
+                                                     seconds_now(), raid_rules(context), destroy);
     switch (burnt.status) {
     case FurnitureBurnStatus::travelling:
         return on_the_road(context, "si brucia da casa tua o da @TheConquister37.");
@@ -561,6 +567,10 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
         return std::format("{} non hai {} in casa.", context.username, emoji);
     case FurnitureBurnStatus::burned:
         break;
+    }
+    if (destroy) {
+        return std::format("{} hai bruciato {}: è uscita dal gioco.",
+                           with_furniture(context.username, burnt.shown, false), emoji);
     }
     if (burnt.reset) {
         return std::format("{0} ha sganciato la bomba nucleare su {1}: il gioco riparte da zero. Tutti senza palle e "
@@ -879,8 +889,9 @@ std::string handle_help(const CommandContext &context, std::string_view) {
     line(std::format("We {0} 🍕 (o {1}give {0} 🍕)", other, slash), "gli porti una 🍕");
     line(std::format("We {0} 💣 (o {1}throw {0} 💣)", other, slash), "gli lanci una 💣, che gli esplode addosso");
     line(std::format("{1}give {0} 💣", other, slash), "gli regali la 💣 intatta: la potrà usare lui");
-    line(std::format("We {} 500", conquister_place), "bruci 500 palle");
-    line(std::format("We {} 🍕", conquister_place), "bruci una 🍕");
+    line(std::format("We {} 500 (o {}burn 500)", conquister_place, slash), "bruci 500 palle");
+    line(std::format("We {} 🍕 (o {}burn 🍕)", conquister_place, slash), "bruci una 🍕");
+    line(std::format("{}burn 💣", slash), std::format("bruci la 💣 senza lanciarla su chi è in {}", conquister_place));
     help += std::format("\nDa {0} le righe col tuo nome ti riportano prima a casa tua. "
                         "Razzie e consegne partono solo da casa tua: da {0} esci prima con We {1}. "
                         "In viaggio si può solo tornare indietro: We {1}.\n", conquister_place, me);
@@ -1141,6 +1152,9 @@ std::string verb_usage(const CommandContext &context, Verb verb) {
     case Verb::throw_:
         return std::format("Uso: {0}throw <giocatore> <emoji da lanciare>, per esempio {0}throw {1} 💣: gli esplode "
                            "addosso.", slash, other);
+    case Verb::burn:
+        return std::format("Uso: {0}burn <emoji o palle>, per esempio {0}burn 🍕 o {0}burn 500: escono dal gioco, "
+                           "e anche una 💣 brucia senza colpire nessuno.", slash);
     case Verb::none:
         break;
     }
@@ -1159,26 +1173,8 @@ std::string handle_throw(const CommandContext &context, std::string_view) {
     return verb_usage(context, Verb::throw_);
 }
 
-/* "/buyballoon": temporary. The free 🎈 for whoever had no room for one when balloons became emoji. */
-std::string handle_buy_balloon(const CommandContext &context, std::string_view) {
-    if (context.username.empty()) {
-        return missing_username_reply();
-    }
-    const BalloonPortResult result = balloon_port(context.storage, std::string{context.player_key},
-                                                  static_cast<std::size_t>(context.config.furniture_limit));
-    switch (result.status) {
-    case BalloonPortStatus::has_one:
-        return std::format("{} ({}) hai già un palloncino.", context.username, result.shown);
-    case BalloonPortStatus::taken_already:
-        return std::format("{} il palloncino gratis l'hai già preso: uno nuovo costa {}, con We {} 🎈.",
-                           context.username, palle(context.config.balloon_cost), own_name(context));
-    case BalloonPortStatus::full:
-        return std::format("{} ({}) non hai un posto libero: liberane uno e riprova, il palloncino gratis ti aspetta.",
-                           context.username, result.shown);
-    case BalloonPortStatus::given:
-        break;
-    }
-    return std::format("{} ({}) ecco il tuo palloncino, gratis.", context.username, result.shown);
+std::string handle_burn_usage(const CommandContext &context, std::string_view) {
+    return verb_usage(context, Verb::burn);
 }
 
 std::string handle_delete_quote(const CommandContext &context, std::string_view argument) {
@@ -1236,7 +1232,7 @@ constexpr std::array commands{
     CommandDefinition{"/raid", handle_raid_usage},
     CommandDefinition{"/give", handle_give},
     CommandDefinition{"/throw", handle_throw},
-    CommandDefinition{"/buyballoon", handle_buy_balloon},
+    CommandDefinition{"/burn", handle_burn_usage},
 };
 
 const CommandDefinition *find_command(std::string_view name) {
@@ -1522,7 +1518,7 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
                     return std::format("{0} a {1} non si regala niente: per bruciare {2} scrivi We {1} {2}.",
                                        context.username, conquister_place, carried->emoji);
                 }
-                return handle_emoji_burn(bound, carried->emoji);
+                return handle_emoji_burn(bound, carried->emoji, verb == Verb::burn);
             }
             return handle_raid(bound, carried->target, 0, carried->emoji, verb == Verb::give);
         }
@@ -1530,7 +1526,7 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
             if (!context.claims_allowed) {
                 return std::nullopt;
             }
-            if (verb == Verb::give || verb == Verb::throw_) {
+            if (verb != Verb::none && verb != Verb::raid) {
                 return verb_usage(context, verb);
             }
             remember_sender();

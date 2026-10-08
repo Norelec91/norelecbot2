@@ -434,26 +434,6 @@ std::vector<std::string> known_players(const ConquisterState &state) {
 
 }
 
-BalloonPortResult balloon_port(Storage &storage, const std::string &player, std::size_t furniture_limit) {
-    const BalloonPortResult result = storage.transaction([&](StorageSession &session) {
-        ConquisterState &state = session.state();
-        BalloonPortResult outcome;
-        if (has_balloon(state, player)) {
-            outcome.status = BalloonPortStatus::has_one;
-        } else if (counter(state.balloon_ported, player) != 0) {
-            outcome.status = BalloonPortStatus::taken_already;
-        } else if (!hang_balloon(state, player, furniture_limit)) {
-            outcome.status = BalloonPortStatus::full;
-        } else {
-            state.balloon_ported[player] = 1;
-        }
-        outcome.shown = shown_furniture(state, player);
-        return outcome;
-    });
-    log_info("balloon port user={} status={}", player, static_cast<int>(result.status));
-    return result;
-}
-
 void balloons_hand_out(Storage &storage, std::size_t furniture_limit) {
     storage.transaction([furniture_limit](StorageSession &session) {
         ConquisterState &state = session.state();
@@ -1333,7 +1313,7 @@ void start_over(ConquisterState &state, const std::string &player, std::int64_t 
 }
 
 FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, const std::string &emoji,
-                                   std::int64_t now, const RaidRules &rules) {
+                                   std::int64_t now, const RaidRules &rules, bool destroy) {
     const FurnitureBurnResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         FurnitureBurnResult outcome;
@@ -1344,6 +1324,12 @@ FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, 
         /* A child is neither burnt like an emoji nor left at the place: it stays until it leaves by itself. */
         if (!take_emoji(state, player, emoji)) {
             outcome.status = FurnitureBurnStatus::not_owned;
+            return outcome;
+        }
+        /* Destroyed, even what is meant to be thrown goes up in smoke and touches nobody. */
+        if (destroy) {
+            outcome.shown = shown_furniture(state, player);
+            lose_bolts(state, now, rules.signs);
             return outcome;
         }
         if (is_power(emoji, power::nuke)) {

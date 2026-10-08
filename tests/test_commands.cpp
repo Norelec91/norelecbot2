@@ -678,7 +678,7 @@ TEST_CASE("the help lists every We line with the asker's own name") {
     CHECK(help.contains("\nWe @Alice — torni a casa tua, da @TheConquister37 o dal viaggio\n"));
     CHECK(help.ends_with("\n/link <nome> — collega account Telegram e nick IRC Azzurra registrato"));
     CHECK(help.contains("\nWe @giocatore 500 (o /give @giocatore 500) — gli porti 500 palle\n"));
-    CHECK(help.contains("\nWe @TheConquister37 🍕 — bruci una 🍕\n"));
+    CHECK(help.contains("\nWe @TheConquister37 🍕 (o /burn 🍕) — bruci una 🍕\n"));
     CHECK(help.contains("\n/leaderboard — classifica\n"));
     CHECK(help.contains("\n/profile [nome] — il tuo profilo o quello di un altro\n"));
     CHECK(help.contains("Razzie e consegne partono solo da casa tua: da @TheConquister37 esci prima con We @Alice. "));
@@ -1104,39 +1104,6 @@ TEST_CASE("a popped 🎈 stays on the name, and a player is handed only one") {
     Storage storage{config.conquister_path, config.quotes_path};
     balloons_hand_out(storage, 10);
     CHECK(furniture_of_alice(storage).empty());
-}
-
-TEST_CASE("/buyballoon hands the free 🎈 once, and a full name can try again") {
-    const TestPaths paths{"balloon-port-test"};
-    AppConfig config;
-    config.starter_balloon = false;
-    config.conquister_path = paths.conquister;
-    config.quotes_path = paths.quotes;
-    config.furniture_limit = 3;
-    Storage storage{config.conquister_path, config.quotes_path};
-    const CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
-
-    CHECK(command_is_for_bot("/buyballoon"));
-    /* Every emoji with a power can be written in a command. */
-    for (const Power &power : powers) {
-        CHECK(command_is_for_bot(std::format("We @Alice {}", power.emoji)));
-    }
-    REQUIRE(command_dispatch(alice, "/profile"));
-    storage.transaction([](StorageSession &session) {
-        session.state().furniture["tg:1"] = "⚡⚡⚡";
-        return 0;
-    });
-    /* A full name does not use the one time up. */
-    CHECK(command_dispatch(alice, "/buyballoon") ==
-          "Alice (⚡⚡⚡) non hai un posto libero: liberane uno e riprova, il palloncino gratis ti aspetta.");
-    REQUIRE(command_dispatch(alice, "We @TheConquister37 ⚡"));
-    CHECK(command_dispatch(alice, "/buyballoon") == "Alice (🎈⚡⚡) ecco il tuo palloncino, gratis.");
-    CHECK(command_dispatch(alice, "/buyballoon") == "Alice (🎈⚡⚡) hai già un palloncino.");
-    /* Once it is gone, the next one is paid for. */
-    REQUIRE(command_dispatch(alice, "We @TheConquister37 🎈"));
-    CHECK(command_dispatch(alice, "/buyballoon") ==
-          "Alice il palloncino gratis l'hai già preso: uno nuovo costa 1000 palle, con We @Alice 🎈.");
-    CHECK(furniture_all(storage).at("tg:1") == "[]⚡⚡");
 }
 
 TEST_CASE("a 🥷 takes the claimer past the holder's 🎈") {
@@ -1593,4 +1560,36 @@ TEST_CASE("/raid robs, /give makes a present of anything, /throw lands what is t
     CHECK(command_dispatch(alice, "/give @Bob 500").value_or("").starts_with("Alice parti per Bob con 500 palle"));
     home_again();
     CHECK(command_dispatch(alice, "/raid @Bob").value_or("").starts_with("Alice parti per Bob:"));
+}
+
+TEST_CASE("/burn takes emoji and palle out of the game, and what is thrown hits nobody") {
+    const TestPaths paths{"burn-command-test"};
+    AppConfig config;
+    config.starter_balloon = false;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{config.conquister_path, config.quotes_path};
+    const CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
+    const CommandContext bob{.storage = storage, .config = config, .user_id = 2, .username = "Bob"};
+    REQUIRE(command_dispatch(alice, "/profile"));
+    REQUIRE(command_dispatch(bob, "/profile"));
+    storage.transaction([](StorageSession &session) {
+        session.state().scores["tg:1"] = 1000;
+        session.state().furniture["tg:1"] = "🍕☢️💣";
+        session.state().furniture["tg:2"] = "⚡";
+        return 0;
+    });
+    /* Bob holds the place: a 💣 thrown there would go off on him. */
+    REQUIRE(command_dispatch(bob, "We @TheConquister37").value_or("").contains("@TheConquister37"));
+
+    CHECK(command_is_for_bot("/burn 🍕"));
+    CHECK(command_dispatch(alice, "/burn").value_or("").starts_with("Uso: /burn <emoji o palle>"));
+    CHECK(command_dispatch(alice, "/burn 🍕") == "Alice ([]☢️💣) hai bruciato 🍕: è uscita dal gioco.");
+    CHECK(command_dispatch(alice, "/burn 💣") == "Alice ([]☢️) hai bruciato 💣: è uscita dal gioco.");
+    CHECK(furniture_all(storage).at("tg:2") == "⚡");
+    /* Not even a ☢️ starts the game over. */
+    CHECK(command_dispatch(alice, "/burn ☢️") == "Alice hai bruciato ☢️: è uscita dal gioco.");
+    CHECK(furniture_all(storage).at("tg:2") == "⚡");
+    CHECK(command_dispatch(alice, "/burn 100").value_or("").starts_with("Alice hai portato 100 palle in @TheConquister37"));
+    CHECK(command_dispatch(alice, "/burn 🍩") == "Alice non hai 🍩 in casa.");
 }
