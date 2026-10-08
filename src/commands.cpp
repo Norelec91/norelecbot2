@@ -410,9 +410,29 @@ std::string own_name(const CommandContext &context) {
    its command, which says how to use it. */
 constexpr std::string_view buy_command = "/buy";
 
+/* "/home" is another way to write "We yourname", and "/move from to" of "We yourname from to": only
+   two slots, so that nothing else after it is ever taken for a purchase. */
+constexpr std::string_view home_command = "/home";
+constexpr std::string_view move_command = "/move";
+
+bool two_slots(std::string_view argument) {
+    const std::size_t space = argument.find_first_of(" \t");
+    return space != std::string_view::npos && text::parse_int64(argument.substr(0, space)) &&
+        text::parse_int64(text::trim(argument.substr(space + 1)));
+}
+
 std::string expand_buy(const CommandContext &context, std::string message) {
     const ParsedCommand command = parse_command(message);
-    if (command.name != buy_command || command.argument.empty() || context.username.empty()) {
+    if (context.username.empty()) {
+        return message;
+    }
+    if (command.name == home_command) {
+        return std::format("{}{}", raid_trigger, own_name(context));
+    }
+    if (command.name == move_command && two_slots(command.argument)) {
+        return std::format("{}{} {}", raid_trigger, own_name(context), command.argument);
+    }
+    if (command.name != buy_command || command.argument.empty()) {
         return message;
     }
     return std::format("{}{} {}", raid_trigger, own_name(context), command.argument);
@@ -887,10 +907,13 @@ std::string handle_help(const CommandContext &context, std::string_view) {
     line(std::format("{}throw {} 💣", slash, other), "gli lanci una 💣, che gli esplode addosso");
     line(std::format("{}buy 🍕", slash), "compri 🍕 e la appendi al nome nel primo posto libero, da casa tua");
     line(std::format("{}buy 🍕 3", slash), "la compri e la appendi nel posto 3");
+    line(std::format("{}move 1 2", slash), "sposti l'emoji dal posto 1 al posto 2");
+    line(std::format("{}home", slash), std::format("torni a casa tua, da {} o dal viaggio", conquister_place));
     line(std::format("{}burn 500", slash), "bruci 500 palle");
     line(std::format("{}burn 🍕", slash), std::format("bruci una 🍕; una 💣 brucia senza colpire chi è in {}",
                                                      conquister_place));
-    help += "\nRazzie, regali e lanci partono solo da casa tua. In viaggio si può solo tornare indietro.\n";
+    help += std::format("\nRazzie, regali e lanci partono solo da casa tua. In viaggio si può solo tornare indietro, "
+                        "con {}home.\n", slash);
     help += std::format("\n{0}leaderboard — classifica\n{0}profile [nome] — il tuo profilo o quello di un altro\n"
                         "{0}emoji — cosa fa ogni emoji con un potere, dove sta e cosa la può colpire\n"
                         "{0}addquote <testo> — aggiungi una citazione\n"
@@ -1173,6 +1196,16 @@ std::string handle_burn_usage(const CommandContext &context, std::string_view) {
     return verb_usage(context, Verb::burn);
 }
 
+/* "/home" and a good "/move" are expanded before they get here: only what cannot be is left. */
+std::string handle_home(const CommandContext &, std::string_view) {
+    return missing_username_reply();
+}
+
+std::string handle_move_usage(const CommandContext &context, std::string_view) {
+    return std::format("Uso: {0}move <da> <a>, per esempio {0}move 1 2: sposti l'emoji dal posto 1 al posto 2.",
+                       command_prefix(context));
+}
+
 std::string handle_delete_quote(const CommandContext &context, std::string_view argument) {
     if (!trusted(context)) {
         return "Solo gli amministratori possono eliminare le citazioni.";
@@ -1229,6 +1262,8 @@ constexpr std::array commands{
     CommandDefinition{"/give", handle_give},
     CommandDefinition{"/throw", handle_throw},
     CommandDefinition{"/burn", handle_burn_usage},
+    CommandDefinition{"/home", handle_home},
+    CommandDefinition{"/move", handle_move_usage},
 };
 
 const CommandDefinition *find_command(std::string_view name) {

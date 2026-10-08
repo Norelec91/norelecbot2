@@ -1605,3 +1605,32 @@ TEST_CASE("/burn takes emoji and palle out of the game, and what is thrown hits 
     CHECK(command_dispatch(alice, "/burn 👧") ==
           "Alice i bambini non si bruciano: 👧 resta con te finché non se ne va da solo.");
 }
+
+TEST_CASE("/home takes him home, /move swaps two slots and nothing else") {
+    const TestPaths paths{"home-move-test"};
+    AppConfig config;
+    config.starter_balloon = false;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{config.conquister_path, config.quotes_path};
+    const CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
+    const CommandContext bob{.storage = storage, .config = config, .user_id = 0, .username = "Bob"};
+    REQUIRE(command_dispatch(alice, "/profile"));
+    storage.transaction([](StorageSession &session) {
+        session.state().scores["tg:1"] = 1000;
+        session.state().furniture["tg:1"] = "🍕🍩";
+        return 0;
+    });
+
+    CHECK(command_is_for_bot("/home"));
+    CHECK(command_is_for_bot("/move 1 2"));
+    CHECK(command_dispatch(alice, "/home") == "Alice sei già in @Alice!");
+    REQUIRE(command_dispatch(alice, "We @TheConquister37").value_or("").contains("@TheConquister37"));
+    CHECK(command_dispatch(alice, "/home").value_or("").starts_with("Alice torni da @TheConquister37 in @Alice"));
+    CHECK(command_dispatch(alice, "/move 1 2") == "Alice (🍩🍕) hai scambiato 🍕 e 🍩: ora 🍕 è nel posto 2 e 🍩 nel posto 1.");
+    /* An emoji after /move is never bought. */
+    CHECK(command_dispatch(alice, "/move 🍔 3").value_or("").starts_with("Uso: /move <da> <a>"));
+    CHECK(command_dispatch(alice, "/move").value_or("").starts_with("Uso: /move <da> <a>"));
+    CHECK(furniture_all(storage).at("tg:1") == "🍩🍕");
+    CHECK(command_dispatch(bob, "/move").value_or("").starts_with("Uso: !move <da> <a>"));
+}
