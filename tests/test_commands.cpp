@@ -686,7 +686,7 @@ TEST_CASE("the help lists every We line with the asker's own name") {
     /* On IRC: bare nicks and the bang instead of the slash; the place keeps its @. */
     const std::string on_irc = command_dispatch(irc, "/help").value_or("");
     CHECK(on_irc.contains("\nWe Bob 1 2 — sposti l'emoji dal posto 1 al posto 2\n"));
-    CHECK(on_irc.contains("\nWe giocatore — parti per razziarlo\n"));
+    CHECK(on_irc.contains("\nWe giocatore (o !raid giocatore) — parti per razziarlo\n"));
     CHECK(on_irc.contains("We @TheConquister37 (o !avventura) — entri in @TheConquister37"));
     CHECK(help.contains("We @TheConquister37 (o /avventura) — entri in @TheConquister37"));
     CHECK(on_irc.contains("\n!addquote <testo> — "));
@@ -1544,8 +1544,8 @@ TEST_CASE("/buy is another way to write We yourname emoji, on Telegram and on IR
     CHECK(furniture_all(storage).count("irc:kio") == 1);
 }
 
-TEST_CASE("/give is another way to write We name emoji or We name palle") {
-    const TestPaths paths{"give-command-test"};
+TEST_CASE("/raid robs, /give makes a present of anything, /throw lands what is thrown") {
+    const TestPaths paths{"verbs-test"};
     AppConfig config;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
@@ -1558,12 +1558,39 @@ TEST_CASE("/give is another way to write We name emoji or We name palle") {
     storage.transaction([](StorageSession &session) {
         session.state().scores["tg:1"] = 1000;
         session.state().scores["tg:2"] = 1000;
+        session.state().furniture["tg:1"] = "💣🍕💣";
         session.state().furniture["tg:2"] = "🍕";
         return 0;
     });
+    const auto home_again = [&storage] {
+        static_cast<void>(raid_due(storage, std::int64_t{4'000'000'000}, RaidRules{}));
+    };
 
-    CHECK(command_is_for_bot("/give @Bob 🍕"));
-    CHECK(command_dispatch(alice, "/give").value_or("").starts_with("Uso: /give <giocatore> <emoji o palle>"));
+    for (const std::string_view verb : {"/raid", "/give", "/throw"}) {
+        CHECK(command_is_for_bot(std::format("{} @Bob 🍕", verb)));
+        CHECK(command_dispatch(alice, verb).value_or("").starts_with(std::format("Uso: {} <giocatore>", verb)));
+    }
+    /* Each verb holds to its meaning. */
+    CHECK(command_dispatch(alice, "/raid @Bob 🍕").value_or("").starts_with("Uso: /raid"));
+    CHECK(command_dispatch(alice, "/give @Bob").value_or("").starts_with("Uso: /give"));
+    CHECK(command_dispatch(alice, "/throw @Bob").value_or("").starts_with("Uso: /throw"));
+    CHECK(command_dispatch(alice, "/raid @Alice") == "Alice non puoi razziare te stesso.");
+    CHECK(command_dispatch(alice, "/give @Alice 🍕") == "Alice non puoi regalare a te stesso.");
+    CHECK(command_dispatch(alice, "/throw @Alice 💣") == "Alice non puoi lanciare a te stesso.");
+    CHECK(command_dispatch(alice, "/throw @Bob 🍕") == "Alice 🍕 non si lancia: per regalarla scrivi /give @Bob 🍕.");
+    CHECK(command_dispatch(alice, "/give @TheConquister37 500").value_or("").starts_with(
+        "Alice a @TheConquister37 non si regala niente"));
+
+    /* Given, the 💣 arrives as it is and hangs on his name. */
+    CHECK(command_dispatch(alice, "/give @Bob 💣").value_or("").starts_with("Alice parti per Bob con 💣 da regalare"));
+    home_again();
+    CHECK(furniture_all(storage).at("tg:2") == "🍕💣");
+    /* Thrown, the other one goes off. */
+    CHECK(command_dispatch(alice, "/throw @Bob 💣").value_or("").starts_with("Alice parti per Bob con 💣 da consegnare"));
+    home_again();
+    CHECK(furniture_all(storage).at("tg:2") != "🍕💣💣");
+    /* And palle are given as before. */
     CHECK(command_dispatch(alice, "/give @Bob 500").value_or("").starts_with("Alice parti per Bob con 500 palle"));
-    CHECK(command_dispatch(bob, "/give @Alice 🍕").value_or("").starts_with("Bob parti per Alice con 🍕"));
+    home_again();
+    CHECK(command_dispatch(alice, "/raid @Bob").value_or("").starts_with("Alice parti per Bob:"));
 }

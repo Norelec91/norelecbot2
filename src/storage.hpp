@@ -68,6 +68,8 @@ struct Raid {
     std::int64_t gift = 0;
     /* An emoji taken off his own name for the target, handed over like the palle. */
     std::string gift_emoji;
+    /* The emoji is a present: hung on the target as it is, even one that is meant to be thrown. */
+    bool intact = false;
 
     bool operator==(const Raid &) const = default;
 };

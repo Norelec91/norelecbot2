@@ -312,7 +312,7 @@ RaidRules raid_rules(const CommandContext &context) {
 }
 
 std::string handle_raid(const CommandContext &context, std::string_view target, std::int64_t gift = 0,
-                        std::string_view gift_emoji = {}) {
+                        std::string_view gift_emoji = {}, bool intact = false) {
     if (context.username.empty()) {
         return missing_username_reply();
     }
@@ -331,7 +331,8 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
         raid_rules(context),
         telegram_target ? RaidTargetKind::telegram : RaidTargetKind::irc,
         gift,
-        gift_emoji
+        gift_emoji,
+        intact
     );
     switch (result.status) {
     case RaidStatus::already_travelling:
@@ -375,10 +376,11 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
     }
     if (!gift_emoji.empty()) {
         return std::format(
-            "{} parti per {} con {} da consegnare: arrivi tra {}. Casa tua resta scoperta.",
+            "{} parti per {} con {} da {}: arrivi tra {}. Casa tua resta scoperta.",
             username,
             result.target,
             gift_emoji,
+            intact ? "regalare" : "consegnare",
             format_wait(result.seconds)
         );
     }
@@ -416,16 +418,27 @@ std::string expand_buy(const CommandContext &context, std::string message) {
     return std::format("{}{} {}", raid_trigger, own_name(context), command.argument);
 }
 
-/* "/give name emoji" and "/give name palle" are another way to write "We name emoji" and "We name
-   palle": what he takes along on the ride. Bare, it is left to its command, which says how to use it. */
-constexpr std::string_view give_command = "/give";
+/* The three things a ride to somebody can be, each with its command: "/raid name" robs him, "/give
+   name emoji|palle" makes him a present, "/throw name emoji" lands it on him. Each is a "We name ..."
+   line underneath, which the verb then holds to its own meaning. */
+enum class Verb { none, raid, give, throw_ };
 
-std::string expand_give(std::string message) {
+struct Verbed {
+    Verb verb = Verb::none;
+    std::string message;
+};
+
+/* Bare, a verb is left to its command, which says how to use it. */
+Verbed expand_verb(std::string message) {
     const ParsedCommand command = parse_command(message);
-    if (command.name != give_command || command.argument.empty()) {
-        return message;
+    const Verb verb = command.name == "/raid" ? Verb::raid
+        : command.name == "/give"             ? Verb::give
+        : command.name == "/throw"            ? Verb::throw_
+                                              : Verb::none;
+    if (verb == Verb::none || command.argument.empty()) {
+        return {Verb::none, std::move(message)};
     }
-    return std::format("{}{}", raid_trigger, command.argument);
+    return {verb, std::format("{}{}", raid_trigger, command.argument)};
 }
 
 /* The line that comes first when a line meant for home took him out of @TheConquister37. */
@@ -861,9 +874,11 @@ std::string handle_help(const CommandContext &context, std::string_view) {
          "da casa tua");
     line(std::format("We {} 🍕 3 (o {}buy 🍕 3)", me, slash), "la compri e la appendi nel posto 3");
     line(std::format("We {} 1 2", me), "sposti l'emoji dal posto 1 al posto 2");
-    line(std::format("We {}", other), "parti per razziarlo");
+    line(std::format("We {0} (o {1}raid {0})", other, slash), "parti per razziarlo");
     line(std::format("We {0} 500 (o {1}give {0} 500)", other, slash), "gli porti 500 palle");
     line(std::format("We {0} 🍕 (o {1}give {0} 🍕)", other, slash), "gli porti una 🍕");
+    line(std::format("We {0} 💣 (o {1}throw {0} 💣)", other, slash), "gli lanci una 💣, che gli esplode addosso");
+    line(std::format("{1}give {0} 💣", other, slash), "gli regali la 💣 intatta: la potrà usare lui");
     line(std::format("We {} 500", conquister_place), "bruci 500 palle");
     line(std::format("We {} 🍕", conquister_place), "bruci una 🍕");
     help += std::format("\nDa {0} le righe col tuo nome ti riportano prima a casa tua. "
@@ -1113,11 +1128,35 @@ std::string handle_buy(const CommandContext &context, std::string_view) {
     return std::format("Uso: {0}buy <emoji> [posto], per esempio {0}buy 🍕 o {0}buy 🍕 3.", command_prefix(context));
 }
 
-/* "/give" with nothing after it: what is taken along is the line that expands it. */
+/* How each verb is used, for whoever writes it bare or with the wrong thing after it. */
+std::string verb_usage(const CommandContext &context, Verb verb) {
+    const std::string_view slash = command_prefix(context);
+    const std::string_view other = context.user_id == 0 ? "giocatore" : "@giocatore";
+    switch (verb) {
+    case Verb::raid:
+        return std::format("Uso: {0}raid <giocatore>, per esempio {0}raid {1}: parti per razziarlo.", slash, other);
+    case Verb::give:
+        return std::format("Uso: {0}give <giocatore> <emoji o palle>, per esempio {0}give {1} 🍕 o {0}give {1} 500: "
+                           "gliele regali, anche una 💣, che arriva intatta.", slash, other);
+    case Verb::throw_:
+        return std::format("Uso: {0}throw <giocatore> <emoji da lanciare>, per esempio {0}throw {1} 💣: gli esplode "
+                           "addosso.", slash, other);
+    case Verb::none:
+        break;
+    }
+    return {};
+}
+
+std::string handle_raid_usage(const CommandContext &context, std::string_view) {
+    return verb_usage(context, Verb::raid);
+}
+
 std::string handle_give(const CommandContext &context, std::string_view) {
-    const bool irc = context.user_id == 0;
-    return std::format("Uso: {0}give <giocatore> <emoji o palle>, per esempio {0}give {1} 🍕 o {0}give {1} 500.",
-                       command_prefix(context), irc ? "giocatore" : "@giocatore");
+    return verb_usage(context, Verb::give);
+}
+
+std::string handle_throw(const CommandContext &context, std::string_view) {
+    return verb_usage(context, Verb::throw_);
 }
 
 /* "/buyballoon": temporary. The free 🎈 for whoever had no room for one when balloons became emoji. */
@@ -1194,7 +1233,9 @@ constexpr std::array commands{
     CommandDefinition{"/delquote", handle_delete_quote},
     CommandDefinition{"/debug", handle_debug},
     CommandDefinition{"/buy", handle_buy},
+    CommandDefinition{"/raid", handle_raid_usage},
     CommandDefinition{"/give", handle_give},
+    CommandDefinition{"/throw", handle_throw},
     CommandDefinition{"/buyballoon", handle_buy_balloon},
 };
 
@@ -1255,6 +1296,11 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
         if (event.no_room) {
             return std::format("{} {}{} non ha più posto per {}: te la riporti a casa tua. Torni in {} tra {}.",
                                raider, mention, target, event.gift_emoji, home, format_wait(event.seconds));
+        }
+        /* A present arrives as it is, whatever it would do if thrown. */
+        if (event.intact) {
+            return std::format("{} hai regalato {} a {}{}! Torni in {} tra {}.",
+                               raider, event.gift_emoji, mention, target, home, format_wait(event.seconds));
         }
         if (event.sent_back) {
             std::string blown;
@@ -1375,8 +1421,9 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
 
 std::optional<std::string> command_dispatch(const CommandContext &context, std::string_view text) {
     try {
-        const std::string expanded = expand_give(expand_buy(context, expand_adventure(text::trim(text))));
-        const std::string_view message = expanded;
+        const Verbed verbed = expand_verb(expand_buy(context, expand_adventure(text::trim(text))));
+        const std::string_view message = verbed.message;
+        const Verb verb = verbed.verb;
         CommandContext bound = context;
         std::string bound_key;
         const auto remember_sender = [&] {
@@ -1389,9 +1436,19 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
                 bound.player_key = bound_key;
             }
         };
+        /* Whether a name written after "We" is the sender himself. */
+        const auto names_me = [&](std::string_view target) {
+            const bool telegram = target.starts_with('@');
+            return !bound.player_key.empty() &&
+                names_player(context.storage, bound_key, telegram ? target.substr(1) : target,
+                             telegram ? RaidTargetKind::telegram : RaidTargetKind::irc);
+        };
         if (message == conquister_trigger) {
             if (!context.claims_allowed) {
                 return std::nullopt;
+            }
+            if (verb != Verb::none) {
+                return verb_usage(context, verb);
             }
             remember_sender();
             return handle_claim(bound, {});
@@ -1400,14 +1457,18 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
             if (!context.claims_allowed) {
                 return std::nullopt;
             }
+            if (verb == Verb::raid || verb == Verb::throw_) {
+                return verb_usage(context, verb);
+            }
             remember_sender();
             if (names_the_place(transfer->target)) {
+                if (verb == Verb::give) {
+                    return std::format("{0} a {1} non si regala niente: per bruciare palle scrivi We {1} {2}.",
+                                       context.username, conquister_place, transfer->amount);
+                }
                 return handle_burn(bound, transfer->amount);
             }
-            const bool telegram = transfer->target.starts_with('@');
-            if (!bound.player_key.empty() &&
-                names_player(context.storage, bound_key, telegram ? transfer->target.substr(1) : transfer->target,
-                             telegram ? RaidTargetKind::telegram : RaidTargetKind::irc)) {
+            if (names_me(transfer->target)) {
                 return std::format("{} non puoi portare palle a te stesso.", context.username);
             }
             return handle_gift(bound, *transfer);
@@ -1416,14 +1477,14 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
             if (!context.claims_allowed) {
                 return std::nullopt;
             }
+            if (verb != Verb::none) {
+                return verb_usage(context, verb);
+            }
             remember_sender();
             if (context.username.empty()) {
                 return missing_username_reply();
             }
-            const bool telegram = move->target.starts_with('@');
-            const std::string_view name = telegram ? move->target.substr(1) : move->target;
-            if (bound.player_key.empty() || !names_player(context.storage, bound_key, name,
-                    telegram ? RaidTargetKind::telegram : RaidTargetKind::irc)) {
+            if (!names_me(move->target)) {
                 return std::format("{} puoi spostare solo le emoji sul tuo nome.", context.username);
             }
             return handle_furniture_move(bound, *move);
@@ -1432,14 +1493,23 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
             if (!context.claims_allowed) {
                 return std::nullopt;
             }
+            if (verb == Verb::raid) {
+                return verb_usage(context, verb);
+            }
             remember_sender();
             if (text::emoji_count(carried->emoji) != std::optional<std::size_t>{1}) {
                 return std::format("{} una emoji per volta.", context.username);
             }
-            const bool telegram = carried->target.starts_with('@');
-            const std::string_view name = telegram ? carried->target.substr(1) : carried->target;
-            if (!bound.player_key.empty() && names_player(context.storage, bound_key, name,
-                    telegram ? RaidTargetKind::telegram : RaidTargetKind::irc)) {
+            const Power *power = power_of(carried->emoji);
+            if (verb == Verb::throw_ && (power == nullptr || power->kind != PowerKind::thrown)) {
+                return std::format("{} {} non si lancia: per regalarla scrivi {}give {} {}.", context.username,
+                                   carried->emoji, command_prefix(context), carried->target, carried->emoji);
+            }
+            if (names_me(carried->target)) {
+                if (verb != Verb::none) {
+                    return std::format("{} non puoi {} a te stesso.", context.username,
+                                       verb == Verb::give ? "regalare" : "lanciare");
+                }
                 return handle_furniture(bound, carried->emoji, carried->position);
             }
             /* The slot is his choice only on his own name: elsewhere the emoji takes the first free one. */
@@ -1448,16 +1518,29 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
                                    context.username, carried->target, carried->emoji);
             }
             if (names_the_place(carried->target)) {
+                if (verb == Verb::give) {
+                    return std::format("{0} a {1} non si regala niente: per bruciare {2} scrivi We {1} {2}.",
+                                       context.username, conquister_place, carried->emoji);
+                }
                 return handle_emoji_burn(bound, carried->emoji);
             }
-            return handle_raid(bound, carried->target, 0, carried->emoji);
+            return handle_raid(bound, carried->target, 0, carried->emoji, verb == Verb::give);
         }
         if (const std::string_view target = raid_target(message); !target.empty()) {
             if (!context.claims_allowed) {
                 return std::nullopt;
             }
+            if (verb == Verb::give || verb == Verb::throw_) {
+                return verb_usage(context, verb);
+            }
             remember_sender();
+            if (verb == Verb::raid && names_me(target)) {
+                return std::format("{} non puoi razziare te stesso.", context.username);
+            }
             return handle_raid(bound, target);
+        }
+        if (verb != Verb::none) {
+            return verb_usage(context, verb);
         }
         if (message.empty()) {
             return std::nullopt;

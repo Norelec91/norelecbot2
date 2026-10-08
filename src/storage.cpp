@@ -128,6 +128,7 @@ std::vector<Raid> parse_raids(const Json &state) {
             .loot = integer(entry.at("loot")),
             .gift = entry.contains("gift") ? integer(entry.at("gift")) : 0,
             .gift_emoji = entry.contains("gift_emoji") ? entry.at("gift_emoji").get<std::string>() : std::string{},
+            .intact = entry.contains("intact") && entry.at("intact").get<bool>(),
         });
     }
     return raids;
@@ -265,6 +266,7 @@ Json state_to_json(const ConquisterState &state) {
             {"loot", raid.loot},
             {"gift", raid.gift},
             {"gift_emoji", raid.gift_emoji},
+            {"intact", raid.intact},
         };
     });
     Json pregnancies = Json::array();

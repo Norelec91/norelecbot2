@@ -297,6 +297,8 @@ struct RaidEvent {
        target's name was full on arrival. */
     std::string gift_emoji;
     bool no_room = false;
+    /* delivered: the emoji was a present, hung as it is, even one that is meant to be thrown. */
+    bool intact = false;
     /* delivered, with a 💣: the emoji it took off the target's name, empty when it found nothing to take. */
     std::vector<std::string> blown{};
     /* The 💣 was a dud: what it took is the raider's own, among what he had with him. */
@@ -547,7 +549,9 @@ struct FurnitureBurnResult {
     /* Palle to hand over on arrival instead of robbing the target. */
     std::int64_t gift = 0,
     /* An emoji of his own to hang on the target on arrival instead of robbing him. */
-    std::string_view gift_emoji = {}
+    std::string_view gift_emoji = {},
+    /* The emoji is given, not thrown: it is hung as it is, even one that would land on him. */
+    bool intact = false
 );
 
 /* Settles the raids that have reached the target or come home by now. */

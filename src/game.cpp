@@ -1535,7 +1535,8 @@ RaidResult raid_start(
     const RaidRules &rules,
     RaidTargetKind target_kind,
     std::int64_t gift,
-    std::string_view gift_emoji
+    std::string_view gift_emoji,
+    bool intact
 ) {
     const RaidResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
@@ -1618,8 +1619,8 @@ RaidResult raid_start(
                 outcome.status = RaidStatus::no_such_emoji;
                 return outcome;
             }
-            /* What is thrown is not hung: it needs no room on the target's name. */
-            if (!is_thrown(gift_emoji) && !has_room(state, *known, rules.furniture_limit)) {
+            /* What is thrown is not hung: it needs no room on the target's name. A gift is hung, whatever it is. */
+            if ((intact || !is_thrown(gift_emoji)) && !has_room(state, *known, rules.furniture_limit)) {
                 outcome.status = RaidStatus::no_room;
                 return outcome;
             }
@@ -1645,6 +1646,7 @@ RaidResult raid_start(
             .loot = 0,
             .gift = gift,
             .gift_emoji = std::string{gift_emoji},
+            .intact = intact,
         });
         return outcome;
     });
@@ -2037,13 +2039,15 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                     }
                     if (!raid.gift_emoji.empty()) {
                         event.gift_emoji = raid.gift_emoji;
+                        event.intact = raid.intact;
                         /* Poo splatters on arrival, making the target "lo smerdato", and is gone; any
                            other emoji is hung, and a name that filled up meanwhile sends it back the
-                           way it came. */
-                        if (is_power(raid.gift_emoji, power::seed) && !at_home(state, raid.target)) {
+                           way it came. One that is given rather than thrown is hung too, as it is. */
+                        if (is_thrown(raid.gift_emoji) && !raid.intact && is_power(raid.gift_emoji, power::seed) &&
+                            !at_home(state, raid.target)) {
                             /* It takes somebody to land on: with the owner out, it goes back as it came. */
                             event.nobody_home = true;
-                        } else if (is_thrown(raid.gift_emoji)) {
+                        } else if (is_thrown(raid.gift_emoji) && !raid.intact) {
                             const std::string thrown = raid.gift_emoji;
                             /* The 📮 at the house may send it back: it then lands on the raider's own
                                house, as it is, and no 📮 of his sends it on again. */
