@@ -1688,21 +1688,6 @@ RaidResult raid_start(
             outcome.seconds = std::max(position::shortest_travel,
                                        outcome.seconds * 100 / (100 + rockets * rules.rocket_percent));
         }
-        /* A raider who comes for the same house again so soon pays the salt: every 🧂 there earns its
-           owner a share of the palle he has. Bringing something is no raid, and is not remembered. */
-        std::erase_if(state.knocks, [now](const Knock &knock) { return now - knock.at > salt_seconds; });
-        if (gift == 0 && gift_emoji.empty()) {
-            const bool again = std::ranges::any_of(state.knocks, [&](const Knock &knock) {
-                return knock.raider == username && knock.target == *known;
-            });
-            const std::int64_t share = copies_of(state, *known, power::salt) * std::max<std::int64_t>(rules.salt_percent, 0);
-            if (again && share > 0) {
-                const std::int64_t owned = counter(state.scores, *known);
-                outcome.salted = std::max<std::int64_t>(owned, 0) * share / 100;
-                state.scores[*known] = owned + outcome.salted;
-            }
-            state.knocks.push_back(Knock{.raider = username, .target = *known, .at = now});
-        }
         leave_home(state, username);
         state.raids.push_back(Raid{
             .raider = username,
@@ -1718,8 +1703,8 @@ RaidResult raid_start(
     });
 
     if (result.status == RaidStatus::started) {
-        log_info("raid started user={} target={} travel={} gift={} emoji={} salted={}", username, result.target,
-                 result.seconds, gift, gift_emoji, result.salted);
+        log_info("raid started user={} target={} travel={} gift={} emoji={}", username, result.target,
+                 result.seconds, gift, gift_emoji);
     }
     if (result.status == RaidStatus::left_place) {
         log_info("left the place user={} earned={}", username, result.earned);
@@ -2042,6 +2027,30 @@ Landing land(StorageSession &session, ConquisterState &state, std::string_view t
 }
 }
 
+namespace {
+
+/* A raider who reaches the same house again so soon after the last time pays the salt: every 🧂 there
+   takes a share of his own palle, all of them at most, and hands it to the owner. Nothing new is made.
+   Only raids that got there count, and once he has paid the house starts counting him afresh. */
+std::int64_t salt(ConquisterState &state, const Raid &raid, std::int64_t now, const RaidRules &rules) {
+    std::erase_if(state.knocks, [now](const Knock &knock) { return now - knock.at > salt_seconds; });
+    const auto same = [&raid](const Knock &knock) { return knock.raider == raid.raider && knock.target == raid.target; };
+    const std::int64_t share = std::min<std::int64_t>(
+        100, copies_of(state, raid.target, power::salt) * std::max<std::int64_t>(rules.salt_percent, 0));
+    if (share <= 0 || !std::ranges::any_of(state.knocks, same)) {
+        state.knocks.push_back(Knock{.raider = raid.raider, .target = raid.target, .at = now});
+        return 0;
+    }
+    std::erase_if(state.knocks, same);
+    const std::int64_t his = std::max<std::int64_t>(counter(state.scores, raid.raider), 0);
+    const std::int64_t paid = his * share / 100;
+    state.scores[raid.raider] = his - paid;
+    state.scores[raid.target] = counter(state.scores, raid.target) + paid;
+    return paid;
+}
+
+}
+
 std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRules &rules) {
     const std::vector<RaidEvent> events = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
@@ -2066,6 +2075,7 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 /* Whoever comes to rob may meet the 🦖 of the house, whatever else happens to him there:
                    it may eat one of the emoji he has with him, never a 🎈. */
                 if (raid.gift == 0 && raid.gift_emoji.empty()) {
+                    event.salted = salt(state, raid, now, rules);
                     const std::int64_t jaws = std::min<std::int64_t>(
                         100, copies_of(state, raid.target, power::dino) * std::max<std::int64_t>(rules.dino_percent, 0));
                     if (jaws > 0 && static_cast<std::int64_t>(session.random_index(100)) < jaws) {
@@ -2214,6 +2224,9 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
         }
         if (!event.eaten.empty()) {
             log_info("raid eaten user={} target={} emoji={}", event.raider, event.target, event.eaten);
+        }
+        if (event.salted > 0) {
+            log_info("raid salted user={} target={} paid={}", event.raider, event.target, event.salted);
         }
         switch (event.kind) {
         case RaidEvent::Kind::stolen:

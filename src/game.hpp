@@ -67,8 +67,8 @@ inline constexpr Power seed{"💦", PowerKind::thrown, "when it lands on somebod
 inline constexpr Power hen{"🐔", PowerKind::home, "every minute", "each lays palle for its owner, whether he is in or out"};
 inline constexpr Power dino{"🦖", PowerKind::home, "when a raider reaches the house",
                             "each may eat one of the emoji the raider has with him, robbed or not"};
-inline constexpr Power salt{"🧂", PowerKind::home, "when the same raider sets off for the house again",
-                            "each earns its owner a share of his palle, if the last time was not long ago"};
+inline constexpr Power salt{"🧂", PowerKind::home, "when the same raider reaches the house again",
+                            "each makes him hand over a share of his own palle, if the last time was not long ago"};
 inline constexpr Power ice{"🧊", PowerKind::thrown, "when it lands",
                            "freezes whoever it hits for a while: no entering the place, no setting off"};
 inline constexpr Power fire{"🔥", PowerKind::carried, "when a 🧊 hits him",
@@ -89,7 +89,7 @@ inline constexpr std::array powers{power::pleading, power::rocket, power::bolt, 
                                    power::ice,      power::fire,    power::hourglass,
                                    power::dino,     power::salt};
 
-/* How long a 🧂 remembers a raider: one who sets off for the same house again within it pays the salt. */
+/* How long a 🧂 remembers a raider: one who reaches the same house again within it pays the salt. */
 inline constexpr std::int64_t salt_seconds = 5 * 60;
 
 /* Whether an emoji is that power's, drawn in colour or not and whatever the tone of its skin. */
@@ -247,8 +247,9 @@ struct RaidRules {
     /* The chance, in percent, that each 🦖 at the house gives of eating one of the emoji the raider has
        with him: they add up. */
     std::int64_t dino_percent = 0;
-    /* The share of his own palle each 🧂 at the house earns the target when the same raider sets off for
-       him again within salt_seconds, in percent: they add up. */
+    /* The share of his own palle each 🧂 at the house makes a raider hand over to the target when he
+       reaches him again within salt_seconds of the last time, in percent: they add up, to all of them at
+       most. */
     std::int64_t salt_percent = 0;
     /* How long a player hit by a 🧊 stays frozen. */
     std::int64_t frozen_seconds = 300;
@@ -268,8 +269,6 @@ struct RaidResult {
     int zodiac_percent = 100;
     /* What is left after the palle taken along were picked up, or what there was when they were too few. */
     std::int64_t score = 0;
-    /* started: what the 🧂 of the house earned the target, because he came for him again so soon. */
-    std::int64_t salted = 0;
 };
 
 struct RaidEvent {
@@ -292,6 +291,8 @@ struct RaidEvent {
     std::string boarded{};
     /* stolen: the emoji he had with him that a 🦖 at the house ate; empty when none. */
     std::string eaten{};
+    /* stolen: what the 🧂 of the house made him hand over, for coming again so soon; 0 when nothing. */
+    std::int64_t salted = 0;
     /* stolen: what the 🥺 on the target's name talked the raider out of, and by how much in percent. */
     std::int64_t spared = 0;
     std::int64_t pleaded_percent = 0;

@@ -409,15 +409,11 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
             format_wait(result.seconds)
         );
     }
-    const std::string salted = result.salted > 0
-        ? std::format(" Ci torni troppo presto: il 🧂 di {} gli fa guadagnare {}.", result.target, palle(result.salted))
-        : std::string{};
     return std::format(
-        "{} parti per {}: arrivi tra {}. Casa tua resta scoperta.{}",
+        "{} parti per {}: arrivi tra {}. Casa tua resta scoperta.",
         username,
         result.target,
-        format_wait(result.seconds),
-        salted
+        format_wait(result.seconds)
     );
 }
 
@@ -916,8 +912,8 @@ std::string power_help(const Power &power, const AppConfig &config) {
         return std::format("ognuno ha il {}% di mangiare a chi ti razzia un'emoji che ha con sé", config.dino_percent);
     }
     if (is(power::salt)) {
-        return std::format("se la stessa persona ti razzia di nuovo entro {}, guadagni il {}% delle tue palle per ognuno",
-                           format_wait(salt_seconds), config.salt_percent);
+        return std::format("se la stessa persona arriva a razziarti di nuovo entro {}, ti dà il {}% delle sue palle "
+                           "per ognuno, fino a tutte", format_wait(salt_seconds), config.salt_percent);
     }
     if (is(power::bolt)) {
         return std::format("+{}% di palle in {} per ognuno", config.lightning_percent, conquister_place);
@@ -1370,6 +1366,10 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
         : std::string{};
     if (!event.eaten.empty()) {
         alarm += std::format("Il 🦖 di {}{} ti mangia {}.\n", mention, event.target, event.eaten);
+    }
+    if (event.salted > 0) {
+        alarm += std::format("Ci torni troppo presto: il 🧂 di {}{} ti costa {}, che vanno a lui.\n", mention,
+                             event.target, palle(event.salted));
     }
     if (event.balloon_held) {
         return alarm + std::format(

@@ -2157,35 +2157,56 @@ TEST_CASE("a 🦖 at the house eats one of the emoji the raider has with him") {
     CHECK(furniture_all(storage).at("alice") == "🎈[]🍕");
 }
 
-TEST_CASE("every 🧂 at the house earns its owner a share of his palle when the same raider comes again soon") {
+TEST_CASE("a raider who reaches a house with 🧂 again soon hands over a share of his palle, all of them at most") {
     const TestPaths paths{"salt-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":null,"scores":{"alice":0,"bob":0,"lucy":1000},"quotes_added":{},)"
+        file << R"({"current":null,"scores":{"alice":1000,"bob":1000,"lucy":0},"quotes_added":{},)"
              << R"("ids":{"alice":0,"bob":1,"lucy":90000},"furniture":{"lucy":"🧂🧂"}})";
     }
     Storage storage{paths.conquister, paths.quotes};
     RaidRules rules = quick_rides();
     rules.salt_percent = 10;
+    /* So short a road buys nothing: only the salt moves palle. */
+    rules.loot_divisor = 1000000;
     const auto score = [&storage](const char *player) {
         return storage.transaction([player](StorageSession &session) { return session.state().scores.at(player); });
     };
-    /* Sets off for lucy and turns around at once, home a second later. */
-    const auto knock = [&](const char *raider, std::int64_t now) {
-        const RaidResult result = raid_start(storage, 0, raider, "lucy", now, rules);
-        REQUIRE(result.status == RaidStatus::started);
-        REQUIRE(raid_start(storage, 0, raider, raider, now + 1, rules).status == RaidStatus::coming_home);
-        static_cast<void>(raid_due(storage, now + 2, rules));
-        return result.salted;
+    /* A whole raid on lucy, with nothing to steal: five seconds there, five back. What the 🧂 took. */
+    const auto raid = [&](const char *raider, std::int64_t now) {
+        REQUIRE(raid_start(storage, 0, raider, "lucy", now, rules).status == RaidStatus::started);
+        const std::vector<RaidEvent> arrival = raid_due(storage, now + 5, rules);
+        REQUIRE(arrival.size() == 1);
+        REQUIRE(raid_due(storage, now + 10, rules).size() == 1);
+        return arrival[0].salted;
     };
 
     /* The first time is nothing, and so is somebody else's first time. */
-    CHECK(knock("alice", 0) == 0);
-    CHECK(knock("bob", 10) == 0);
-    /* alice again within five minutes: two 🧂 earn lucy a fifth of what she has. */
-    CHECK(knock("alice", 100) == 200);
-    CHECK(score("lucy") == 1200);
+    CHECK(raid("alice", 0) == 0);
+    CHECK(raid("bob", 20) == 0);
+    /* Setting off and turning back before getting there does not count. */
+    REQUIRE(raid_start(storage, 0, "alice", "lucy", 40, rules).status == RaidStatus::started);
+    REQUIRE(raid_start(storage, 0, "alice", "alice", 41, rules).status == RaidStatus::coming_home);
+    REQUIRE(raid_due(storage, 42, rules).size() == 1);
+    /* alice gets there again within five minutes: two 🧂 make her hand lucy a fifth of what she has.
+       Nothing new is made. */
+    CHECK(raid("alice", 100) == 200);
+    CHECK(score("alice") == 800);
+    CHECK(score("lucy") == 200);
+    /* Once paid, she starts afresh: the next time is a first time again, the one after is not. */
+    CHECK(raid("alice", 120) == 0);
+    CHECK(raid("alice", 140) == 160);
+    CHECK(score("alice") == 640);
     /* More than five minutes after her last time, lucy has forgotten her. */
-    CHECK(knock("alice", 401) == 0);
-    CHECK(score("lucy") == 1200);
+    CHECK(raid("alice", 200) == 0);
+    CHECK(raid("alice", 600) == 0);
+
+    /* Twelve 🧂 would take more than she has: they take all of it, and no more. */
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["lucy"] = "🧂🧂🧂🧂🧂🧂🧂🧂🧂🧂🧂🧂";
+        return 0;
+    });
+    CHECK(raid("alice", 620) == 640);
+    CHECK(score("alice") == 0);
+    CHECK(score("lucy") == 1000);
 }

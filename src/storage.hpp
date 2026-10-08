@@ -97,7 +97,8 @@ struct Child {
     bool operator==(const Child &) const = default;
 };
 
-/* A raid that set off: who went for whom, and when. Kept only as long as a 🧂 can still remember it. */
+/* A raid that reached the house: who came for whom, and when. Kept only as long as a 🧂 can still
+   remember it. */
 struct Knock {
     std::string raider;
     std::string target;
@@ -156,7 +157,7 @@ struct ConquisterState {
     std::vector<Child> children;
     /* Up to when the 🐔 have been paid for their eggs; 0 before the first time. */
     std::int64_t eggs_at = 0;
-    /* The raids that set off lately, oldest first. */
+    /* The raids that reached a house lately and were not paid for with salt yet, oldest first. */
     std::vector<Knock> knocks{};
 
     bool operator==(const ConquisterState &) const = default;

@@ -60,7 +60,7 @@ struct AppConfig {
     static constexpr int default_mating_percent = 50;
     /* The chance, in percent, that each 🦖 at a house eats one of the emoji a raider has with him. */
     static constexpr int default_dino_percent = 10;
-    /* The share of his own palle each 🧂 at a house earns its owner when the same raider comes again soon. */
+    /* The share of his own palle each 🧂 at a house makes the same raider, coming again soon, hand over. */
     static constexpr int default_salt_percent = 10;
     /* How long a player hit by a 🧊 stays frozen: five minutes. */
     static constexpr int default_frozen_seconds = 300;
