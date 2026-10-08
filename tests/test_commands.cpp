@@ -677,7 +677,7 @@ TEST_CASE("the help lists every We line with the asker's own name") {
     CHECK_FALSE(help.contains("⚡"));
     CHECK(help.contains("\nWe @Alice — torni a casa tua, dal posto o dal viaggio\n"));
     CHECK(help.ends_with("\n/link <nome> — collega account Telegram e nick IRC Azzurra registrato"));
-    CHECK(help.contains("\nWe @giocatore 500 — gli porti 500 palle\n"));
+    CHECK(help.contains("\nWe @giocatore 500 (o /give @giocatore 500) — gli porti 500 palle\n"));
     CHECK(help.contains("\nWe @TheConquister37 🍕 — bruci una 🍕\n"));
     CHECK(help.contains("\n/leaderboard — classifica\n"));
     CHECK(help.contains("\n/profile [nome] — il tuo profilo o quello di un altro\n"));
@@ -1541,4 +1541,28 @@ TEST_CASE("/buy is another way to write We yourname emoji, on Telegram and on IR
     CHECK(furniture_all(storage).at("tg:1") == "🍕[]🍩");
     CHECK(command_dispatch(kio, "/buy 🍕").value_or("").contains("hai speso"));
     CHECK(furniture_all(storage).count("irc:kio") == 1);
+}
+
+TEST_CASE("/give is another way to write We name emoji or We name palle") {
+    const TestPaths paths{"give-command-test"};
+    AppConfig config;
+    config.starter_balloon = false;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{config.conquister_path, config.quotes_path};
+    const CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
+    const CommandContext bob{.storage = storage, .config = config, .user_id = 2, .username = "Bob"};
+    REQUIRE(command_dispatch(alice, "/profile"));
+    REQUIRE(command_dispatch(bob, "/profile"));
+    storage.transaction([](StorageSession &session) {
+        session.state().scores["tg:1"] = 1000;
+        session.state().scores["tg:2"] = 1000;
+        session.state().furniture["tg:2"] = "🍕";
+        return 0;
+    });
+
+    CHECK(command_is_for_bot("/give @Bob 🍕"));
+    CHECK(command_dispatch(alice, "/give").value_or("").starts_with("Uso: /give <giocatore> <emoji o palle>"));
+    CHECK(command_dispatch(alice, "/give @Bob 500").value_or("").starts_with("Alice parti per Bob con 500 palle"));
+    CHECK(command_dispatch(bob, "/give @Alice 🍕").value_or("").starts_with("Bob parti per Alice con 🍕"));
 }

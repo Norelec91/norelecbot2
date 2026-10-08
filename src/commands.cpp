@@ -416,6 +416,18 @@ std::string expand_buy(const CommandContext &context, std::string message) {
     return std::format("{}{} {}", raid_trigger, own_name(context), command.argument);
 }
 
+/* "/give name emoji" and "/give name palle" are another way to write "We name emoji" and "We name
+   palle": what he takes along on the ride. Bare, it is left to its command, which says how to use it. */
+constexpr std::string_view give_command = "/give";
+
+std::string expand_give(std::string message) {
+    const ParsedCommand command = parse_command(message);
+    if (command.name != give_command || command.argument.empty()) {
+        return message;
+    }
+    return std::format("{}{}", raid_trigger, command.argument);
+}
+
 /* The line that comes first when a line meant for home took him out of @TheConquister37. */
 std::string departure_line(const CommandContext &context, const Departure &departure, std::int64_t now) {
     if (!departure.left) {
@@ -850,8 +862,8 @@ std::string handle_help(const CommandContext &context, std::string_view) {
     line(std::format("We {} 🍕 3 (o {}buy 🍕 3)", me, slash), "la compri e la appendi nel posto 3");
     line(std::format("We {} 1 2", me), "sposti l'emoji dal posto 1 al posto 2");
     line(std::format("We {}", other), "parti per razziarlo");
-    line(std::format("We {} 500", other), "gli porti 500 palle");
-    line(std::format("We {} 🍕", other), "gli porti una 🍕");
+    line(std::format("We {0} 500 (o {1}give {0} 500)", other, slash), "gli porti 500 palle");
+    line(std::format("We {0} 🍕 (o {1}give {0} 🍕)", other, slash), "gli porti una 🍕");
     line(std::format("We {} 500", conquister_place), "bruci 500 palle");
     line(std::format("We {} 🍕", conquister_place), "bruci una 🍕");
     help += std::format("\nDa {0} le righe col tuo nome ti riportano prima a casa tua. "
@@ -1101,6 +1113,13 @@ std::string handle_buy(const CommandContext &context, std::string_view) {
     return std::format("Uso: {0}buy <emoji> [posto], per esempio {0}buy 🍕 o {0}buy 🍕 3.", command_prefix(context));
 }
 
+/* "/give" with nothing after it: what is taken along is the line that expands it. */
+std::string handle_give(const CommandContext &context, std::string_view) {
+    const bool irc = context.user_id == 0;
+    return std::format("Uso: {0}give <giocatore> <emoji o palle>, per esempio {0}give {1} 🍕 o {0}give {1} 500.",
+                       command_prefix(context), irc ? "giocatore" : "@giocatore");
+}
+
 /* "/buyballoon": temporary. The free 🎈 for whoever had no room for one when balloons became emoji. */
 std::string handle_buy_balloon(const CommandContext &context, std::string_view) {
     if (context.username.empty()) {
@@ -1175,6 +1194,7 @@ constexpr std::array commands{
     CommandDefinition{"/delquote", handle_delete_quote},
     CommandDefinition{"/debug", handle_debug},
     CommandDefinition{"/buy", handle_buy},
+    CommandDefinition{"/give", handle_give},
     CommandDefinition{"/buyballoon", handle_buy_balloon},
 };
 
@@ -1355,7 +1375,7 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
 
 std::optional<std::string> command_dispatch(const CommandContext &context, std::string_view text) {
     try {
-        const std::string expanded = expand_buy(context, expand_adventure(text::trim(text)));
+        const std::string expanded = expand_give(expand_buy(context, expand_adventure(text::trim(text))));
         const std::string_view message = expanded;
         CommandContext bound = context;
         std::string bound_key;
