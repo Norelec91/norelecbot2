@@ -32,8 +32,6 @@ struct Landing {
     bool backfired = false;
     /* A ☢️ made the victim start over. */
     bool reset = false;
-    /* A 🌀 flung the victim far away. */
-    bool flung = false;
     /* A 💦 left the victim expecting: the seconds until the child is born. */
     std::int64_t expecting = 0;
     /* A 🧊 froze the victim for this many seconds; his 🔥 shortened it, or melted it away. */
@@ -48,8 +46,6 @@ Landing land(StorageSession &session, ConquisterState &state, std::string_view t
 std::string worn(const ConquisterState &state, const std::string &player);
 /* Hit by a 💩 and not clean yet. */
 bool is_smeared(const ConquisterState &state, const std::string &player, std::int64_t now);
-/* Flung far away by a 🌀. */
-bool is_flung(const ConquisterState &state, const std::string &player);
 /* Where the emoji with a power in a slot is. */
 Whereabouts site_of(const ConquisterState &state, const std::string &player, std::size_t slot, const Power &power);
 /* Hands a player the 🎈 everybody starts with, once, if he has none and a free slot. */
@@ -210,10 +206,6 @@ Settlement leave_place(ConquisterState &state, std::int64_t now, zodiac::Overrid
 /* Seconds until a player hit by a 🧊 thaws; 0 when he is not frozen. */
 std::int64_t frozen_for(const ConquisterState &state, const std::string &player, std::int64_t now) {
     return std::max<std::int64_t>(counter(state.frozen, player) - now, 0);
-}
-
-bool is_flung(const ConquisterState &state, const std::string &player) {
-    return state.flung.find(player) != state.flung.end();
 }
 
 Whereabouts whereabouts(const ConquisterState &state, const std::string &player) {
@@ -637,10 +629,6 @@ ClaimResult conquister_claim(
             outcome.status = ClaimStatus::already_held;
             return outcome;
         }
-        if (is_flung(state, username)) {
-            outcome.status = ClaimStatus::too_far;
-            return outcome;
-        }
         if (const std::int64_t wait = frozen_for(state, username, now); wait > 0) {
             outcome.status = ClaimStatus::frozen;
             outcome.penalty_seconds = wait;
@@ -732,9 +720,6 @@ ClaimResult conquister_claim(
     case ClaimStatus::travelling:
         log_info("claim refused user={} travelling={}", username, result.travel_seconds);
         break;
-    case ClaimStatus::too_far:
-        log_info("claim refused user={} flung", username);
-        break;
     case ClaimStatus::frozen:
         log_info("claim refused user={} frozen={}", username, result.penalty_seconds);
         break;
@@ -773,7 +758,6 @@ Profile profile_from(ConquisterState &state, const std::string &key, std::int64_
     profile.name = display_name(state, key);
     profile.furniture = shown_furniture(state, key);
     profile.smeared = is_smeared(state, key, now);
-    profile.flung = is_flung(state, key);
     profile.hens = copies_of(state, key, power::hen);
     profile.frozen_for = frozen_for(state, key, now);
     profile.on_telegram = counter(state.telegram_ids, key) != 0;
@@ -1311,8 +1295,6 @@ void start_over(ConquisterState &state) {
     state.cooldowns.clear();
     state.smeared.clear();
     state.stayed.clear();
-    /* And where he first lived: nobody is far away any more. */
-    state.flung.clear();
     state.frozen.clear();
     state.pregnancies.clear();
     state.children.clear();
@@ -1359,11 +1341,6 @@ FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, 
             outcome.status = FurnitureBurnStatus::travelling;
             return outcome;
         }
-        /* The place is a year of road away for him too, unless he is already standing in it. */
-        if (is_flung(state, player)) {
-            outcome.status = FurnitureBurnStatus::too_far;
-            return outcome;
-        }
         /* A child is neither burnt like an emoji nor left at the place: it stays until it leaves by itself. */
         if (!take_emoji(state, player, emoji)) {
             outcome.status = FurnitureBurnStatus::not_owned;
@@ -1382,7 +1359,6 @@ FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, 
             const std::string holder = state.current->username;
             Landing landing = land(session, state, emoji, player, holder, Whereabouts::conquister, now, rules);
             outcome.backfired = landing.backfired;
-            outcome.flung = landing.flung;
             outcome.expecting = landing.expecting;
             outcome.froze = landing.froze;
             outcome.melted = landing.melted;
@@ -1401,27 +1377,6 @@ FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, 
     } else if (result.status == FurnitureBurnStatus::burned) {
         log_info("emoji burned user={} emoji={} hit={}", player, emoji, result.hit);
     }
-    return result;
-}
-
-RecallResult player_recall(Storage &storage, std::string_view name, RaidTargetKind platform) {
-    const RecallResult result = storage.transaction([&](StorageSession &session) {
-        ConquisterState &state = session.state();
-        RecallResult outcome;
-        const std::optional<std::string> key = player_by_name(state, name, platform);
-        if (!key) {
-            outcome.status = RecallStatus::unknown;
-            return outcome;
-        }
-        outcome.name = display_name(state, *key);
-        if (!is_flung(state, *key)) {
-            outcome.status = RecallStatus::not_flung;
-            return outcome;
-        }
-        state.flung.erase(*key);
-        return outcome;
-    });
-    log_info("recall name={} status={}", name, static_cast<int>(result.status));
     return result;
 }
 
@@ -1551,10 +1506,6 @@ BurnResult palle_burn(Storage &storage, const std::string &player, std::int64_t 
             outcome.status = BurnStatus::travelling;
             return outcome;
         }
-        if (is_flung(state, player)) {
-            outcome.status = BurnStatus::too_far;
-            return outcome;
-        }
         if (amount <= 0) {
             outcome.status = BurnStatus::invalid_amount;
             return outcome;
@@ -1678,10 +1629,6 @@ RaidResult raid_start(
         const position::Point home = position::coordinates_of(player_id(session, state, username));
         const position::Point theirs = position::coordinates_of(player_id(session, state, *known));
         outcome.seconds = position::travel_seconds(position::distance(home, theirs), rules.travel_divisor);
-        /* Whoever a 🌀 flung away is a year of road from everybody, whichever of the two he is. */
-        if (is_flung(state, username) || is_flung(state, *known)) {
-            outcome.seconds = flung_seconds;
-        }
         /* The 🚀 still on his name as he leaves speed up both legs; one carried as a gift does not. */
         const std::int64_t rockets = copies_of(state, username, power::rocket);
         if (rockets > 0 && rules.rocket_percent > 0) {
@@ -2002,13 +1949,6 @@ Landing land(StorageSession &session, ConquisterState &state, std::string_view t
         session.backup(std::format("before-reset-{}", now));
         start_over(state, victim, now);
         landing.reset = true;
-    } else if (is_power(thrown, power::vortex)) {
-        /* Wherever he was, he is far from it now: out of the place, paid for the time he held it. */
-        if (whereabouts(state, victim) == Whereabouts::conquister) {
-            static_cast<void>(leave_place(state, now, rules.signs));
-        }
-        state.flung[victim] = now;
-        landing.flung = true;
     } else if (is_power(thrown, power::seed)) {
         const std::int64_t wait = std::max<std::int64_t>(rules.pregnancy_seconds, 0);
         state.pregnancies.push_back(Pregnancy{.mother = victim, .father = thrower, .due = now + wait});
@@ -2128,7 +2068,6 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                             raid.gift_emoji.clear();
                             event.backfired = landing.backfired;
                             event.reset = landing.reset;
-                            event.flung = landing.flung;
                             event.expecting = landing.expecting;
                             event.froze = landing.froze;
                             event.melted = landing.melted;

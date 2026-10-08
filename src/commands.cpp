@@ -263,21 +263,6 @@ std::string frozen_reply(std::string_view username, std::int64_t seconds) {
                        conquister_place, format_wait(seconds));
 }
 
-/* What whoever a 🌀 flung away is told when he tries for the place. */
-std::string too_far_reply(std::string_view username) {
-    return std::format("{} una 🌀 ti ha scaraventato lontano: {} è a un anno di viaggio, da lì non ci arrivi.", username,
-                       conquister_place);
-}
-
-/* The 🌀 is the admins' alone, to buy and to throw: nobody else can use one, however he came by it. */
-bool admins_only(const CommandContext &context, std::string_view emoji) {
-    return is_power(emoji, power::vortex) && !context.owner && !context.admin;
-}
-
-std::string admins_only_reply(std::string_view username, std::string_view emoji) {
-    return std::format("{} la {} è riservata agli amministratori.", username, emoji);
-}
-
 std::string missing_username_reply() {
     return std::format("Imposta uno username Telegram per giocare a {}.", conquister_place);
 }
@@ -330,9 +315,6 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
                         std::string_view gift_emoji = {}) {
     if (context.username.empty()) {
         return missing_username_reply();
-    }
-    if (admins_only(context, gift_emoji)) {
-        return admins_only_reply(context.username, gift_emoji);
     }
     const std::string username{context.username};
     /* His own place is named after him, with the mention only where it reaches him. */
@@ -422,6 +404,18 @@ std::string own_name(const CommandContext &context) {
     return std::format("{}{}", context.user_id != 0 ? "@" : "", context.username);
 }
 
+/* "/buy emoji [position]" is another way to write "We yourname emoji [position]". Bare, it is left to
+   its command, which says how to use it. */
+constexpr std::string_view buy_command = "/buy";
+
+std::string expand_buy(const CommandContext &context, std::string message) {
+    const ParsedCommand command = parse_command(message);
+    if (command.name != buy_command || command.argument.empty() || context.username.empty()) {
+        return message;
+    }
+    return std::format("{}{} {}", raid_trigger, own_name(context), command.argument);
+}
+
 /* The line that comes first when a line meant for home took him out of @TheConquister37. */
 std::string departure_line(const CommandContext &context, const Departure &departure, std::int64_t now) {
     if (!departure.left) {
@@ -481,8 +475,6 @@ std::string handle_burn(const CommandContext &context, std::int64_t amount) {
         return std::format("{} hai solo {} a disposizione.", context.username, palle(result.score));
     case BurnStatus::travelling:
         return on_the_road(context, "si brucia da casa tua o da @TheConquister37.");
-    case BurnStatus::too_far:
-        return too_far_reply(context.username);
     case BurnStatus::burned:
         break;
     }
@@ -535,9 +527,6 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
     if (context.username.empty()) {
         return missing_username_reply();
     }
-    if (admins_only(context, emoji)) {
-        return admins_only_reply(context.username, emoji);
-    }
     const FurnitureBurnResult burnt = furniture_burn(context.storage, std::string{context.player_key}, std::string{emoji},
                                                      seconds_now(), raid_rules(context));
     switch (burnt.status) {
@@ -545,8 +534,6 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
         return on_the_road(context, "si brucia da casa tua o da @TheConquister37.");
     case FurnitureBurnStatus::not_owned:
         return std::format("{} non hai {} in casa.", context.username, emoji);
-    case FurnitureBurnStatus::too_far:
-        return too_far_reply(context.username);
     case FurnitureBurnStatus::burned:
         break;
     }
@@ -572,10 +559,6 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
         return std::format("{} la tua 💦 è arrivata addosso a {}{} in {}: tra {} si vedrà.", context.username,
                            burnt.hit_on_telegram ? "@" : "", burnt.hit, conquister_place,
                            format_wait(burnt.expecting));
-    }
-    if (burnt.flung) {
-        return std::format("{} scaraventi {}{} fuori da {} e lontanissimo: ora è a un anno di viaggio da tutti e dal "
-                           "posto.", context.username, burnt.hit_on_telegram ? "@" : "", burnt.hit, conquister_place);
     }
     if (is_power(emoji, power::bomb) && !burnt.hit.empty()) {
         std::string blown;
@@ -629,9 +612,6 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
         );
     /* A name that came from IRC must not be written as a mention: on Telegram it would tag a stranger. */
     const std::string_view mention = result.previous_user_id != 0 ? "@" : "";
-    if (result.status == ClaimStatus::too_far) {
-        return too_far_reply(username);
-    }
     if (result.status == ClaimStatus::frozen) {
         return frozen_reply(username, result.penalty_seconds);
     }
@@ -786,13 +766,9 @@ std::string handle_furniture(const CommandContext &context, std::string_view wan
     if (context.username.empty()) {
         return missing_username_reply();
     }
-    if (admins_only(context, wanted)) {
-        return admins_only_reply(context.username, wanted);
-    }
     const std::string username{context.username};
-    /* The ☢️, the 🌀 and the 🎈 have prices of their own, which do not grow with the copies in the game. */
+    /* The ☢️ and the 🎈 have prices of their own, which do not grow with the copies in the game. */
     const std::optional<int> fixed = is_power(wanted, power::nuke) ? std::optional{context.config.nuke_cost}
-        : is_power(wanted, power::vortex) ? std::optional{context.config.vortex_cost}
         : is_power(wanted, power::balloon) ? std::optional{context.config.balloon_cost} : std::nullopt;
     const int cost = price(context, fixed.value_or(context.config.furniture_cost));
     const int inflation = fixed ? 0 : context.config.furniture_inflation;
@@ -869,8 +845,9 @@ std::string handle_help(const CommandContext &context, std::string_view) {
     line(std::format("We {} (o {}avventura)", conquister_place, slash),
          "entri nel posto: 1 palla al secondo finché lo tieni");
     line(std::format("We {}", me), "torni a casa tua, dal posto o dal viaggio");
-    line(std::format("We {} 🍕", me), "appendi 🍕 al nome nel primo posto libero, da casa tua");
-    line(std::format("We {} 🍕 3", me), "appendi 🍕 nel posto 3");
+    line(std::format("We {} 🍕 (o {}buy 🍕)", me, slash), "compri 🍕 e la appendi al nome nel primo posto libero, "
+         "da casa tua");
+    line(std::format("We {} 🍕 3 (o {}buy 🍕 3)", me, slash), "la compri e la appendi nel posto 3");
     line(std::format("We {} 1 2", me), "sposti l'emoji dal posto 1 al posto 2");
     line(std::format("We {}", other), "parti per razziarlo");
     line(std::format("We {} 500", other), "gli porti 500 palle");
@@ -960,9 +937,6 @@ std::string power_help(const Power &power, const AppConfig &config) {
     if (is(power::fire)) {
         return std::format("ognuno accorcia del {}% il tempo che resti congelato da una 🧊", config.fire_percent);
     }
-    if (is(power::vortex)) {
-        return "solo amministratori: scaraventa un giocatore a un anno di viaggio da tutti";
-    }
     return {};
 }
 
@@ -1031,9 +1005,6 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
     card += std::format("{} {}: oggi è giorno di {}, {}\n", sign.symbol, sign.name,
                         zodiac::element_name(zodiac::element_of_day(now)),
                         multiplier_text(percent));
-    if (profile.flung) {
-        card += "scaraventato lontano da una 🌀: a un anno di viaggio da tutti\n";
-    }
     if (profile.frozen_for > 0) {
         card += std::format("congelato da una 🧊 ancora per {}\n", format_wait(profile.frozen_for));
     }
@@ -1125,28 +1096,9 @@ std::string handle_debug(const CommandContext &context, std::string_view argumen
               : "Debug spento: i tuoi acquisti tornano a costare.";
 }
 
-/* "/richiama name": the owner brings back a player a 🌀 flung far away. */
-std::string handle_recall(const CommandContext &context, std::string_view argument) {
-    if (!context.owner) {
-        return "Solo il proprietario può richiamare un giocatore.";
-    }
-    const std::string_view wanted = text::trim(argument);
-    if (wanted.empty()) {
-        return std::format("Uso: {}richiama <nome>.", command_prefix(context));
-    }
-    const bool telegram = wanted.starts_with('@');
-    const RecallResult result = player_recall(context.storage, telegram ? wanted.substr(1) : wanted,
-                                              telegram ? RaidTargetKind::telegram : RaidTargetKind::irc);
-    switch (result.status) {
-    case RecallStatus::unknown:
-        return std::format("Non conosco nessun giocatore di nome {}.", wanted);
-    case RecallStatus::not_flung:
-        return std::format("{} non è stato scaraventato lontano.", result.name);
-    case RecallStatus::recalled:
-        break;
-    }
-    return std::format("{} è di nuovo vicino: i viaggi da lui e verso di lui tornano normali, e può rientrare in {}.",
-                       result.name, conquister_place);
+/* "/buy" with nothing after it: what an emoji is bought with is the line that expands it. */
+std::string handle_buy(const CommandContext &context, std::string_view) {
+    return std::format("Uso: {0}buy <emoji> [posto], per esempio {0}buy 🍕 o {0}buy 🍕 3.", command_prefix(context));
 }
 
 /* "/buyballoon": temporary. The free 🎈 for whoever had no room for one when balloons became emoji. */
@@ -1222,8 +1174,8 @@ constexpr std::array commands{
     CommandDefinition{"/quotes", handle_quotes},
     CommandDefinition{"/delquote", handle_delete_quote},
     CommandDefinition{"/debug", handle_debug},
+    CommandDefinition{"/buy", handle_buy},
     CommandDefinition{"/buyballoon", handle_buy_balloon},
-    CommandDefinition{"/richiama", handle_recall},
 };
 
 const CommandDefinition *find_command(std::string_view name) {
@@ -1294,8 +1246,6 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
                                     : std::format("resti congelato per {}", format_wait(event.froze)))
                 : is_power(event.gift_emoji, power::seed)
                 ? std::format("tra {} si vedrà, e sarà tutto tuo", format_wait(event.expecting))
-                : is_power(event.gift_emoji, power::vortex)
-                ? "vieni scaraventato lontanissimo, a un anno di viaggio da tutti e dal posto"
                 : is_power(event.gift_emoji, power::poo) ? "ora lo smerdato sei tu"
                 : is_power(event.gift_emoji, power::nuke) ? "riparti da zero, senza palle e con il solo 🎈 di partenza"
                 : blown.empty() ? "esplode a casa tua ma non trova niente da portarsi via"
@@ -1322,11 +1272,6 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
         if (event.expecting > 0 && !event.sent_back) {
             return std::format("{} la tua 💦 è arrivata a casa di {}{}: tra {} si vedrà. Torni in {} tra {}.", raider,
                                mention, event.target, format_wait(event.expecting), home, format_wait(event.seconds));
-        }
-        if (event.flung) {
-            return std::format("{} scaraventi {}{} lontanissimo: ora è a un anno di viaggio da tutti e da {}. Torni "
-                               "in {} tra {}.", raider, mention, event.target, conquister_place, home,
-                               format_wait(event.seconds));
         }
         if (is_power(event.gift_emoji, power::nuke)) {
             return std::format("{} ha sganciato la bomba nucleare su casa di {}{}: riparte da zero, senza palle e "
@@ -1410,7 +1355,7 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event) {
 
 std::optional<std::string> command_dispatch(const CommandContext &context, std::string_view text) {
     try {
-        const std::string expanded = expand_adventure(text::trim(text));
+        const std::string expanded = expand_buy(context, expand_adventure(text::trim(text)));
         const std::string_view message = expanded;
         CommandContext bound = context;
         std::string bound_key;

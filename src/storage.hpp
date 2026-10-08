@@ -148,8 +148,6 @@ struct ConquisterState {
     Counters welcomed;
     /* The players who took the free 🎈 of /buyballoon: it is given once. */
     Counters balloon_ported;
-    /* The players a 🌀 flung far away, and when: a year of road from everybody and from @TheConquister37. */
-    Counters flung;
     /* The players a 🧊 froze, mapped to the instant they thaw: until then no place and no leaving. */
     Counters frozen;
     /* The children on the way, in the order they were conceived. */

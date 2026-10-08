@@ -1079,7 +1079,8 @@ TEST_CASE("every emoji with a power is listed once, with its kind") {
     CHECK(power::mailbox.kind == PowerKind::home);
     CHECK(power::ninja.kind == PowerKind::carried);
     CHECK(power::alarm.kind == PowerKind::home);
-    CHECK(power::vortex.kind == PowerKind::thrown);
+    /* The 🌀 is an emoji like any other. */
+    CHECK(power_of("🌀") == nullptr);
     CHECK(power::pirate.kind == PowerKind::carried);
     CHECK(power::seed.kind == PowerKind::thrown);
     CHECK(power::hen.kind == PowerKind::home);
@@ -1514,45 +1515,6 @@ TEST_CASE("a 🥷 with the raider may take him past the 🎈 and the 🐶 of the
     REQUIRE(arrival.size() == 1);
     CHECK_FALSE(arrival[0].sneaked);
     CHECK(arrival[0].loot == 100);
-}
-
-TEST_CASE("a 🌀 flings a player a year of road away from everybody and from the place") {
-    const TestPaths paths{"vortex-test"};
-    {
-        std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":{"user_id":0,"username":"bob","since":0},)"
-             << R"("scores":{"alice":0,"bob":10,"carol":10},"quotes_added":{},)"
-             << R"("furniture":{"alice":"🌀🌀","bob":"🚀🍕","carol":"🍕"}})";
-    }
-    Storage storage{paths.conquister, paths.quotes};
-    /* Thrown at the place it lands on the holder: out he goes, paid for his hold, and far away. */
-    const FurnitureBurnResult thrown = furniture_burn(storage, "alice", "🌀", 100);
-    CHECK(thrown.flung);
-    CHECK(thrown.hit == "bob");
-    CHECK(player_profile_of(storage, "bob", 100).flung);
-    CHECK(player_profile_of(storage, "bob", 100).place == Whereabouts::home);
-    CHECK(conquister_user(storage, "bob")->score > 10);
-    /* The place is a year away for him, to hold or to throw at. */
-    CHECK(conquister_claim(storage, 0, "bob", 110).status == ClaimStatus::too_far);
-    CHECK(furniture_burn(storage, "bob", "🍕", 110).status == FurnitureBurnStatus::too_far);
-    CHECK(palle_burn(storage, "bob", 1).status == BurnStatus::too_far);
-    /* And so is everybody, from him or to him. */
-    CHECK(raid_start(storage, 0, "carol", "bob", 120, quick_rides()).seconds == flung_seconds);
-    CHECK(raid_start(storage, 0, "bob", "alice", 120, quick_rides()).seconds == flung_seconds);
-    /* Nobody else is any further than he was. */
-    CHECK_FALSE(player_profile_of(storage, "carol", 120).flung);
-
-    /* At a house it does the same to whoever lives there. */
-    storage.transaction([](StorageSession &session) {
-        session.state().raids.clear();
-        return 0;
-    });
-    REQUIRE(raid_start(storage, 0, "alice", "carol", 200, quick_rides(), RaidTargetKind::any, 0, "🌀").status ==
-            RaidStatus::started);
-    const std::vector<RaidEvent> arrival = raid_due(storage, 205, quick_rides());
-    REQUIRE(arrival.size() == 1);
-    CHECK(arrival[0].flung);
-    CHECK(player_profile_of(storage, "carol", 205).flung);
 }
 
 TEST_CASE("a 🏴‍☠️ with the raider may carry off an emoji that is at the house") {

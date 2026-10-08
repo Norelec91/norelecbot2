@@ -58,8 +58,6 @@ inline constexpr Power ninja{"🥷", PowerKind::carried, "when he reaches a hous
                              "each is a chance of slipping past the 🎈 and the 🐶 that guard it"};
 inline constexpr Power alarm{"🔊", PowerKind::home, "when a raider with a 🥷 reaches the house",
                              "each takes a share off his chance of slipping past unnoticed"};
-inline constexpr Power vortex{"🌀", PowerKind::thrown, "when it lands",
-                              "flings whoever it hits a year of road away from everybody and from the place"};
 inline constexpr Power pirate{"🏴‍☠️", PowerKind::carried, "when a raid of his gets through",
                               "each is a chance of carrying off one emoji that is at the house too"};
 inline constexpr Power seed{"💦", PowerKind::thrown, "when it lands on somebody who is there",
@@ -85,7 +83,7 @@ inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries 
 inline constexpr std::array powers{power::pleading, power::rocket, power::bolt, power::lobster,
                                    power::poo,      power::bomb,   power::nuke, power::dog,
                                    power::balloon,  power::mailbox, power::ninja, power::alarm,
-                                   power::vortex,   power::pirate,  power::seed,  power::hen,
+                                   power::pirate,   power::seed,    power::hen,
                                    power::ice,      power::fire,    power::hourglass,
                                    power::dino,     power::salt};
 
@@ -97,11 +95,8 @@ inline constexpr std::int64_t salt_seconds = 5 * 60;
 /* The power an emoji has, or nothing for one that only hangs there. */
 [[nodiscard]] const Power *power_of(std::string_view emoji);
 
-/* too_far: a 🌀 flung him a year of road away from the place. frozen: a 🧊 hit him not long ago. */
-enum class ClaimStatus { taken, already_held, defended, cooldown, travelling, too_far, frozen };
-
-/* How far a 🌀 flings a player from everything: every ride to or from him takes this long. */
-inline constexpr std::int64_t flung_seconds = std::int64_t{365} * 24 * 60 * 60;
+/* frozen: a 🧊 hit him not long ago. */
+enum class ClaimStatus { taken, already_held, defended, cooldown, travelling, frozen };
 
 struct ClaimResult {
     ClaimStatus status = ClaimStatus::taken;
@@ -195,7 +190,7 @@ enum class RaidStatus {
 
 enum class RaidTargetKind { any, telegram, irc };
 
-enum class BurnStatus { burned, invalid_amount, insufficient_score, travelling, too_far };
+enum class BurnStatus { burned, invalid_amount, insufficient_score, travelling };
 
 struct BurnResult {
     BurnStatus status = BurnStatus::burned;
@@ -308,8 +303,6 @@ struct RaidEvent {
     bool backfired = false;
     /* delivered, with a ☢️: the target starts over. */
     bool reset = false;
-    /* delivered, with a 🌀: the target was flung far away. */
-    bool flung = false;
     /* delivered, with a 💦: a child is on the way, born after this many seconds. */
     std::int64_t expecting = 0;
     /* delivered, with a 🧊: whoever it hit is frozen for this many seconds; melted, his 🔥 shortened it,
@@ -416,8 +409,6 @@ struct Profile {
     std::string furniture;
     /* Hit by a 💩 not long ago: he is "lo smerdato". */
     bool smeared = false;
-    /* Flung by a 🌀: a year of road from everything. */
-    bool flung = false;
     /* How many 🐔 lay for him. */
     std::int64_t hens = 0;
     /* Seconds until he thaws after a 🧊; 0 when he is not frozen. */
@@ -509,7 +500,7 @@ void debug_set(Storage &storage, const std::string &username, bool wanted);
 
 /* Palle brought back to @TheConquister37 leave the game: nobody receives them. Not from the road. */
 [[nodiscard]] BurnResult palle_burn(Storage &storage, const std::string &player, std::int64_t amount);
-enum class FurnitureBurnStatus { burned, not_owned, travelling, too_far };
+enum class FurnitureBurnStatus { burned, not_owned, travelling };
 
 struct FurnitureBurnResult {
     FurnitureBurnStatus status = FurnitureBurnStatus::burned;
@@ -525,8 +516,6 @@ struct FurnitureBurnResult {
     bool backfired = false;
     /* It was a ☢️: the game started over. */
     bool reset = false;
-    /* It was a 🌀: whoever held the place was flung far away. */
-    bool flung = false;
     /* It was a 💦: the holder is expecting, and the child is born after this many seconds. */
     std::int64_t expecting = 0;
     /* It was a 🧊: the holder is frozen for this many seconds; melted, his 🔥 shortened it, to nothing
@@ -541,16 +530,6 @@ struct FurnitureBurnResult {
 [[nodiscard]] FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player,
                                                  const std::string &emoji, std::int64_t now = 0,
                                                  const RaidRules &rules = {});
-enum class RecallStatus { recalled, not_flung, unknown };
-
-struct RecallResult {
-    RecallStatus status = RecallStatus::recalled;
-    /* The spelling the player has on file. */
-    std::string name;
-};
-
-/* Brings back a player a 🌀 flung far away, named as on that platform: the owner's remedy. */
-[[nodiscard]] RecallResult player_recall(Storage &storage, std::string_view name, RaidTargetKind platform);
 /* The players who are "lo smerdato" right now. */
 [[nodiscard]] std::vector<std::string> smeared_all(Storage &storage, std::int64_t now);
 
