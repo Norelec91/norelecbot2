@@ -39,8 +39,8 @@ struct Holder {
        there at the lower percent. */
     std::int64_t banked = 0;
     std::int64_t counted_from = 0;
-    /* The 🦞 on his name, by slot from 0, that came in as the emoji the kicked holder had in that same
-       slot: they count and show as that emoji until he leaves. */
+    /* The 🦞 he has with him, by slot from 0, that came in as the emoji the kicked holder had with him in
+       that same slot: they count and show as that emoji until he leaves. */
     std::map<std::size_t, std::string> lobsters{};
 
     bool operator==(const Holder &) const = default;
@@ -50,8 +50,6 @@ struct Holder {
 using Counters = nlohmann::ordered_map<std::string, std::int64_t>;
 /* Quotes mapped to whoever added them, in file order. */
 using Authors = nlohmann::ordered_map<std::string, std::string>;
-/* Players mapped to slots of their names, from 0, in file order. */
-using Slots = nlohmann::ordered_map<std::string, std::vector<std::int64_t>>;
 
 
 /* A player away from home, robbing another one. */
@@ -137,15 +135,12 @@ struct ConquisterState {
     std::vector<Raid> raids;
     /* Who added each quote, for the ones added since the bot started writing it down. */
     Authors quote_authors;
-    /* The emoji each player bought to hang beside his name. */
+    /* The emoji each player keeps in his house, slot by slot: they stay there whether he is in or out. */
     Authors furniture;
     /* Players who turned the debug switch on for themselves: their purchases are free. */
     Counters debugging;
     /* Players hit by a thrown 💩, mapped to the instant they stop being "lo smerdato". */
     Counters smeared;
-    /* The slots filled while the player was away: what was hung there is at home, even of a kind he
-       would carry, until he next leaves from home. */
-    Slots stayed;
     /* The players who were handed the 🎈 everybody starts with: nobody gets it twice. */
     Counters welcomed;
     /* The players a 🧊 froze, mapped to the instant they thaw: until then no place and no leaving. */
@@ -157,6 +152,12 @@ struct ConquisterState {
     std::int64_t eggs_at = 0;
     /* The raids that reached a house lately and were not paid for with salt yet, oldest first. */
     std::vector<Knock> knocks{};
+    /* The emoji each player has with him, slot by slot: they go wherever he goes, and are what is
+       shown beside his name. */
+    Authors equipped{};
+    /* Whether what used to hang on a single name has been sorted into the house and what he has with
+       him: done once, for the saves from before there were two. */
+    bool split = false;
 
     bool operator==(const ConquisterState &) const = default;
 };

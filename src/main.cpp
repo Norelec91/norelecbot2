@@ -30,6 +30,7 @@ int run() {
         return EXIT_FAILURE;
     }
     norelecbot::Storage storage{config->conquister_path, config->quotes_path};
+    norelecbot::equipment_sort_out(storage);
     if (config->starter_balloon) {
         norelecbot::balloons_hand_out(storage, static_cast<std::size_t>(config->furniture_limit));
     }

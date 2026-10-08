@@ -14,13 +14,15 @@
 
 namespace norelecbot {
 
-/* Where an emoji with a power does its work. One hung at home stays there and guards the house whether
-   its owner is in or out; one carried counts for him away from home, on the road or in
-   @TheConquister37; one thrown leaves his name for good and lands on somebody else. */
+/* Where an emoji with a power does its work. A player keeps his emoji in two places: his house, where
+   they stay and work whether he is in or out, and on him, where they go wherever he goes. One of the
+   home kind works in the house; one carried works on him, at home, on the road or in @TheConquister37;
+   one thrown works nowhere until it is thrown, when it leaves him for good and lands on somebody else.
+   Kept where it does not work, an emoji only sits there. */
 enum class PowerKind { home, carried, thrown };
-/* That is also where each one is. What is carried is wherever its owner is: at home, on the road or
-   in @TheConquister37. Everything else is at home, a thrown one until it is thrown. And what is thrown
-   lands where somebody is, his house or @TheConquister37, and works on what it finds there. */
+
+/* How many emoji a player can have on him: the house has the rest. */
+inline constexpr std::size_t carried_limit = 5;
 
 /* An emoji that does something beyond hanging beside a name. */
 struct Power {
@@ -43,7 +45,7 @@ inline constexpr Power rocket{"🚀", PowerKind::carried, "when he sets off", "e
 inline constexpr Power bolt{"⚡", PowerKind::carried, "when he enters @TheConquister37",
                             "each makes the hold worth a share more"};
 inline constexpr Power lobster{"🦞", PowerKind::carried, "when he enters @TheConquister37 kicking somebody out",
-                               "becomes what the kicked holder has in the same slot until he leaves"};
+                               "becomes what the kicked holder has on him in the same slot until he leaves"};
 inline constexpr Power poo{"💩", PowerKind::thrown, "when it lands", "makes whoever it hits \"lo smerdato\" for a while",
                            false, {"🇷🇺", "🇮🇱"}};
 inline constexpr Power bomb{"💣", PowerKind::thrown, "when it lands",
@@ -73,7 +75,9 @@ inline constexpr Power fire{"🔥", PowerKind::carried, "when a 🧊 hits him",
                             "each melts a share of the time he stays frozen"};
 inline constexpr Power hourglass{"⏳", PowerKind::carried, "when a 🎈 holds off his attempt at the place",
                                  "each takes a share off the penalty he is left with"};
-inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries to get past it, where its owner is",
+/* The one that works in either place: on him it guards him wherever he is, kept in the house it guards
+   the house even while he is out. */
+inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries to get past it",
                                "holds off whoever comes for his place or his house until it pops, then is as good as new",
                                true};
 
@@ -148,9 +152,13 @@ enum class FurnitureStatus {
 struct FurnitureResult {
     FurnitureStatus status = FurnitureStatus::bought;
     std::int64_t available_score = 0;
-    /* How the name reads now: the emoji in their slots, "[]" for an empty one in between. */
+    /* What he has on him now and what is in his house: the emoji in their slots, "[]" for an empty one in
+       between. */
     std::string shown;
-    /* The slot, from 1, and what was hanging there before, empty if nothing was. */
+    std::string house;
+    /* Bought: it went on him, rather than into the house. */
+    bool with_him = false;
+    /* The slot of the house, from 1, and what was there before, empty if nothing was; 0 when it went on him. */
     std::size_t position = 0;
     std::string replaced;
     /* How many of that emoji already hung from anybody's name, and what it cost for that. */
@@ -163,7 +171,7 @@ enum class FurnitureMoveStatus { moved, swapped, empty_slot, invalid_position, s
 
 struct FurnitureMoveResult {
     FurnitureMoveStatus status = FurnitureMoveStatus::moved;
-    /* How the name reads now, the emoji that moved, and the one it swapped places with. */
+    /* How the house reads now, the emoji that moved, and the one it swapped places with. */
     std::string shown;
     std::string moved;
     std::string swapped;
@@ -181,9 +189,11 @@ enum class RaidStatus {
     /* Only when palle are taken along: not enough of them, or a number that makes no sense. */
     insufficient_score,
     invalid_amount,
-    /* Only when an emoji is taken along: he has none like it, or the target has no empty slot. */
+    /* Only when an emoji is taken along: he has none like it, the target has no empty slot, or he has no
+       free slot on him to carry it in. */
     no_such_emoji,
     no_room,
+    hands_full,
     /* A 🧊 hit him not long ago: he cannot set off until he thaws. */
     frozen
 };
@@ -205,7 +215,7 @@ struct RaidRules {
     /* Units of distance per second of travel. */
     int travel_divisor = 1000;
     zodiac::Overrides signs;
-    /* How many emoji a name can carry: an emoji brought to a full name has nowhere to go. */
+    /* How many emoji a house can keep: an emoji brought to a full one has nowhere to go. */
     std::size_t furniture_limit = 10;
     /* How long a player hit by a 💩 stays "lo smerdato". */
     std::int64_t smeared_seconds = 86400;
@@ -299,6 +309,8 @@ struct RaidEvent {
     bool no_room = false;
     /* delivered: the emoji was a present, hung as it is, even one that is meant to be thrown. */
     bool intact = false;
+    /* delivered: the present went on the target, who was home with room for it, rather than in his house. */
+    bool gift_with_him = false;
     /* delivered, with a 💣: the emoji it took off the target's name, empty when it found nothing to take. */
     std::vector<std::string> blown{};
     /* The 💣 was a dud: what it took is the raider's own, among what he had with him. */
@@ -316,7 +328,7 @@ struct RaidEvent {
     /* delivered, with something thrown: a 📮 sent it back, and what it did it did to the raider, at his
        own house. */
     bool sent_back = false;
-    /* The furniture hung beside the two names, to be shown along with them. */
+    /* What the two have on them, shown beside their names. */
     std::string raider_emoji;
     std::string target_emoji;
     /* Whether each of the two is "lo smerdato" right now: a delivered 💩 makes the target one. */
@@ -408,10 +420,12 @@ enum class Whereabouts { home, conquister, road };
 /* Everything the group can know about one player. */
 struct Profile {
     std::string name;
+    /* What he has on him, shown beside his name, and what is in his house. */
     std::string furniture;
+    std::string house;
     /* Hit by a 💩 not long ago: he is "lo smerdato". */
     bool smeared = false;
-    /* How many 🐔 lay for him. */
+    /* How many 🐔 lay for him, in his house. */
     std::int64_t hens = 0;
     /* Seconds until he thaws after a 🧊; 0 when he is not frozen. */
     std::int64_t frozen_for = 0;
@@ -454,6 +468,9 @@ struct Profile {
                                       std::size_t furniture_limit = 10);
 /* Everybody starts with a 🎈: hands one, once, to every known player who has none and a free slot. */
 void balloons_hand_out(Storage &storage, std::size_t furniture_limit);
+/* Sorts what saves from before had on a single name: the 🎈 and what works on him go on him, as many as
+   fit, in their order; the rest stays in the house, each in its slot. Once, after a backup. */
+void equipment_sort_out(Storage &storage);
 enum class LinkStatus { pending, linked, unknown_account, conflict, self, already_linked };
 [[nodiscard]] LinkStatus player_link(Storage &storage, std::int64_t user_id, const std::string &username,
                                      std::string_view other_name, std::string_view account_name = {});
@@ -462,13 +479,14 @@ enum class LinkStatus { pending, linked, unknown_account, conflict, self, alread
 void debug_set(Storage &storage, const std::string &username, bool wanted);
 [[nodiscard]] bool debug_on(Storage &storage, const std::string &username);
 
-/* A name's furniture slot by slot: an emoji, or an empty string where "[]" marks an empty slot. */
+/* A house, or what is on a player, slot by slot: an emoji, or an empty string where "[]" marks an empty slot. */
 [[nodiscard]] std::vector<std::string> furniture_slots(std::string_view stored);
 /* The slots back into what is saved and shown: "[]" for an empty one, none after the last emoji. */
 [[nodiscard]] std::string furniture_stored(std::vector<std::string> slots);
 
-/* Hangs one emoji in a slot, from 1, overwriting what was there; position 0 takes the first empty
-   one. Only at home. The price is the base cost grown by the inflation percent for every copy of that
+/* Buys one emoji. Named a slot of the house, from 1, it goes there, over what was there. Otherwise one that
+   works on him goes on him if he has room, and everything else in the first empty slot of the house.
+   Only at home. The price is the base cost grown by the inflation percent for every copy of that
    emoji already in the game: 100 doubles it each time. */
 [[nodiscard]] FurnitureResult furniture_buy(
     Storage &storage,
@@ -481,12 +499,12 @@ void debug_set(Storage &storage, const std::string &username, bool wanted);
     zodiac::Overrides signs = {},
     std::int64_t inflation = 100
 );
-/* Moves the emoji in one slot to another, both from 1, swapping it with whatever hangs there. Free,
-   and only at home. */
+/* Moves the emoji in one slot of the house to another, both from 1, swapping it with whatever is there.
+   Free, and only at home. */
 [[nodiscard]] FurnitureMoveResult furniture_move(Storage &storage, const std::string &username,
                                                  std::int64_t from, std::int64_t to, std::size_t limit,
                                                  std::int64_t now, zodiac::Overrides signs = {});
-/* Everybody's emoji, for whoever only has names to write. */
+/* What everybody has on him, for whoever only has names to write. */
 [[nodiscard]] Authors furniture_all(Storage &storage);
 
 /* Palle brought back to @TheConquister37 leave the game: nobody receives them. Not from the road. */
@@ -496,7 +514,7 @@ enum class FurnitureBurnStatus { burned, not_owned, travelling, child };
 
 struct FurnitureBurnResult {
     FurnitureBurnStatus status = FurnitureBurnStatus::burned;
-    /* How his name reads once it is gone. */
+    /* What he has on him once it is gone. */
     std::string shown;
     /* What is thrown at the place lands on whoever holds it, unless that is the thrower himself: who
        he is, how his name reads afterwards and, for a 💣, the emoji it took from the ones he carries. */
@@ -517,7 +535,7 @@ struct FurnitureBurnResult {
 };
 
 /* An emoji brought back to @TheConquister37 leaves the game too: the first slot that holds it is
-   emptied. Not from the road. One that is thrown lands on the holder instead: a 💩 makes him "lo
+   emptied, on him before the house. Not from the road. One that is thrown lands on the holder instead: a 💩 makes him "lo
    smerdato", a 💣 takes the emoji he carries. Destroyed, it only goes up in smoke, whatever it is. */
 [[nodiscard]] FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player,
                                                  const std::string &emoji, std::int64_t now = 0,
@@ -538,7 +556,8 @@ struct FurnitureBurnResult {
     RaidTargetKind target_kind = RaidTargetKind::any,
     /* Palle to hand over on arrival instead of robbing the target. */
     std::int64_t gift = 0,
-    /* An emoji of his own to hang on the target on arrival instead of robbing him. */
+    /* An emoji of his own to hang on the target on arrival instead of robbing him: it travels on him,
+       taken from the house if it is not on him already. */
     std::string_view gift_emoji = {},
     /* The emoji is given, not thrown: it is hung as it is, even one that would land on him. */
     bool intact = false
@@ -546,6 +565,30 @@ struct FurnitureBurnResult {
 
 /* Settles the raids that have reached the target or come home by now. */
 [[nodiscard]] std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRules &rules);
+
+/* not_owned: none in the house, already_on: it is on him already, child: children stay in the house,
+   full: he has no room on him and named nothing to put back, swap_missing: what he named is not on him.
+   stored: put back in the house; not_on: none on him, house_full: no room in the house for it. */
+enum class GearStatus { taken, swapped, stored, not_home, not_owned, already_on, child, full, swap_missing, not_on,
+                        house_full };
+
+struct GearResult {
+    GearStatus status = GearStatus::taken;
+    /* What he has on him and what is in the house, once done. */
+    std::string shown;
+    std::string house;
+    /* swapped: what went back in the house to make room. */
+    std::string swapped;
+    Departure departure;
+};
+
+/* Takes an emoji from the house and puts it on him; with no room on him, the one named as swap goes
+   back in the house in its place. Only at home. */
+[[nodiscard]] GearResult gear_take(Storage &storage, const std::string &player, const std::string &emoji,
+                                   const std::string &swap, std::int64_t now, zodiac::Overrides signs = {});
+/* Puts an emoji he has on him back in the house, in its first empty slot. Only at home. */
+[[nodiscard]] GearResult gear_store(Storage &storage, const std::string &player, const std::string &emoji,
+                                    std::size_t limit, std::int64_t now, zodiac::Overrides signs = {});
 
 [[nodiscard]] QuoteAddResult quote_add(
     Storage &storage,

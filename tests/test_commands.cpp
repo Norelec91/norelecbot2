@@ -22,6 +22,15 @@ std::int64_t seconds_now_for_test() {
     ).count();
 }
 
+/* What a player keeps in his house, as it is saved. */
+std::string house_of(Storage &storage, const std::string &player) {
+    return storage.transaction([&player](StorageSession &session) {
+        const Authors &houses = session.state().furniture;
+        const auto found = houses.find(player);
+        return found == houses.end() ? std::string{} : found->second;
+    });
+}
+
 }
 
 TEST_CASE("the bot answers the commands it knows and ignores the rest") {
@@ -139,19 +148,19 @@ TEST_CASE("Telegram ID keeps its player after a rename and namesakes stay separa
     Storage storage{paths.conquister, paths.quotes};
 
     CommandContext alice{.storage = storage, .config = config, .user_id = 11, .username = "Alice"};
-    CHECK(command_dispatch(alice, "We @Alice 🍕")->contains("Alice (🍕) hai speso"));
+    CHECK(command_dispatch(alice, "We @Alice 🍕")->contains(": 🍕 in casa nel posto 1."));
     alice.username = "AliceNuova";
-    CHECK(command_dispatch(alice, "We @AliceNuova 🎁")->contains("AliceNuova (🍕🎁) hai speso"));
+    CHECK(command_dispatch(alice, "We @AliceNuova 🎁")->contains(": 🎁 in casa nel posto 2."));
     CHECK(command_dispatch(alice, "We @AliceNuova") == "AliceNuova sei già in @AliceNuova!");
     CHECK(command_dispatch(alice, "We @Alice") ==
           "AliceNuova non conosco nessun giocatore di nome @Alice.");
 
     const CommandContext namesake{.storage = storage, .config = config, .user_id = 22, .username = "Alice"};
-    CHECK(command_dispatch(namesake, "We @Alice 🐟")->contains("Alice (🐟) hai speso"));
-    CHECK(command_dispatch(alice, "We @AliceNuova 🚀")->contains("AliceNuova (🍕🎁🚀) hai speso"));
+    CHECK(command_dispatch(namesake, "We @Alice 🐟")->contains(": 🐟 in casa nel posto 1."));
+    CHECK(command_dispatch(alice, "We @AliceNuova 🚀")->contains("🚀 AliceNuova hai speso 0 palle: 🚀 ora è con te"));
 
     const CommandContext irc{.storage = storage, .config = config, .user_id = 0, .username = "AliceNuova"};
-    CHECK(command_dispatch(irc, "We AliceNuova 🧀")->contains("AliceNuova (🧀) hai speso"));
+    CHECK(command_dispatch(irc, "We AliceNuova 🧀")->contains(": 🧀 in casa nel posto 1."));
     CHECK(command_dispatch(alice, "We AliceNuova")->contains("parti per AliceNuova"));
     CHECK(command_dispatch(irc, "We AliceNuova") == "AliceNuova sei già in AliceNuova!");
 
@@ -179,13 +188,13 @@ TEST_CASE("two authenticated accounts link only after reciprocal confirmation") 
     CHECK(command_dispatch(telegram, "/link Alice")->contains("Richiesta registrata"));
     CHECK(command_dispatch(irc, "/link @Alice") ==
           "Account collegati: ora condividono lo stesso giocatore.");
-    CHECK(command_dispatch(irc, "We Alice 🎁")->contains("Alice (🍕🎁) hai speso"));
+    CHECK(command_dispatch(irc, "We Alice 🎁")->contains(": 🎁 in casa nel posto 2."));
     const Json state = Json::parse(std::ifstream{paths.conquister});
     CHECK(state.at("accounts").at("tg:11") == state.at("accounts").at("irc:alice"));
     Storage reopened{paths.conquister, paths.quotes};
     const CommandContext after_restart{.storage = reopened, .config = config, .user_id = 0,
                                        .username = "Alice"};
-    CHECK(command_dispatch(after_restart, "We Alice 🚀")->contains("Alice (🍕🎁🚀) hai speso"));
+    CHECK(command_dispatch(after_restart, "We Alice 🚀")->contains("🚀 Alice hai speso"));
 }
 
 TEST_CASE("linking never silently merges two inventories") {
@@ -290,7 +299,7 @@ TEST_CASE("IRC nick aliases share the verified NickServ account") {
                        .username = "FirstNick", .account_name = "RegisteredAccount"};
     CHECK(command_dispatch(irc, "We FirstNick 🍕")->contains("hai speso"));
     irc.username = "SecondNick";
-    CHECK(command_dispatch(irc, "We SecondNick 🎁")->contains("SecondNick (🍕🎁) hai speso"));
+    CHECK(command_dispatch(irc, "We SecondNick 🎁")->contains(": 🎁 in casa nel posto 2."));
     const Json state = Json::parse(std::ifstream{paths.conquister});
     CHECK(state.at("accounts").at("irc:registeredaccount") == "irc:registeredaccount");
     CHECK(state.at("furniture").size() == 1);
@@ -307,7 +316,7 @@ TEST_CASE("the balloon replies are the ones the players read") {
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":{"user_id":1,"username":"alice","since":0},"scores":{},"quotes_added":{},)"
              << R"("balloons":{"alice":3},"cooldowns":{"erin":)" << now + 290
-             << R"(},"telegram_ids":{"erin":5,"alice":1},"furniture":{"alice":"🎈"}})";
+             << R"(},"telegram_ids":{"erin":5,"alice":1},"equipped":{"alice":"🎈"}})";
     }
     AppConfig config;
     config.starter_balloon = false;
@@ -328,8 +337,8 @@ TEST_CASE("the balloon replies are the ones the players read") {
     context.user_id = 2;
     context.username = "bob";
     const std::string popped = reply("We @TheConquister37");
-    CHECK(popped.starts_with("bob hai bucato il palloncino di @alice (🎈)!\n"));
-    CHECK(popped.contains("bob hai cacciato @alice (🎈) da @TheConquister37.\n"));
+    CHECK(popped.starts_with("bob hai bucato il palloncino di 🎈 @alice!\n"));
+    CHECK(popped.contains("bob hai cacciato 🎈 @alice da @TheConquister37.\n"));
     CHECK(popped.contains("bob sei in @TheConquister37!"));
 }
 
@@ -405,8 +414,8 @@ TEST_CASE("getting in tells what the 🦞 became") {
     CHECK_FALSE(play(0, "alice").contains("aragoste"));
     storage.transaction([](StorageSession &session) {
         session.state().balloons["irc:alice"] = 3;
-        session.state().furniture["irc:alice"] = "🍕[]⚡";
-        session.state().furniture["tg:2"] = "🦞🦞🦞";
+        session.state().equipped["irc:alice"] = "🍕[]⚡";
+        session.state().equipped["tg:2"] = "🦞🦞🦞";
         return 0;
     });
     const std::string reply = play(2, "bob");
@@ -418,7 +427,7 @@ TEST_CASE("the balloon replies follow the same rule") {
     {
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":{"user_id":0,"username":"alice","since":0},"scores":{},"quotes_added":{},)"
-             << R"("balloons":{"alice":3},"cooldowns":{},"furniture":{"alice":"🎈"}})";
+             << R"("balloons":{"alice":3},"cooldowns":{},"equipped":{"alice":"🎈"}})";
     }
     AppConfig config;
     config.starter_balloon = false;
@@ -428,7 +437,7 @@ TEST_CASE("the balloon replies follow the same rule") {
 
     const CommandContext context{.storage = storage, .config = config, .user_id = 2, .username = "bob"};
     const std::string reply = command_dispatch(context, "We @TheConquister37").value_or("<nessuna risposta>");
-    CHECK(reply.starts_with("bob hai bucato il palloncino di alice (🎈)!\n"));
+    CHECK(reply.starts_with("bob hai bucato il palloncino di 🎈 alice!\n"));
     CHECK_FALSE(reply.contains("@alice"));
 }
 
@@ -629,7 +638,8 @@ TEST_CASE("the profile shows where a player stands") {
         ConquisterState &state = session.state();
         state.scores["tg:1"] = 5000;
         state.scores["tg:2"] = 7000;
-        state.furniture["tg:1"] = "🍕[]⚡";
+        state.furniture["tg:1"] = "🍕";
+        state.equipped["tg:1"] = "⚡";
         state.quotes_added["tg:1"] = 3;
         state.balloons["tg:1"] = 1;
         return 0;
@@ -638,7 +648,7 @@ TEST_CASE("the profile shows where a player stands") {
     CHECK(command_is_for_bot("/profile"));
     const std::string mine = command_dispatch(alice, "/profile").value_or("");
     /* Carol has no palle yet, so the ranking has two players. */
-    CHECK(mine.starts_with("Alice (🍕[]⚡)\n5000 palle, 2° su 2 in classifica\n"));
+    CHECK(mine.starts_with("Alice\nCon te: ⚡\nCasa: 🍕\n5000 palle, 2° su 2 in classifica\n"));
     CHECK(mine.contains(": oggi è giorno di "));
     CHECK(mine.contains("\na casa, in @Alice\n"));
     /* The balloon stays out of it, worn or not. */
@@ -649,7 +659,7 @@ TEST_CASE("the profile shows where a player stands") {
     CHECK(command_dispatch(bob, "/profile @Alice") == mine);
     CHECK(command_dispatch(bob, "/profile @Nessuno") == "Bob non conosco nessun giocatore di nome @Nessuno.");
     const std::string irc = command_dispatch(bob, "/profile Carol").value_or("");
-    CHECK(irc.starts_with("Carol\nnessuna palla ancora\n"));
+    CHECK(irc.starts_with("Carol\nCon te: niente\nCasa: vuota\nnessuna palla ancora\n"));
     CHECK_FALSE(irc.contains("🎈"));
     CHECK(irc.contains("\na casa, in Carol"));
 
@@ -673,14 +683,18 @@ TEST_CASE("the help lists the commands, and of the We lines only the one for the
     CHECK(command_is_for_bot("/help"));
     const std::string help = command_dispatch(telegram, "/help").value_or("");
     CHECK(help.starts_with("Come si gioca\n\n"));
-    CHECK(help.contains("\n/buy 🍕 3 — la compri e la appendi nel posto 3\n"));
-    CHECK_FALSE(help.contains("⚡"));
+    CHECK(help.contains("\n/buy 🍕 3 — la compri e la metti nel posto 3 della casa\n"));
+    CHECK(help.contains("\n/take ⚡ — prendi ⚡ dalla casa e lo porti con te, dove dà il suo bonus\n"));
+    CHECK(help.contains("\n/take ⚡ 🚀 — prendi ⚡ e rimetti in casa 🚀 al suo posto\n"));
+    CHECK(help.contains("\n/store ⚡ — rimetti ⚡ in casa\n"));
+    CHECK(help.contains("\n/move 1 2 — sposti l'emoji dal posto 1 al posto 2 della casa\n"));
     CHECK(help.ends_with("\n/link <nome> — collega account Telegram e nick IRC Azzurra registrato"));
     CHECK(help.contains("\n/give @giocatore 500 — gli porti 500 palle\n"));
     CHECK(help.contains("\n/burn 🍕 — bruci una 🍕"));
     CHECK(help.contains("\n/leaderboard — classifica\n"));
     CHECK(help.contains("\n/profile [nome] — il tuo profilo o quello di un altro\n"));
-    CHECK(help.contains("\nRazzie, regali e lanci partono solo da casa tua."));
+    CHECK(help.contains("\nAccanto al nome si vede quello che hai con te; la casa è nel /profile. Razzie, regali e "
+                        "lanci partono solo da casa tua"));
     /* No We line but the one for the place. */
     std::size_t we_lines = 0;
     for (std::size_t at = help.find("\nWe "); at != std::string::npos; at = help.find("\nWe ", at + 1)) {
@@ -726,25 +740,25 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     CHECK(command_dispatch(alice, "We @Bob 🍕🎈") == "Alice una emoji per volta.");
     CHECK(command_dispatch(alice, "We @Bob 🍕 2") ==
           "Alice la posizione si sceglie solo sul tuo nome: scrivi We @Bob 🍕.");
-    CHECK(command_dispatch(alice, "We @Bob 🚀") == "Alice non hai 🚀 in casa.");
+    CHECK(command_dispatch(alice, "We @Bob 🚀") == "Alice non hai 🚀, né con te né in casa.");
     /* On her own name it is a purchase: one copy already hangs there, so the price doubles. */
     CHECK(command_dispatch(alice, "We @Alice 🍕")->contains("ce ne sono già 1 in giro"));
     CHECK(command_dispatch(alice, "We @Nessuno 🍕") == "Alice non conosco nessun giocatore di nome @Nessuno.");
 
     CHECK(command_dispatch(alice, "We @TheConquister37 🐟") ==
           "Alice hai portato 🐟 in @TheConquister37: è uscita dal gioco.");
-    CHECK(command_dispatch(alice, "We @TheConquister37 🐟") == "Alice non hai 🐟 in casa.");
-    /* Two slots on her own name: the emoji change places. */
+    CHECK(command_dispatch(alice, "We @TheConquister37 🐟") == "Alice non hai 🐟, né con te né in casa.");
+    /* Two slots of her house: the emoji change places. */
     CHECK(command_is_for_bot("We @Alice 1 2"));
     CHECK(command_dispatch(alice, "We @Alice 1 2") ==
-          "Alice (🎈🍕) hai scambiato 🍕 e 🎈: ora 🍕 è nel posto 2 e 🎈 nel posto 1.");
-    CHECK(command_dispatch(alice, "We @Alice 2 4") == "Alice (🎈[][]🍕) hai spostato 🍕 dal posto 2 al posto 4.");
+          "Alice hai scambiato 🍕 e 🎈: ora 🍕 è nel posto 2 e 🎈 nel posto 1. Casa: 🎈🍕");
+    CHECK(command_dispatch(alice, "We @Alice 2 4") == "Alice hai spostato 🍕 dal posto 2 al posto 4. Casa: 🎈[][]🍕");
     CHECK(command_dispatch(alice, "We @Alice 4 1") ==
-          "Alice (🍕[][]🎈) hai scambiato 🍕 e 🎈: ora 🍕 è nel posto 1 e 🎈 nel posto 4.");
-    CHECK(command_dispatch(alice, "We @Alice 4 2") == "Alice (🍕🎈) hai spostato 🎈 dal posto 4 al posto 2.");
-    CHECK(command_dispatch(alice, "We @Alice 3 1") == "Alice nel posto 3 non c'è nessuna emoji.");
+          "Alice hai scambiato 🍕 e 🎈: ora 🍕 è nel posto 1 e 🎈 nel posto 4. Casa: 🍕[][]🎈");
+    CHECK(command_dispatch(alice, "We @Alice 4 2") == "Alice hai spostato 🎈 dal posto 4 al posto 2. Casa: 🍕🎈");
+    CHECK(command_dispatch(alice, "We @Alice 3 1") == "Alice nel posto 3 della casa non c'è nessuna emoji.");
     CHECK(command_dispatch(alice, "We @Alice 1 1") == "Alice il posto di partenza e quello di arrivo sono lo stesso.");
-    CHECK(command_dispatch(alice, "We @Alice 1 12") == "Alice i posti vanno da 1 a 10.");
+    CHECK(command_dispatch(alice, "We @Alice 1 12") == "Alice i posti della casa vanno da 1 a 10.");
     CHECK(command_dispatch(alice, "We @Bob 1 2") == "Alice puoi spostare solo le emoji sul tuo nome.");
 
     /* A pile of poo is not just burnt: it is thrown. */
@@ -754,18 +768,18 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
         return 0;
     });
     /* Owning a 💩 is not being hit by one. */
-    CHECK(command_dispatch(alice, "/profile").value_or("").starts_with("Alice (🍕🎈💩)\n"));
+    CHECK(command_dispatch(alice, "/profile").value_or("").starts_with("Alice\nCon te: niente\nCasa: 🍕🎈💩\n"));
     CHECK(command_dispatch(alice, "We @TheConquister37 💩") ==
           "@Alice, tiri una palla di cacca a @TheConquister37, bravo hai fatto centro, l'hai completamente smerdato!");
-    CHECK(furniture_all(storage).at("tg:1") == "🍕🎈");
-    CHECK(command_dispatch(alice, "We @TheConquister37 💩") == "Alice non hai 💩 in casa.");
+    CHECK(house_of(storage, "tg:1") == "🍕🎈");
+    CHECK(command_dispatch(alice, "We @TheConquister37 💩") == "Alice non hai 💩, né con te né in casa.");
 
     const std::string leaving = command_dispatch(alice, "We @Bob 🍕").value_or("");
     CHECK(leaving.starts_with("Alice parti per Bob con 🍕 da consegnare: arrivi tra "));
-    CHECK(furniture_all(storage).at("tg:1") == "[]🎈");
+    CHECK(house_of(storage, "tg:1") == "[]🎈");
     /* On the road she cannot buy, and the old command only points to the new way. */
     CHECK(command_dispatch(alice, "We @Alice 🚀") ==
-          "Alice sei in viaggio: le emoji si appendono al nome da casa tua. Per tornare indietro scrivi We @Alice.");
+          "Alice sei in viaggio: le emoji si comprano da casa tua. Per tornare indietro scrivi We @Alice.");
     CHECK(command_dispatch(alice, "We @Alice 1 2") ==
           "Alice sei in viaggio: le emoji si spostano da casa tua. Per tornare indietro scrivi We @Alice.");
     CHECK(command_dispatch(alice, "We @TheConquister37 🎈") ==
@@ -788,7 +802,7 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     given.gift_emoji = "🍕";
     given.target_emoji = "🍕";
     given.seconds = 5;
-    CHECK(raid_event_reply(given) == "Alice hai consegnato 🍕 a @Bob (🍕)! Torni in Alice tra 5 secondi.");
+    CHECK(raid_event_reply(given) == "Alice hai consegnato 🍕 a 🍕 @Bob! Torni in Alice tra 5 secondi.");
     /* A pile of poo that lands is a throw, like the one at the place. */
     RaidEvent poo = given;
     poo.gift_emoji = "💩";
@@ -799,11 +813,11 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     RaidEvent bomb = given;
     bomb.gift_emoji = "💣";
     bomb.target_emoji = "🍕";
-    CHECK(raid_event_reply(bomb) == "Alice la tua bomba esplode in casa di @Bob (🍕) ma non trova niente da "
+    CHECK(raid_event_reply(bomb) == "Alice la tua bomba esplode in casa di 🍕 @Bob ma non trova niente da "
                                     "portarsi via. Torni in Alice tra 5 secondi.");
     bomb.blown = {"🥺", "⚡"};
     CHECK(raid_event_reply(bomb) ==
-          "Alice la tua bomba esplode in casa di @Bob (🍕) e si porta via 🥺⚡! Torni in Alice tra 5 secondi.");
+          "Alice la tua bomba esplode in casa di 🍕 @Bob e si porta via 🥺⚡! Torni in Alice tra 5 secondi.");
     RaidEvent bounced = bomb;
     bounced.sent_back = true;
     CHECK(raid_event_reply(bounced) == "La cassetta di @Bob rispedisce 💣 al mittente: Alice esplode a casa tua e si "
@@ -820,7 +834,7 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     empty_house.gift_emoji = "💦";
     empty_house.nobody_home = true;
     CHECK(raid_event_reply(empty_house) ==
-          "Alice a casa di @Bob (🍕) non c'è nessuno: la 💦 te la riporti a casa. Torni in Alice tra 5 secondi.");
+          "Alice a casa di 🍕 @Bob non c'è nessuno: la 💦 te la riporti a casa. Torni in Alice tra 5 secondi.");
     RaidEvent iced = given;
     iced.gift_emoji = "🧊";
     iced.froze = 300;
@@ -840,15 +854,15 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     birth.target_on_telegram = true;
     birth.target_emoji = "🍕👶";
     birth.gift_emoji = "👶";
-    CHECK(raid_event_reply(birth) == "@Bob (🍕👶) è nata una femmina 👶: il padre è @Alice.");
+    CHECK(raid_event_reply(birth) == "🍕👶 @Bob è nata una femmina 👶: il padre è @Alice.");
     birth.gift = 1;
     birth.target_emoji = "👶";
     birth.blown = {"🍕"};
     CHECK(raid_event_reply(birth) ==
-          "@Bob (👶) è nato un maschio 👶: il padre è @Alice. Non c'era un posto libero: ha preso quello di 🍕.");
+          "👶 @Bob è nato un maschio 👶: il padre è @Alice. Non c'era un posto libero: ha preso quello di 🍕.");
     birth.raider.clear();
     birth.blown.clear();
-    CHECK(raid_event_reply(birth) == "@Bob (👶) è nato un maschio 👶: i genitori sono il 👨 e la 👩 di casa.");
+    CHECK(raid_event_reply(birth) == "👶 @Bob è nato un maschio 👶: i genitori sono il 👨 e la 👩 di casa.");
     RaidEvent left;
     left.kind = RaidEvent::Kind::gone;
     left.target = "Bob";
@@ -868,17 +882,17 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     robbed.target_smeared = true;
     robbed.target_emoji = "🍕";
     robbed.loot = 3;
-    CHECK(raid_event_reply(robbed).value_or("").contains("Bob lo smerdato (🍕)"));
+    CHECK(raid_event_reply(robbed).value_or("").contains("🍕 Bob lo smerdato"));
     RaidEvent quiet = robbed;
     quiet.sneaked = true;
     quiet.seconds = 5;
-    CHECK(raid_event_reply(quiet) == "Carol scivoli di nascosto oltre le difese di Bob lo smerdato (🍕) e rubi 3 palle! "
+    CHECK(raid_event_reply(quiet) == "Carol scivoli di nascosto oltre le difese di 🍕 Bob lo smerdato e rubi 3 palle! "
                                      "Torni in Carol tra 5 secondi.");
     RaidEvent found = robbed;
     found.alarmed = true;
     found.seconds = 5;
     CHECK(raid_event_reply(found).value_or("").starts_with(
-        "L'allarme di Bob ti scopre: devi vedertela con le sue difese.\nCarol hai rubato 3 palle a Bob lo smerdato"));
+        "L'allarme di Bob ti scopre: devi vedertela con le sue difese.\nCarol hai rubato 3 palle a 🍕 Bob lo smerdato"));
     RaidEvent eaten = robbed;
     eaten.eaten = "⚡";
     CHECK(raid_event_reply(eaten).value_or("").starts_with("Il 🦖 di "));
@@ -886,22 +900,31 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     RaidEvent boarded = robbed;
     boarded.boarded = "🍕";
     boarded.seconds = 5;
-    CHECK(raid_event_reply(boarded).value_or("").ends_with("\nArrembaggio: ti porti via anche 🍕 da casa sua."));
+    CHECK(raid_event_reply(boarded).value_or("").ends_with(
+        "\nArrembaggio: ti porti via anche 🍕 da casa sua, e ora è con te: non dà nessun bonus."));
+    /* What works on him says what it is worth there, all the copies he has on him counted. */
+    boarded.boarded = "⚡";
+    boarded.raider_emoji = "⚡⚡";
+    AppConfig numbers;
+    numbers.lightning_percent = 10;
+    CHECK(raid_event_reply(boarded, numbers).value_or("").ends_with(
+        "\nArrembaggio: ti porti via anche ⚡ da casa sua, e ora è con te: ora ne hai 2 con te: +20% di palle in "
+        "@TheConquister37."));
     RaidEvent caught = robbed;
     caught.loot = 0;
     caught.intercepted = true;
     caught.seconds = 5;
     CHECK(raid_event_reply(caught) ==
-          "Carol il cane di Bob lo smerdato (🍕) ti ha intercettato: niente bottino. Torni in Carol tra 5 secondi.");
+          "Carol il cane di 🍕 Bob lo smerdato ti ha intercettato: niente bottino. Torni in Carol tra 5 secondi.");
     robbed.target_emoji = "🥺🥺";
     robbed.spared = 1;
     robbed.pleaded_percent = 10;
     CHECK(raid_event_reply(robbed).value_or("").ends_with(
-        "\nBob lo smerdato (🥺🥺) ti ha impietosito: gli rubi 3 palle invece di 4 palle (10% in meno)."));
+        "\n🥺🥺 Bob lo smerdato ti ha impietosito: gli rubi 3 palle invece di 4 palle (10% in meno)."));
     given.no_room = true;
     given.target_emoji = "🐝🐝";
     CHECK(raid_event_reply(given) ==
-          "Alice @Bob (🐝🐝) non ha più posto per 🍕: te la riporti a casa tua. Torni in Alice tra 5 secondi.");
+          "Alice 🐝🐝 @Bob non ha più posto per 🍕: te la riporti a casa tua. Torni in Alice tra 5 secondi.");
 
     RaidEvent home;
     home.kind = RaidEvent::Kind::returned;
@@ -940,18 +963,18 @@ TEST_CASE("a 💩 thrown at the place makes the holder \"lo smerdato\" for a day
     CHECK(command_dispatch(bob, "/profile").value_or("").starts_with("Bob lo smerdato\n"));
     const std::string board = command_dispatch(alice, "/leaderboard").value_or("");
     CHECK(board.contains("In @TheConquister37 ora: Bob lo smerdato"));
-    CHECK(board.contains(" Alice ([]💩) — "));
+    CHECK(board.contains(" Alice — "));
 
     /* A bomb thrown at the place goes off on him too, among what he carries. */
     storage.transaction([](StorageSession &session) {
         session.state().furniture["tg:1"] = "💣💣";
-        session.state().furniture["tg:2"] = "🍕⚡";
+        session.state().equipped["tg:2"] = "🍕⚡";
         return 0;
     });
     CHECK(command_dispatch(alice, "We @TheConquister37 💣") ==
-          "Alice la tua bomba esplode addosso a @Bob (🍕) in @TheConquister37 e si porta via ⚡!");
+          "Alice la tua bomba esplode addosso a 🍕 @Bob in @TheConquister37 e si porta via ⚡!");
     CHECK(command_dispatch(alice, "We @TheConquister37 💣") ==
-          "Alice la tua bomba esplode addosso a @Bob (🍕) in @TheConquister37 ma non trova niente da portarsi via.");
+          "Alice la tua bomba esplode addosso a 🍕 @Bob in @TheConquister37 ma non trova niente da portarsi via.");
 
     /* A day later he is clean, and the entry is gone. */
     storage.transaction([](StorageSession &session) {
@@ -961,7 +984,7 @@ TEST_CASE("a 💩 thrown at the place makes the holder \"lo smerdato\" for a day
     const std::int64_t now = std::chrono::duration_cast<std::chrono::seconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
     CHECK(raid_due(storage, now, RaidRules{}).empty());
-    CHECK(command_dispatch(bob, "/profile").value_or("").starts_with("Bob (🍕)\n"));
+    CHECK(command_dispatch(bob, "/profile").value_or("").starts_with("Bob\nCon te: 🍕\n"));
     CHECK(storage.transaction([](StorageSession &session) { return session.state().smeared.empty(); }));
 }
 
@@ -1019,7 +1042,7 @@ TEST_CASE("the ☢️ costs a million and starts the game over from the place") 
         return 0;
     });
     REQUIRE(command_dispatch(alice, "We @Alice ☢️"));
-    CHECK(furniture_all(storage).at("tg:1") == "☢️");
+    CHECK(house_of(storage, "tg:1") == "☢️");
     CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 7);
 
     RaidEvent landed;
@@ -1056,9 +1079,9 @@ TEST_CASE("everybody starts with a 🎈, which is what defends him and can be bo
     const CommandContext bob{.storage = storage, .config = config, .user_id = 2, .username = "Bob"};
 
     /* Seen for the first time, she is handed one; never a second time. */
-    CHECK(command_dispatch(alice, "/profile").value_or("").starts_with("Alice (🎈)\n"));
+    CHECK(command_dispatch(alice, "/profile").value_or("").starts_with("Alice\nCon te: 🎈\n"));
     storage.transaction([](StorageSession &session) {
-        session.state().furniture.erase("tg:1");
+        session.state().equipped.erase("tg:1");
         session.state().scores["tg:1"] = 1500;
         return 0;
     });
@@ -1071,7 +1094,7 @@ TEST_CASE("everybody starts with a 🎈, which is what defends him and can be bo
     CHECK_FALSE(walked.contains("palloncino"));
 
     /* A new one has its own price, whatever copies are around. */
-    CHECK(command_dispatch(alice, "We @Alice 🎈").value_or("").contains("Alice (🎈) hai speso 1000 palle"));
+    CHECK(command_dispatch(alice, "We @Alice 🎈").value_or("").contains("🎈 Alice hai speso 1000 palle: 🎈 ora è con te"));
     CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score >= 500);
 }
 
@@ -1096,7 +1119,7 @@ TEST_CASE("a popped 🎈 stays on the name, and a player is handed only one") {
         for (int attempt = 0; attempt < 8 && !reply.contains("hai cacciato"); ++attempt) {
             reply = command_dispatch(bob, "We @TheConquister37").value_or("");
         }
-        CHECK(reply.contains("hai bucato il palloncino di @Alice"));
+        CHECK(reply.contains("hai bucato il palloncino di 🎈 @Alice"));
         CHECK(furniture_of_alice(storage) == "🎈");
         /* Burnt, it is gone for good: nothing she does hands her another. */
         REQUIRE(command_dispatch(alice, "We @TheConquister37 🎈"));
@@ -1115,7 +1138,7 @@ TEST_CASE("a 🥷 takes the claimer past the holder's 🎈") {
     {
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":{"user_id":0,"username":"alice","since":0},"scores":{},"quotes_added":{},)"
-             << R"("furniture":{"alice":"🎈"}})";
+             << R"("equipped":{"alice":"🎈"}})";
     }
     AppConfig config;
     config.starter_balloon = false;
@@ -1126,12 +1149,12 @@ TEST_CASE("a 🥷 takes the claimer past the holder's 🎈") {
     const CommandContext bob{.storage = storage, .config = config, .user_id = 2, .username = "bob"};
     REQUIRE(command_dispatch(bob, "/profile"));
     storage.transaction([](StorageSession &session) {
-        session.state().furniture["tg:2"] = "🥷🏿";
+        session.state().equipped["tg:2"] = "🥷🏿";
         return 0;
     });
     const std::string reply = command_dispatch(bob, "We @TheConquister37").value_or("");
-    CHECK(reply.starts_with("bob (🥷🏿) scivoli di nascosto oltre il palloncino di alice (🎈)!\n"));
-    CHECK(reply.contains("bob (🥷🏿) hai cacciato alice (🎈) da @TheConquister37.\n"));
+    CHECK(reply.starts_with("🥷🏿 bob scivoli di nascosto oltre il palloncino di 🎈 alice!\n"));
+    CHECK(reply.contains("🥷🏿 bob hai cacciato 🎈 alice da @TheConquister37.\n"));
     CHECK_FALSE(reply.contains("bucato"));
 }
 
@@ -1169,12 +1192,14 @@ TEST_CASE("/emoji tells every emoji with a power, where it is and what can hit i
     }
     CHECK(help.contains("\n🥺 chi ti razzia ruba il 10% in meno per ognuna\n"));
     CHECK(help.contains("\n⚡ +10% di palle in @TheConquister37 per ognuno\n"));
-    CHECK(help.contains("🎈 il palloncino: difende casa tua quando ci sei e @TheConquister37 quando lo tieni; bucato "
-                        "torna nuovo; uno nuovo costa 1000 palle. "
-                        "Invincibile: né bombe né furti\n"));
+    CHECK(help.contains("🎈 il palloncino: con te difende te, casa tua quando ci sei e @TheConquister37 quando lo "
+                        "tieni; in casa difende la casa anche quando sei fuori; bucato torna nuovo; uno nuovo costa "
+                        "1000 palle. Invincibile: né bombe né furti\n"));
     CHECK(help.contains("\n💩 🇷🇺 🇮🇱 chi la prende è \"lo smerdato\" per 1 giorno\n"));
-    CHECK(help.contains("Restano a casa"));
-    CHECK(help.contains("Vengono con te"));
+    CHECK(help.starts_with("Emoji con un potere\n\nHai due posti per le emoji: con te (5 posti), accanto al nome, e la "
+                           "casa (10 posti), nel /profile."));
+    CHECK(help.contains("Funzionano in casa"));
+    CHECK(help.contains("Funzionano con te"));
     CHECK(help.contains("Si lanciano"));
     CHECK(command_dispatch(alice, "/help").value_or("").contains("\n/emoji — "));
     /* It fits in one Telegram message. */
@@ -1343,39 +1368,40 @@ TEST_CASE("a bought emoji follows the name everywhere") {
 
     const auto reply = [&](std::string_view text) { return command_dispatch(context, text).value_or(""); };
 
-    /* No slot named: the first one, and the reply already shows the name dressed. */
-    CHECK(reply("We @alice 🎈").starts_with("alice (🎈) hai speso "));
-    /* The emoji first, then the slot: the one in between stays a hole. */
+    /* No slot named: one that works on her goes on her, and the reply already shows her name dressed. */
+    CHECK(reply("We @alice 🎈").starts_with("🎈 alice hai speso 1000 palle: 🎈 ora è con te. Con te difende te"));
+    /* The emoji first, then the slot of the house: the ones before it stay holes. */
     const std::string third = reply("We @alice 🍕 3");
-    CHECK(third.contains("alice (🎈[]🍕) hai speso "));
-    CHECK(third.ends_with(": 🍕 nel posto 3."));
-    CHECK(reply("We @alice 🐟 3").ends_with(": 🐟 nel posto 3, al posto di 🍕."));
+    CHECK(third.starts_with("🎈 alice hai speso "));
+    CHECK(third.ends_with(": 🍕 in casa nel posto 3."));
+    CHECK(reply("We @alice 🐟 3").ends_with(": 🐟 in casa nel posto 3, al posto di 🍕."));
 
     /* Anything else is turned away without a charge. */
     const std::int64_t before = conquister_user(storage, "alice")->score;
     CHECK_FALSE(command_is_for_bot("We @alice ciao"));
     CHECK(reply("We @alice 🍕🎈 3") == "alice una emoji per volta.");
-    CHECK(reply("We @alice 🍕 11") == "alice i posti vanno da 1 a 10: nessun addebito.");
-    CHECK(reply("We @alice 🍕 0") == "alice i posti vanno da 1 a 10: nessun addebito.");
+    CHECK(reply("We @alice 🍕 11") == "alice i posti della casa vanno da 1 a 10: nessun addebito.");
+    CHECK(reply("We @alice 🍕 0") == "alice i posti della casa vanno da 1 a 10: nessun addebito.");
     CHECK(reply("We @alice 🐟 3") == "alice nel posto 3 c'è già 🐟: nessun addebito.");
     CHECK(conquister_user(storage, "alice")->score == before);
 
     /* The leaderboard shows the dressed name, and whoever bought nothing stays bare. */
     const std::optional<std::string> board = command_dispatch(context, "/leaderboard");
     REQUIRE(board);
-    CHECK(board->contains("alice (🎈[]🐟)"));
+    CHECK(board->contains("🎈 alice —"));
     CHECK(board->contains("bob —"));
 
     /* And taking the seat, too. */
     const std::optional<std::string> claimed = command_dispatch(context, conquister_trigger);
     REQUIRE(claimed);
-    CHECK(claimed->contains("alice (🎈[]🐟) sei in"));
+    CHECK(claimed->contains("🎈 alice sei in"));
 
     /* From the place the purchase takes her home first; a keycap is an emoji like any other and fills
-       the hole. */
+       the first hole of the house. */
     const std::string keycap = reply("We @alice 3️⃣");
     CHECK(keycap.starts_with("alice torni da @TheConquister37 in @alice con "));
-    CHECK(keycap.contains("\nalice (🎈3️⃣🐟) hai speso "));
+    CHECK(keycap.contains("\n🎈 alice hai speso "));
+    CHECK(keycap.ends_with(": 3️⃣ in casa nel posto 1."));
     CHECK_FALSE(conquister_user(storage, "alice")->in_conquister);
 }
 
@@ -1510,9 +1536,9 @@ TEST_CASE("/buy is another way to write We yourname emoji, on Telegram and on IR
     CHECK(command_dispatch(alice, "/buy").value_or("").starts_with("Uso: /buy <emoji> [posto]"));
     CHECK(command_dispatch(alice, "/buy 🍕").value_or("").contains("hai speso"));
     CHECK(command_dispatch(alice, "/buy 🍩 3").value_or("").contains("hai speso"));
-    CHECK(furniture_all(storage).at("tg:1") == "🍕[]🍩");
+    CHECK(house_of(storage, "tg:1") == "🍕[]🍩");
     CHECK(command_dispatch(kio, "/buy 🍕").value_or("").contains("hai speso"));
-    CHECK(furniture_all(storage).count("irc:kio") == 1);
+    CHECK(house_of(storage, "irc:kio") == "🍕");
 }
 
 TEST_CASE("/raid robs, /give makes a present of anything, /throw lands what is thrown") {
@@ -1552,14 +1578,14 @@ TEST_CASE("/raid robs, /give makes a present of anything, /throw lands what is t
     CHECK(command_dispatch(alice, "/give @TheConquister37 500").value_or("").starts_with(
         "Alice a @TheConquister37 non si regala niente"));
 
-    /* Given, the 💣 arrives as it is and hangs on his name. */
+    /* Given, the 💣 arrives as it is and goes in his house. */
     CHECK(command_dispatch(alice, "/give @Bob 💣").value_or("").starts_with("Alice parti per Bob con 💣 da regalare"));
     home_again();
-    CHECK(furniture_all(storage).at("tg:2") == "🍕💣");
+    CHECK(house_of(storage, "tg:2") == "🍕💣");
     /* Thrown, the other one goes off. */
     CHECK(command_dispatch(alice, "/throw @Bob 💣").value_or("").starts_with("Alice parti per Bob con 💣 da consegnare"));
     home_again();
-    CHECK(furniture_all(storage).at("tg:2") != "🍕💣💣");
+    CHECK(house_of(storage, "tg:2") != "🍕💣💣");
     /* And palle are given as before. */
     CHECK(command_dispatch(alice, "/give @Bob 500").value_or("").starts_with("Alice parti per Bob con 500 palle"));
     home_again();
@@ -1580,7 +1606,7 @@ TEST_CASE("/burn takes emoji and palle out of the game, and what is thrown hits 
     storage.transaction([](StorageSession &session) {
         session.state().scores["tg:1"] = 1000;
         session.state().furniture["tg:1"] = "🍕☢️💣";
-        session.state().furniture["tg:2"] = "⚡";
+        session.state().equipped["tg:2"] = "⚡";
         return 0;
     });
     /* Bob holds the place: a 💣 thrown there would go off on him. */
@@ -1588,14 +1614,14 @@ TEST_CASE("/burn takes emoji and palle out of the game, and what is thrown hits 
 
     CHECK(command_is_for_bot("/burn 🍕"));
     CHECK(command_dispatch(alice, "/burn").value_or("").starts_with("Uso: /burn <emoji o palle>"));
-    CHECK(command_dispatch(alice, "/burn 🍕") == "Alice ([]☢️💣) hai bruciato 🍕: è uscita dal gioco.");
-    CHECK(command_dispatch(alice, "/burn 💣") == "Alice ([]☢️) hai bruciato 💣: è uscita dal gioco.");
+    CHECK(command_dispatch(alice, "/burn 🍕") == "Alice hai bruciato 🍕: è uscita dal gioco.");
+    CHECK(command_dispatch(alice, "/burn 💣") == "Alice hai bruciato 💣: è uscita dal gioco.");
     CHECK(furniture_all(storage).at("tg:2") == "⚡");
     /* Not even a ☢️ starts the game over. */
     CHECK(command_dispatch(alice, "/burn ☢️") == "Alice hai bruciato ☢️: è uscita dal gioco.");
     CHECK(furniture_all(storage).at("tg:2") == "⚡");
     CHECK(command_dispatch(alice, "/burn 100").value_or("").starts_with("Alice hai portato 100 palle in @TheConquister37"));
-    CHECK(command_dispatch(alice, "/burn 🍩") == "Alice non hai 🍩 in casa.");
+    CHECK(command_dispatch(alice, "/burn 🍩") == "Alice non hai 🍩, né con te né in casa.");
     storage.transaction([](StorageSession &session) {
         session.state().furniture["tg:1"] = "👧";
         session.state().children.push_back(
@@ -1603,7 +1629,7 @@ TEST_CASE("/burn takes emoji and palle out of the game, and what is thrown hits 
         return 0;
     });
     CHECK(command_dispatch(alice, "/burn 👧") ==
-          "Alice i bambini non si bruciano: 👧 resta con te finché non se ne va da solo.");
+          "Alice i bambini non si bruciano: 👧 resta in casa finché non se ne va da solo.");
 }
 
 TEST_CASE("/home takes him home, /move swaps two slots and nothing else") {
@@ -1627,10 +1653,70 @@ TEST_CASE("/home takes him home, /move swaps two slots and nothing else") {
     CHECK(command_dispatch(alice, "/home") == "Alice sei già in @Alice!");
     REQUIRE(command_dispatch(alice, "We @TheConquister37").value_or("").contains("@TheConquister37"));
     CHECK(command_dispatch(alice, "/home").value_or("").starts_with("Alice torni da @TheConquister37 in @Alice"));
-    CHECK(command_dispatch(alice, "/move 1 2") == "Alice (🍩🍕) hai scambiato 🍕 e 🍩: ora 🍕 è nel posto 2 e 🍩 nel posto 1.");
+    CHECK(command_dispatch(alice, "/move 1 2") == "Alice hai scambiato 🍕 e 🍩: ora 🍕 è nel posto 2 e 🍩 nel posto 1. Casa: 🍩🍕");
     /* An emoji after /move is never bought. */
     CHECK(command_dispatch(alice, "/move 🍔 3").value_or("").starts_with("Uso: /move <da> <a>"));
     CHECK(command_dispatch(alice, "/move").value_or("").starts_with("Uso: /move <da> <a>"));
-    CHECK(furniture_all(storage).at("tg:1") == "🍩🍕");
+    CHECK(house_of(storage, "tg:1") == "🍩🍕");
     CHECK(command_dispatch(bob, "/move").value_or("").starts_with("Uso: !move <da> <a>"));
+}
+
+TEST_CASE("/take puts an emoji on him, /store back in the house, and both tell what it is worth") {
+    const TestPaths paths{"take-store-test"};
+    AppConfig config;
+    config.starter_balloon = false;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    config.lightning_percent = 10;
+    config.hen_per_minute = 1;
+    config.ninja_percent = 40;
+    Storage storage{config.conquister_path, config.quotes_path};
+    const CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
+    const CommandContext kio{.storage = storage, .config = config, .user_id = 0, .username = "Kio"};
+    REQUIRE(command_dispatch(alice, "/profile"));
+    REQUIRE(command_dispatch(kio, "/profile"));
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["tg:1"] = "⚡🐔🐔🍕💣🥷🥷🥷👧";
+        session.state().equipped["tg:1"] = "⚡⚡🦞[]🦞";
+        session.state().children.push_back(
+            Child{.owner = "tg:1", .slot = 8, .male = false, .born = 0, .paid = 0, .courted = false});
+        return 0;
+    });
+
+    CHECK(command_is_for_bot("/take ⚡"));
+    CHECK(command_is_for_bot("/store ⚡"));
+    CHECK(command_dispatch(alice, "/take").value_or("").starts_with("Uso: /take <emoji>"));
+    CHECK(command_dispatch(kio, "/store").value_or("").starts_with("Uso: !store <emoji>"));
+    CHECK(command_dispatch(alice, "/take ⚡") ==
+          "⚡⚡🦞⚡🦞 Alice ⚡ ora è con te: ora ne hai 3 con te: +30% di palle in @TheConquister37.");
+    CHECK(command_dispatch(alice, "/take 🍕") ==
+          "Alice hai già 5 emoji con te (⚡⚡🦞⚡🦞): scrivi /take 🍕 <emoji> per mettere 🍕 al posto di una di quelle, "
+          "che torna in casa.");
+    CHECK(command_dispatch(alice, "/take 🥷 ⚡") ==
+          "🥷⚡🦞⚡🦞 Alice 🥷 ora è con te al posto di ⚡, che torna in casa: ora ne hai 1 con te: 40% di passare "
+          "oltre 🎈 e 🐶 senza toccarli.");
+    CHECK(command_dispatch(alice, "/take 🥷 ⚡").value_or("").ends_with("ora ne hai 2 con te: 80% di passare oltre 🎈 e "
+                                                                      "🐶 senza toccarli."));
+    CHECK(command_dispatch(alice, "/take 🥷🦞").value_or("").ends_with(
+        "ora ne hai 3 con te: 100%, il massimo di passare oltre 🎈 e 🐶 senza toccarli."));
+    CHECK(command_dispatch(alice, "/store 🦞") ==
+          "🥷🥷🥷⚡ Alice 🦞 ora è in casa: non ne hai più con te, nessun bonus.");
+    CHECK(command_dispatch(alice, "/take 🐔") ==
+          "🥷🥷🥷⚡🐔 Alice 🐔 ora è con te: con te non fa niente, funziona solo in casa, dove ne hai ancora 1: fanno "
+          "60 palle all'ora.");
+    CHECK(command_dispatch(alice, "/store 🐔") == "🥷🥷🥷⚡ Alice 🐔 ora è in casa: ora ne hai 2 in casa: fanno 120 "
+                                                  "palle all'ora.");
+    CHECK(command_dispatch(alice, "/take 💣").value_or("").ends_with(
+        "💣 ora è con te: non dà nessun bonus: quando la lanci con /throw parte da qui."));
+    CHECK(command_dispatch(alice, "/take 👧") == "Alice i bambini restano in casa.");
+    CHECK(command_dispatch(alice, "/take 🎺") == "Alice non hai 🎺 in casa.");
+    CHECK(command_dispatch(alice, "/take 💣") == "Alice 💣 è già con te.");
+    CHECK(command_dispatch(alice, "/store 🎺") == "Alice non hai 🎺 con te.");
+    CHECK(command_dispatch(alice, "/take 🍕 🎺") == "Alice non hai 🎺 con te.");
+    CHECK(command_dispatch(alice, "/take 🍕 🍕 🍕").value_or("").starts_with("Uso: /take"));
+
+    /* Not from the road. */
+    REQUIRE(command_dispatch(alice, "/raid Kio").value_or("").starts_with("Alice parti per Kio"));
+    CHECK(command_dispatch(alice, "/take ⚡") ==
+          "Alice sei in viaggio: le emoji si prendono da casa tua. Per tornare indietro scrivi We @Alice.");
 }

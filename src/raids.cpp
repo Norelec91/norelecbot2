@@ -102,7 +102,7 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
         }
         try {
             for (const RaidEvent &event : raid_due(storage, seconds_now(), rules)) {
-                if (const std::optional<std::string> reply = raid_event_reply(event)) {
+                if (const std::optional<std::string> reply = raid_event_reply(event, config)) {
                     announce(config, *reply);
                 }
             }

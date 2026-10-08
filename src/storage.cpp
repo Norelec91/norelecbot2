@@ -90,25 +90,6 @@ Authors parse_authors(const Json &state, const char *name) {
     return authors;
 }
 
-Slots parse_slots(const Json &state, const char *name) {
-    Slots slots;
-    const auto section = state.find(name);
-    if (section == state.end() || !section->is_object()) {
-        return slots;
-    }
-    for (const auto &entry : section->items()) {
-        if (!entry.value().is_array()) {
-            continue;
-        }
-        std::vector<std::int64_t> numbers;
-        for (const Json &slot : entry.value()) {
-            numbers.push_back(integer(slot));
-        }
-        slots.emplace(entry.key(), std::move(numbers));
-    }
-    return slots;
-}
-
 std::vector<Raid> parse_raids(const Json &state) {
     std::vector<Raid> raids;
     const auto section = state.find("raids");
@@ -242,13 +223,14 @@ ConquisterState parse_state(const Json &json) {
         parse_authors(json, "furniture"),
         parse_counters(json, "debugging"),
         parse_counters(json, "smeared"),
-        parse_slots(json, "stayed"),
         parse_counters(json, "welcomed"),
         parse_counters(json, "frozen"),
         parse_pregnancies(json),
         parse_children(json),
         json.contains("eggs_at") ? integer(json.at("eggs_at")) : 0,
         parse_knocks(json),
+        parse_authors(json, "equipped"),
+        json.contains("split") && json.at("split").get<bool>(),
     };
     return state;
 }
@@ -319,13 +301,14 @@ Json state_to_json(const ConquisterState &state) {
         {"furniture", state.furniture},
         {"debugging", state.debugging},
         {"smeared", state.smeared},
-        {"stayed", state.stayed},
         {"welcomed", state.welcomed},
         {"frozen", state.frozen},
         {"pregnancies", std::move(pregnancies)},
         {"children", std::move(children)},
         {"eggs_at", state.eggs_at},
         {"knocks", std::move(knocks)},
+        {"equipped", state.equipped},
+        {"split", state.split},
     };
 }
 

@@ -32,8 +32,9 @@ struct CommandContext {
     bool admin = false;
 };
 
-/* What the bot says when a raid reaches its target or comes home. */
-[[nodiscard]] std::optional<std::string> raid_event_reply(const RaidEvent &event);
+/* What the bot says when a raid reaches its target or comes home: the config gives the numbers of the
+   bonus an emoji that ends up on somebody brings him. */
+[[nodiscard]] std::optional<std::string> raid_event_reply(const RaidEvent &event, const AppConfig &config = {});
 
 /* Whether the text is a claim or a known command, without running it. */
 [[nodiscard]] bool command_is_for_bot(std::string_view text);

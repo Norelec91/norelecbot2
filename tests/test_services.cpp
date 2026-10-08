@@ -26,6 +26,15 @@ Json read_json(const std::string &path) {
     return Json::parse(file);
 }
 
+/* What a player keeps in his house, as it is saved. */
+std::string house_of(Storage &storage, const std::string &player) {
+    return storage.transaction([&player](StorageSession &session) {
+        const Authors &houses = session.state().furniture;
+        const auto found = houses.find(player);
+        return found == houses.end() ? std::string{} : found->second;
+    });
+}
+
 }
 
 TEST_CASE("claims, leaderboard, users and quotes") {
@@ -206,16 +215,16 @@ TEST_CASE("the fourth attempt pops the balloon for certain") {
     {
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":{"user_id":1,"username":"alice","since":0},"scores":{},)"
-             << R"("quotes_added":{},"balloons":{"alice":3},"furniture":{"alice":"🍕🎈"}})";
+             << R"("quotes_added":{},"balloons":{"alice":3},"furniture":{"alice":"🍕"},"equipped":{"alice":"🎈"}})";
     }
     Storage storage{paths.conquister, paths.quotes};
 
     const ClaimResult attack = conquister_claim(storage, 2, "bob", 10);
     CHECK(attack.status == ClaimStatus::taken);
     CHECK(attack.balloon_popped);
-    /* Popped, the 🎈 stays on her name. It is having it that defends: once she burns it, the next one
+    /* Popped, the 🎈 stays on her. It is having it that defends: once she burns it, the next one
        walks in. */
-    CHECK(furniture_all(storage).at("alice") == "🍕🎈");
+    CHECK(furniture_all(storage).at("alice") == "🎈");
     CHECK(furniture_burn(storage, "alice", "🎈", 15).status == FurnitureBurnStatus::burned);
     CHECK(conquister_claim(storage, 1, "alice", 20).status == ClaimStatus::taken);
     const ClaimResult unguarded = conquister_claim(storage, 2, "bob", 30);
@@ -272,7 +281,7 @@ TEST_CASE("every ⚡ on the name as a player comes in adds its share to that hol
         /* Alice has ⚡; both balloons already took three attempts, so every claim gets in. */
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":null,"scores":{"alice":0,"bob":0},"quotes_added":{},)"
-             << R"("furniture":{"alice":"🍕⚡"},"balloons":{"alice":3,"bob":3}})";
+             << R"("furniture":{"alice":"🍕"},"equipped":{"alice":"⚡"},"balloons":{"alice":3,"bob":3}})";
     }
     Storage storage{paths.conquister, paths.quotes};
     const ClaimRules rules{.cooldown_seconds = 0, .signs = {}, .lightning = 50};
@@ -297,7 +306,7 @@ TEST_CASE("every ⚡ on the name as a player comes in adds its share to that hol
 
     /* Coming in without one, a ⚡ that arrives later does not count either. */
     storage.transaction([](StorageSession &session) {
-        session.state().furniture["bob"] = "⚡";
+        session.state().equipped["bob"] = "⚡";
         return 0;
     });
     worn_out();
@@ -308,7 +317,7 @@ TEST_CASE("every ⚡ on the name as a player comes in adds its share to that hol
 
     /* Three ⚡ add up to x2.5, and the balloon stays: the ⚡ only multiplies. */
     storage.transaction([](StorageSession &session) {
-        session.state().furniture["bob"] = "⚡⚡⚡";
+        session.state().equipped["bob"] = "⚡⚡⚡";
         return 0;
     });
     worn_out();
@@ -326,7 +335,7 @@ TEST_CASE("a 🦞 comes in as what the kicked holder has in the same slot, and l
         /* Both balloons already took three attempts, so every claim gets in. */
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":null,"scores":{"alice":0,"bob":0,"carol":0},"quotes_added":{},)"
-             << R"("furniture":{"alice":"⚡[]🎈🦞","bob":"🦞🦞🍕🦞"},"balloons":{"alice":3,"bob":3,"carol":3}})";
+             << R"("equipped":{"alice":"⚡[]🎈🦞","bob":"🦞🦞🍕🦞"},"balloons":{"alice":3,"bob":3,"carol":3}})";
     }
     const ClaimRules rules{.cooldown_seconds = 0, .signs = {}, .lightning = 50};
     {
@@ -344,7 +353,7 @@ TEST_CASE("a 🦞 comes in as what the kicked holder has in the same slot, and l
     }
     /* The copy survives a restart, and what is saved on the name is still the 🦞. */
     const Json saved = read_json(paths.conquister);
-    CHECK(saved.at("furniture").at("bob") == "🦞🦞🍕🦞");
+    CHECK(saved.at("equipped").at("bob") == "🦞🦞🍕🦞");
     CHECK(saved.at("current").at("lobsters").at("0") == "⚡");
     Storage storage{paths.conquister, paths.quotes};
     CHECK(player_profile_of(storage, "bob", 200).furniture == "⚡🦞🍕🦞");
@@ -353,7 +362,7 @@ TEST_CASE("a 🦞 comes in as what the kicked holder has in the same slot, and l
     CHECK(furniture_burn(storage, "bob", "⚡").status == FurnitureBurnStatus::not_owned);
     CHECK(furniture_burn(storage, "bob", "🦞").shown == "[]🦞🍕🦞");
     storage.transaction([](StorageSession &session) {
-        session.state().furniture["bob"] = "🦞🦞🍕🦞";
+        session.state().equipped["bob"] = "🦞🦞🍕🦞";
         return 0;
     });
 
@@ -429,7 +438,7 @@ TEST_CASE("the balloon guards only where its owner is, and follows him home") {
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":{"user_id":1,"username":"alice","since":0},)"
              << R"("scores":{"alice":2000,"bob":0},"quotes_added":{},)"
-             << R"("balloons":{"alice":3},"ids":{"alice":0,"bob":5000},"furniture":{"alice":"🎈"}})";
+             << R"("balloons":{"alice":3},"ids":{"alice":0,"bob":5000},"equipped":{"alice":"🎈"}})";
     }
     Storage storage{paths.conquister, paths.quotes};
     /* She is in @TheConquister37 with it, so her house is empty. */
@@ -845,28 +854,35 @@ TEST_CASE("furniture hangs in numbered slots, leaves holes and can be overwritte
     CHECK(furniture_slots("🎈[]🍕[][]🐟") == std::vector<std::string>{"🎈", "", "🍕", "", "", "🐟"});
     CHECK(furniture_stored({"🎈", "", "🍕", "", ""}) == "🎈[]🍕");
 
-    /* No slot named: the first empty one. */
+    /* No slot named, one that works on him goes on him. */
     const FurnitureResult first = furniture_buy(storage, "alice", "🎈", 0, 1000, 10, 0);
     CHECK(first.status == FurnitureStatus::bought);
-    CHECK(first.position == 1);
+    CHECK(first.with_him);
+    CHECK(first.position == 0);
     CHECK(first.shown == "🎈");
+    CHECK(first.house.empty());
     CHECK(first.charged == 1000);
     CHECK(conquister_user(storage, "alice")->score == 24000);
 
-    /* A slot further on leaves a hole, shown as [] only between emoji. */
+    /* A slot of the house further on leaves a hole, shown as [] only between emoji. */
     const FurnitureResult third = furniture_buy(storage, "alice", "🍕", 3, 1000, 10, 0);
     CHECK(third.status == FurnitureStatus::bought);
-    CHECK(third.shown == "🎈[]🍕");
+    CHECK_FALSE(third.with_him);
+    CHECK(third.house == "[][]🍕");
+    CHECK(third.shown == "🎈");
     CHECK(third.replaced.empty());
 
-    /* The hole is the first empty slot now. */
-    CHECK(furniture_buy(storage, "alice", "🐟", 0, 1000, 10, 0).shown == "🎈🐟🍕");
+    /* The hole is the first empty slot now, for what does not go on him. */
+    const FurnitureResult fish = furniture_buy(storage, "alice", "🐟", 0, 1000, 10, 0);
+    CHECK(fish.position == 1);
+    CHECK(fish.house == "🐟[]🍕");
 
-    /* Overwriting pays the full price and says what was there. */
+    /* Overwriting pays the full price and says what was there, even with one that would go on him. */
     const FurnitureResult swapped = furniture_buy(storage, "alice", "🚀", 3, 1000, 10, 0);
     CHECK(swapped.status == FurnitureStatus::bought);
+    CHECK_FALSE(swapped.with_him);
     CHECK(swapped.replaced == "🍕");
-    CHECK(swapped.shown == "🎈🐟🚀");
+    CHECK(swapped.house == "🐟[]🚀");
     CHECK(conquister_user(storage, "alice")->score == 21000);
 
     /* The same emoji in the same slot, or a slot that does not exist, costs nothing. */
@@ -876,11 +892,12 @@ TEST_CASE("furniture hangs in numbered slots, leaves holes and can be overwritte
     CHECK(furniture_buy(storage, "alice", "🎺", -1, 1000, 10, 0).status == FurnitureStatus::invalid_position);
     CHECK(conquister_user(storage, "alice")->score == 21000);
 
-    /* Every slot full and none named: refused without a charge. */
-    for (std::int64_t slot = 4; slot <= 10; ++slot) {
+    /* Every slot of the house full and none named: refused without a charge, unless it goes on him. */
+    for (const std::int64_t slot : {2, 4, 5, 6, 7, 8, 9, 10}) {
         REQUIRE(furniture_buy(storage, "alice", "🌊", slot, 0, 10, 0).status == FurnitureStatus::bought);
     }
     CHECK(furniture_buy(storage, "alice", "🎺", 0, 1000, 10, 0).status == FurnitureStatus::full);
+    CHECK(furniture_buy(storage, "alice", "⚡", 0, 0, 10, 0).with_him);
 
     /* With no palle nothing is bought and nothing is left hanging. */
     const FurnitureResult broke = furniture_buy(storage, "bob", "🎈", 0, 1000, 10, 0);
@@ -893,7 +910,8 @@ TEST_CASE("furniture hangs in numbered slots, leaves holes and can be overwritte
     Storage again{paths.conquister, paths.quotes};
     const Authors kept = furniture_all(again);
     REQUIRE(kept.find("alice") != kept.end());
-    CHECK(kept.find("alice")->second == "🎈🐟🚀🌊🌊🌊🌊🌊🌊🌊");
+    CHECK(kept.find("alice")->second == "🎈⚡");
+    CHECK(house_of(again, "alice") == "🐟🌊🚀🌊🌊🌊🌊🌊🌊🌊");
 }
 
 TEST_CASE("an emoji moves to another slot, swapping with what hangs there") {
@@ -924,7 +942,7 @@ TEST_CASE("an emoji moves to another slot, swapping with what hangs there") {
     CHECK(furniture_move(storage, "alice", 1, 11, 10, 0).status == FurnitureMoveStatus::invalid_position);
     CHECK(furniture_move(storage, "alice", 0, 1, 10, 0).status == FurnitureMoveStatus::invalid_position);
     CHECK(furniture_move(storage, "alice", 2, 2, 10, 0).status == FurnitureMoveStatus::same_position);
-    CHECK(furniture_all(storage).at("alice") == "🎈🍕");
+    CHECK(house_of(storage, "alice") == "🎈🍕");
 
     /* From the place it takes her home first. */
     storage.transaction([](StorageSession &session) {
@@ -940,7 +958,7 @@ TEST_CASE("an emoji moves to another slot, swapping with what hangs there") {
     /* Not from the road. */
     REQUIRE(raid_start(storage, 0, "alice", "bob", 0, quick_rides()).status == RaidStatus::started);
     CHECK(furniture_move(storage, "alice", 1, 2, 10, 0).status == FurnitureMoveStatus::not_home);
-    CHECK(furniture_all(storage).at("alice") == "🎈🍕");
+    CHECK(house_of(storage, "alice") == "🎈🍕");
 }
 
 TEST_CASE("an emoji costs double for every copy already hanging from anybody's name") {
@@ -1007,7 +1025,7 @@ TEST_CASE("every 🚀 on the name as he leaves makes both legs of the ride faste
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":null,"scores":{"alice":0,"bob":0,"carol":0},"quotes_added":{},)"
              << R"("ids":{"alice":0,"bob":1000,"carol":2000},)"
-             << R"("furniture":{"bob":"🚀🍕","carol":"🚀🚀🚀"}})";
+             << R"("furniture":{"bob":"🍕"},"equipped":{"bob":"🚀","carol":"🚀🚀🚀"}})";
     }
     Storage storage{paths.conquister, paths.quotes};
     const RaidRules rules{.loot_divisor = 50, .travel_divisor = 1, .signs = {}, .rocket_percent = 25};
@@ -1108,12 +1126,12 @@ TEST_CASE("every emoji with a power is listed once, with its kind") {
 TEST_CASE("a 💣 takes one emoji with a power among those that are where it lands") {
     const TestPaths paths{"bomb-test"};
     {
-        /* dave holds the place: the ⚡ and the 🚀 he carries are with him, only his 🥺 is at home. */
+        /* dave holds the place: the ⚡ and the 🚀 he has on him are with him, only his 🥺 is at home. */
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":{"user_id":0,"username":"dave","since":0},)"
              << R"("scores":{"alice":0,"bob":0,"carol":0,"dave":0},"quotes_added":{},)"
              << R"("furniture":{"alice":"💣💣💣","bob":"🍕🥺🍕","carol":"🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕",)"
-             << R"("dave":"⚡🚀🍕🥺"}})";
+             << R"("dave":"🍕🥺"},"equipped":{"dave":"⚡🚀"}})";
     }
     Storage storage{paths.conquister, paths.quotes};
     const auto thrown_at = [&storage](const std::string &target, std::int64_t now) {
@@ -1133,8 +1151,7 @@ TEST_CASE("a 💣 takes one emoji with a power among those that are where it lan
     /* The 🥺 is the only one with a power: the 🍕 are never touched. */
     const RaidEvent pair = thrown_at("bob", 0);
     CHECK(pair.blown == std::vector<std::string>{"🥺"});
-    CHECK(pair.target_emoji == "🍕[]🍕");
-    CHECK(furniture_all(storage).at("bob") == "🍕[]🍕");
+    CHECK(house_of(storage, "bob") == "🍕[]🍕");
 
     /* Nor does it take a 🎈, which no explosion touches. */
     storage.transaction([](StorageSession &session) {
@@ -1144,30 +1161,32 @@ TEST_CASE("a 💣 takes one emoji with a power among those that are where it lan
     });
     const RaidEvent spared = thrown_at("bob", 12);
     CHECK(spared.blown.empty());
-    CHECK(furniture_all(storage).at("bob") == "🍕🎈🍕");
+    CHECK(house_of(storage, "bob") == "🍕🎈🍕");
     storage.transaction([](StorageSession &session) {
         session.state().furniture["bob"] = "🍕[]🍕";
         return 0;
     });
 
-    /* A full name of plain emoji takes the hit and loses nothing. */
+    /* A full house of plain emoji takes the hit and loses nothing. */
     const RaidEvent nothing = thrown_at("carol", 20);
     CHECK(nothing.blown.empty());
-    CHECK(furniture_all(storage).at("carol") == "🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕");
+    CHECK(house_of(storage, "carol") == "🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕");
 
-    /* Out of the house, what he carries is safe: only the 🥺 is there to take. */
+    /* At his house, what he has on him is safe: only the 🥺 is there to take. */
     const RaidEvent single = thrown_at("dave", 40);
     CHECK(single.blown == std::vector<std::string>{"🥺"});
-    CHECK(furniture_all(storage).at("dave") == "⚡🚀🍕");
+    CHECK(house_of(storage, "dave") == "🍕");
+    CHECK(furniture_all(storage).at("dave") == "⚡🚀");
     /* All three bombs are spent. */
-    CHECK(furniture_all(storage).count("alice") == 0);
+    CHECK(house_of(storage, "alice").empty());
 
-    /* Thrown at the place it lands on the holder, and there it is what he carries that goes: the ⚡,
-       not the 🍕. Losing the ⚡ he came in with, the hold is worth less from then
-       on, and what it made so far is put aside. */
+    /* Thrown at the place it lands on the holder, and there it is what he has on him that goes: the ⚡,
+       not the 🍕. Losing the ⚡ he came in with, the hold is worth less from then on, and what it made
+       so far is put aside. */
     storage.transaction([](StorageSession &session) {
         session.state().furniture["alice"] = "💣💣";
-        session.state().furniture["dave"] = "⚡🍕🥺💩";
+        session.state().furniture["dave"] = "🥺💩";
+        session.state().equipped["dave"] = "⚡🍕";
         session.state().current->lightning_percent = 125;
         session.state().current->bolts = 1;
         return 0;
@@ -1176,21 +1195,23 @@ TEST_CASE("a 💣 takes one emoji with a power among those that are where it lan
     CHECK(onto.status == FurnitureBurnStatus::burned);
     CHECK(onto.hit == "dave");
     CHECK(onto.blown == std::vector<std::string>{"⚡"});
-    CHECK(onto.hit_furniture == "[]🍕🥺💩");
+    CHECK(onto.hit_furniture == "[]🍕");
     CHECK(player_profile_of(storage, "dave", 100).lightning_percent == 0);
     const Holder after = storage.transaction([](StorageSession &session) { return *session.state().current; });
     CHECK(after.bolts == 0);
     CHECK(after.banked == earnings("dave", 100, 100, 125));
     CHECK(after.counted_from == 100);
     CHECK(after.since == 0);
-    /* Nothing he carries is left: the 🥺 and the 💩 are at home, out of reach from here. */
+    /* Nothing with a power is left on him: the 🥺 and the 💩 are at home, out of reach from here. */
     const FurnitureBurnResult again = furniture_burn(storage, "alice", "💣", 100);
     CHECK(again.hit == "dave");
     CHECK(again.blown.empty());
-    CHECK(furniture_all(storage).at("dave") == "[]🍕🥺💩");
+    CHECK(furniture_all(storage).at("dave") == "[]🍕");
+    CHECK(house_of(storage, "dave") == "🥺💩");
     /* The holder who throws one at his own place hits nobody. */
     storage.transaction([](StorageSession &session) {
-        session.state().furniture["dave"] = "⚡💣";
+        session.state().equipped["dave"] = "⚡";
+        session.state().furniture["dave"] = "💣";
         return 0;
     });
     const FurnitureBurnResult own = furniture_burn(storage, "dave", "💣", 100);
@@ -1199,17 +1220,19 @@ TEST_CASE("a 💣 takes one emoji with a power among those that are where it lan
     CHECK(furniture_all(storage).at("dave") == "⚡");
 
     /* A dud goes off in the thrower's hand: it spares the victim and takes one of what the thrower has
-       with him, never what only hangs at his house. */
+       on him, never what is in his house. */
     RaidRules duds = quick_rides();
     duds.bomb_dud_percent = 100;
     storage.transaction([](StorageSession &session) {
-        session.state().furniture["alice"] = "🥺🚀💣💣💣";
+        session.state().furniture["alice"] = "🥺💣💣💣";
+        session.state().equipped["alice"] = "🚀";
         return 0;
     });
     const FurnitureBurnResult dud = furniture_burn(storage, "alice", "💣", 200, duds);
     CHECK(dud.backfired);
     CHECK(dud.blown == std::vector<std::string>{"🚀"});
-    CHECK(dud.shown == "🥺[][]💣💣");
+    CHECK(dud.shown.empty());
+    CHECK(house_of(storage, "alice") == "🥺[]💣💣");
     CHECK(furniture_all(storage).at("dave") == "⚡");
     /* On the way to a house it goes off on arrival, and with nothing on him he loses nothing. */
     REQUIRE(raid_start(storage, 0, "alice", "bob", 200, duds, RaidTargetKind::any, 0, "💣").status ==
@@ -1218,53 +1241,117 @@ TEST_CASE("a 💣 takes one emoji with a power among those that are where it lan
     REQUIRE(arrival.size() == 1);
     CHECK(arrival[0].backfired);
     CHECK(arrival[0].blown.empty());
-    CHECK(furniture_all(storage).at("bob") == "🍕[]🍕");
-    CHECK(furniture_all(storage).at("alice") == "🥺[][][]💣");
+    CHECK(house_of(storage, "bob") == "🍕[]🍕");
+    CHECK(house_of(storage, "alice") == "🥺[][]💣");
 }
 
-TEST_CASE("an emoji hung while its owner is out is at home, even of a kind he would carry") {
+TEST_CASE("a present reaching a player who is out goes in his house, where one that works on him does nothing") {
     const TestPaths paths{"stayed-home-test"};
     {
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":null,"scores":{"alice":0,"bob":0},"quotes_added":{},)"
-             << R"("furniture":{"alice":"⚡💣💣","bob":"⚡"}})";
+             << R"("furniture":{"alice":"💣💣"},"equipped":{"alice":"⚡","bob":"⚡"}})";
     }
     Storage storage{paths.conquister, paths.quotes};
     const ClaimRules claim{.cooldown_seconds = 0, .signs = {}, .lightning = 25};
-    /* bob walks in with his one ⚡; alice brings him another, which is hung at his house. */
+    /* bob walks in with his one ⚡; alice brings him another, which goes in his house. */
     CHECK(conquister_claim(storage, 2, "bob", 0, claim).entered_lightning == 125);
-    REQUIRE(raid_start(storage, 0, "alice", "bob", 0, quick_rides(), RaidTargetKind::any, 0, "⚡").status ==
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 0, quick_rides(), RaidTargetKind::any, 0, "⚡", true).status ==
             RaidStatus::started);
-    REQUIRE(raid_due(storage, 5, quick_rides()).size() == 1);
+    const std::vector<RaidEvent> given = raid_due(storage, 5, quick_rides());
+    REQUIRE(given.size() == 1);
+    CHECK_FALSE(given[0].gift_with_him);
     REQUIRE(raid_due(storage, 10, quick_rides()).size() == 1);
-    CHECK(furniture_all(storage).at("bob") == "⚡⚡");
+    CHECK(furniture_all(storage).at("bob") == "⚡");
+    CHECK(player_profile_of(storage, "bob", 10).house == "⚡");
     CHECK(player_profile_of(storage, "bob", 10).lightning_percent == 125);
 
-    /* A bomb at his house finds the one that was hung there, not the one he has with him... */
+    /* A bomb at his house finds the one in the house, not the one he has on him... */
     REQUIRE(raid_start(storage, 0, "alice", "bob", 10, quick_rides(), RaidTargetKind::any, 0, "💣").status ==
             RaidStatus::started);
     const std::vector<RaidEvent> house = raid_due(storage, 15, quick_rides());
     REQUIRE(house.size() == 1);
     CHECK(house[0].blown == std::vector<std::string>{"⚡"});
     CHECK(furniture_all(storage).at("bob") == "⚡");
+    CHECK(player_profile_of(storage, "bob", 15).house.empty());
     CHECK(player_profile_of(storage, "bob", 15).lightning_percent == 125);
     REQUIRE(raid_due(storage, 20, quick_rides()).size() == 1);
 
-    /* ...and one at the place finds the one he has with him, which lowers the hold. */
+    /* ...and one at the place finds the one he has on him, which lowers the hold. */
     const FurnitureBurnResult place = furniture_burn(storage, "alice", "💣", 20);
     CHECK(place.blown == std::vector<std::string>{"⚡"});
     CHECK(furniture_all(storage).count("bob") == 0);
     CHECK(player_profile_of(storage, "bob", 20).lightning_percent == 0);
+}
 
-    /* Once he has been home and left again, what was hung in his absence goes with him. */
+TEST_CASE("an emoji is taken from the house and put back, with room for five on him") {
+    const TestPaths paths{"gear-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":0,"username":"bob","since":0},"scores":{"bob":0,"carol":0},)"
+             << R"("furniture":{"bob":"🍕⚡👶[]🚀","carol":"🍕"},"equipped":{"bob":"🎈🥷🥷🔥"},)"
+             << R"("children":[{"owner":"bob","slot":2,"male":true,"born":0}]})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    /* From the place it takes him home first. */
+    GearResult taken = gear_take(storage, "bob", "⚡", "", 10);
+    CHECK(taken.status == GearStatus::taken);
+    CHECK(taken.departure.left);
+    CHECK(taken.shown == "🎈🥷🥷🔥⚡");
+    CHECK(taken.house == "🍕[]👶[]🚀");
+    CHECK(gear_take(storage, "bob", "⚡", "", 10).status == GearStatus::already_on);
+    CHECK(gear_take(storage, "bob", "👶", "", 10).status == GearStatus::child);
+    CHECK(gear_take(storage, "bob", "🦖", "", 10).status == GearStatus::not_owned);
+    /* Five on him: one more needs one of them back in the house, in its slot. */
+    CHECK(gear_take(storage, "bob", "🚀", "", 10).status == GearStatus::full);
+    CHECK(gear_take(storage, "bob", "🚀", "🦞", 10).status == GearStatus::swap_missing);
+    taken = gear_take(storage, "bob", "🚀", "🔥", 10);
+    CHECK(taken.status == GearStatus::swapped);
+    CHECK(taken.swapped == "🔥");
+    CHECK(taken.shown == "🎈🥷🥷🚀⚡");
+    CHECK(taken.house == "🍕[]👶[]🔥");
+
+    GearResult stored = gear_store(storage, "bob", "🎈", 10, 10);
+    CHECK(stored.status == GearStatus::stored);
+    CHECK(stored.shown == "[]🥷🥷🚀⚡");
+    CHECK(stored.house == "🍕🎈👶[]🔥");
+    CHECK(gear_store(storage, "bob", "🎈", 10, 10).status == GearStatus::not_on);
+    CHECK(gear_store(storage, "bob", "🥷", 3, 10).status == GearStatus::house_full);
+
+    /* Not from the road. */
+    REQUIRE(raid_start(storage, 0, "bob", "carol", 10, quick_rides()).status == RaidStatus::started);
+    CHECK(gear_take(storage, "bob", "🍕", "", 11).status == GearStatus::not_home);
+    CHECK(gear_store(storage, "bob", "⚡", 10, 11).status == GearStatus::not_home);
+}
+
+TEST_CASE("the saves from before are sorted out once, what works on him on him") {
+    const TestPaths paths{"sort-out-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":0,"username":"bob","since":0,"lobsters":{"3":"⚡"}},)"
+             << R"("scores":{"bob":0},"furniture":{"bob":"🍕🎈⚡🦞🐔🚀🚀🚀🚀","carol":"🍕👶"},)"
+             << R"("children":[{"owner":"carol","slot":1,"male":true,"born":0}]})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    equipment_sort_out(storage);
+    const ConquisterState state = storage.transaction([](StorageSession &session) { return session.state(); });
+    CHECK(state.split);
+    CHECK(state.equipped.at("bob") == "🎈⚡🦞🚀🚀");
+    CHECK(state.furniture.at("bob") == "🍕[][][]🐔[][]🚀🚀");
+    CHECK(state.furniture.at("carol") == "🍕👶");
+    CHECK(state.equipped.count("carol") == 0);
+    REQUIRE(state.current);
+    CHECK(state.current->lobsters == std::map<std::size_t, std::string>{{2, "⚡"}});
+    CHECK(read_json(paths.conquister + ".before-equipment").at("furniture").at("bob") == "🍕🎈⚡🦞🐔🚀🚀🚀🚀");
+    std::filesystem::remove(paths.conquister + ".before-equipment");
+    /* Once only. */
     storage.transaction([](StorageSession &session) {
-        session.state().furniture["bob"] = "🚀";
-        session.state().stayed["bob"] = {0};
+        session.state().furniture["bob"] = "⚡";
         return 0;
     });
-    REQUIRE(raid_start(storage, 2, "bob", "bob", 30, quick_rides()).status == RaidStatus::left_place);
-    REQUIRE(raid_start(storage, 2, "bob", "alice", 30, quick_rides()).status == RaidStatus::started);
-    CHECK(storage.transaction([](StorageSession &session) { return session.state().stayed.count("bob") == 0; }));
+    equipment_sort_out(storage);
+    CHECK(storage.transaction([](StorageSession &session) { return session.state().furniture.at("bob"); }) == "⚡");
+    CHECK_FALSE(std::filesystem::exists(paths.conquister + ".before-equipment"));
 }
 
 TEST_CASE("a ☢️ starts over the player whose house it lands on, and on the place the whole game") {
@@ -1274,7 +1361,7 @@ TEST_CASE("a ☢️ starts over the player whose house it lands on, and on the p
         file << R"({"current":{"user_id":0,"username":"bob","since":0},)"
              << R"("scores":{"alice":5,"bob":900,"carol":70,"dave":40},"quotes_added":{"bob":3},)"
              << R"("balloons":{"bob":2},"cooldowns":{"carol":99999},"ids":{"alice":1,"bob":2,"carol":3,"dave":4},)"
-             << R"("telegram_ids":{"alice":11},"smeared":{"carol":99999},"stayed":{"bob":[0]},)"
+             << R"("telegram_ids":{"alice":11},"smeared":{"carol":99999},)"
              << R"("raids":[{"raider":"carol","target":"alice","arrive":50,"back":100,"arrived":false,)"
              << R"("loot":0,"gift":0,"gift_emoji":""}],)"
              << R"("furniture":{"alice":"☢️☢️","bob":"⚡","carol":"🥺","dave":"🍕"}})";
@@ -1290,10 +1377,10 @@ TEST_CASE("a ☢️ starts over the player whose house it lands on, and on the p
         const ConquisterState local = storage.transaction([](StorageSession &session) { return session.state(); });
         CHECK(local.scores.at("bob") == 0);
         /* He starts again as everybody starts: with a 🎈. */
-        CHECK(local.furniture.at("bob") == "🎈");
+        CHECK(local.equipped.at("bob") == "🎈");
+        CHECK(local.furniture.count("bob") == 0);
         CHECK_FALSE(local.current);
         CHECK(local.balloons.empty());
-        CHECK(local.stayed.empty());
         /* Nobody else is touched. */
         CHECK(local.scores.at("carol") == 70);
         CHECK(local.furniture.at("carol") == "🥺");
@@ -1328,15 +1415,15 @@ TEST_CASE("a ☢️ starts over the player whose house it lands on, and on the p
     /* Everybody is still a player, at nothing. */
     CHECK(after.scores == Counters{{"alice", 0}, {"bob", 0}, {"carol", 0}, {"dave", 0}});
     CHECK_FALSE(after.current);
-    CHECK(after.furniture.size() == 4);
+    CHECK(after.furniture.empty());
+    CHECK(after.equipped.size() == 4);
     for (const char *player : {"alice", "bob", "carol", "dave"}) {
-        CHECK(after.furniture.at(player) == "🎈");
+        CHECK(after.equipped.at(player) == "🎈");
     }
     CHECK(after.raids.empty());
     CHECK(after.balloons.empty());
     CHECK(after.cooldowns.empty());
     CHECK(after.smeared.empty());
-    CHECK(after.stayed.empty());
     /* Who they are, where they live and what they quoted stay. */
     CHECK(after.ids == Counters{{"alice", 1}, {"bob", 2}, {"carol", 3}, {"dave", 4}});
     CHECK(after.telegram_ids == Counters{{"alice", 11}});
@@ -1370,7 +1457,7 @@ TEST_CASE("a 🐶 at home may catch a raider, who then takes nothing") {
     CHECK(arrival[0].loot == 0);
     CHECK(conquister_user(storage, "bob")->score == 100);
     /* The dogs are still there. */
-    CHECK(furniture_all(storage).at("bob") == "🐶🐶");
+    CHECK(house_of(storage, "bob") == "🐶🐶");
     REQUIRE(raid_due(storage, 10, rules).size() == 1);
 
     /* With no chance to give, a dog is only an emoji. */
@@ -1414,12 +1501,12 @@ TEST_CASE("a 📮 at home may send back what is thrown at the house") {
     CHECK(bomb.sent_back);
     REQUIRE(bomb.blown.size() == 1);
     CHECK((bomb.blown[0] == "🥺" || bomb.blown[0] == "☢️"));
-    CHECK(furniture_all(storage).at("bob") == "📮📮🍕");
+    CHECK(house_of(storage, "bob") == "📮📮🍕");
 
     /* A present is not something thrown: it is delivered as ever. */
     const RaidEvent present = thrown("🍕", 40);
     CHECK_FALSE(present.sent_back);
-    CHECK(furniture_all(storage).at("bob") == "📮📮🍕🍕");
+    CHECK(house_of(storage, "bob") == "📮📮🍕🍕");
 
     /* With no chance to give, a 📮 is only an emoji. */
     rules.mailbox_percent = 0;
@@ -1439,7 +1526,7 @@ TEST_CASE("a 🥷 with the raider may take him past the 🎈 and the 🐶 of the
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":null,"scores":{"alice":0,"bob":100,"carol":0,"dave":100},"quotes_added":{},)"
              << R"("ids":{"alice":0,"bob":90000,"carol":1,"dave":90001},)"
-             << R"("furniture":{"alice":"🥷🏿🥷","bob":"🎈🐶🐶","dave":"🍕"}})";
+             << R"("furniture":{"bob":"🎈🐶🐶","dave":"🍕"},"equipped":{"alice":"🥷🏿🥷"}})";
     }
     Storage storage{paths.conquister, paths.quotes};
     RaidRules rules = quick_rides();
@@ -1491,7 +1578,7 @@ TEST_CASE("a 🥷 with the raider may take him past the 🎈 and the 🐶 of the
 
     /* The same at the place: past the holder's 🎈, which stays as worn as it was. */
     storage.transaction([](StorageSession &session) {
-        session.state().furniture["bob"] = "🎈";
+        session.state().equipped["bob"] = "🎈";
         session.state().balloons["bob"] = 2;
         session.state().current = Holder{.user_id = 0, .username = "bob", .since = 30};
         return 0;
@@ -1520,12 +1607,12 @@ TEST_CASE("a 🥷 with the raider may take him past the 🎈 and the 🐶 of the
 TEST_CASE("a 🏴‍☠️ with the raider may carry off an emoji that is at the house") {
     const TestPaths paths{"pirate-test"};
     {
-        /* bob holds the place: his ⚡ is with him, his 🎈 too. Only the 🍕 is at home to take. */
+        /* bob holds the place with his ⚡ and his 🎈 on him. Only the 🍕 is in the house to take. */
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":{"user_id":0,"username":"bob","since":0},)"
              << R"("scores":{"alice":0,"bob":100,"carol":100,"dave":0},"quotes_added":{},)"
-             << R"("furniture":{"alice":"🏴‍☠️🏴‍☠️","bob":"⚡🎈🍕","carol":"🎈",)"
-             << R"("dave":"🏴‍☠️🏴‍☠️🍕🍕🍕🍕🍕🍕🍕🍕"}})";
+             << R"("furniture":{"bob":"🍕","carol":"🎈"},"equipped":{"alice":"🏴‍☠️🏴‍☠️","bob":"⚡🎈",)"
+             << R"("dave":"🏴‍☠️🏴‍☠️🍕🍕🍕"}})";
     }
     Storage storage{paths.conquister, paths.quotes};
     RaidRules rules = quick_rides();
@@ -1540,7 +1627,7 @@ TEST_CASE("a 🏴‍☠️ with the raider may carry off an emoji that is at the
     CHECK(arrival[0].raider_emoji == "🏴‍☠️🏴‍☠️🍕");
     REQUIRE(raid_due(storage, 10, rules).size() == 1);
 
-    /* Nothing left there but what he carries: nothing to take. A 🎈 is never taken. */
+    /* Nothing left in the house: nothing to take. A 🎈 is never taken. */
     REQUIRE(raid_start(storage, 0, "alice", "bob", 10, rules).status == RaidStatus::started);
     arrival = raid_due(storage, 15, rules);
     REQUIRE(arrival.size() == 1);
@@ -1554,10 +1641,10 @@ TEST_CASE("a 🏴‍☠️ with the raider may carry off an emoji that is at the
     arrival = raid_due(storage, 25, rules);
     REQUIRE(arrival.size() == 1);
     CHECK(arrival[0].boarded.empty());
-    CHECK(furniture_all(storage).at("carol") == "🎈");
+    CHECK(house_of(storage, "carol") == "🎈");
     REQUIRE(raid_due(storage, 30, rules).size() == 1);
 
-    /* A name with no room carries nothing off. */
+    /* With no room on him he carries nothing off. */
     storage.transaction([](StorageSession &session) {
         session.state().furniture["bob"] = "🍕";
         return 0;
@@ -1566,7 +1653,7 @@ TEST_CASE("a 🏴‍☠️ with the raider may carry off an emoji that is at the
     arrival = raid_due(storage, 35, rules);
     REQUIRE(arrival.size() == 1);
     CHECK(arrival[0].boarded.empty());
-    CHECK(furniture_all(storage).at("bob") == "🍕");
+    CHECK(house_of(storage, "bob") == "🍕");
 }
 
 TEST_CASE("a 💦 leaves a child on the way, born on the name it landed on") {
@@ -1590,7 +1677,7 @@ TEST_CASE("a 💦 leaves a child on the way, born on the name it landed on") {
     REQUIRE(events.size() == 1);
     CHECK(events[0].kind == RaidEvent::Kind::delivered);
     CHECK(events[0].expecting == 100);
-    CHECK(furniture_all(storage).at("bob") == "🍕");
+    CHECK(house_of(storage, "bob") == "🍕");
     REQUIRE(raid_due(storage, 10, rules).size() == 1);
     CHECK(raid_due(storage, 104, rules).empty());
     /* Its time come, the newborn takes the empty slot: a boy or a girl. */
@@ -1602,7 +1689,7 @@ TEST_CASE("a 💦 leaves a child on the way, born on the name it landed on") {
     CHECK(events[0].target == "bob");
     CHECK(events[0].gift_emoji == "👶");
     CHECK(events[0].blown.empty());
-    CHECK(furniture_all(storage).at("bob") == "🍕👶");
+    CHECK(house_of(storage, "bob") == "🍕👶");
     CHECK(raid_due(storage, 106, rules).empty());
 
     /* On a full name the next one takes the place of another emoji, never of the first child. */
@@ -1613,7 +1700,7 @@ TEST_CASE("a 💦 leaves a child on the way, born on the name it landed on") {
     events = raid_due(storage, 305, rules);
     REQUIRE(events.size() == 1);
     CHECK(events[0].blown == std::vector<std::string>{"🍕"});
-    CHECK(furniture_all(storage).at("bob") == "👶👶");
+    CHECK(house_of(storage, "bob") == "👶👶");
 
     /* With the owner out there is nobody for it to land on: the raider takes it back home. */
     storage.transaction([](StorageSession &session) {
@@ -1626,12 +1713,14 @@ TEST_CASE("a 💦 leaves a child on the way, born on the name it landed on") {
     REQUIRE(events.size() == 1);
     CHECK(events[0].nobody_home);
     CHECK(events[0].expecting == 0);
-    CHECK(furniture_all(storage).at("alice") == "[]💦");
+    CHECK(house_of(storage, "alice") == "[]💦");
     events = raid_due(storage, 320, rules);
     REQUIRE(events.size() == 1);
     CHECK(events[0].kind == RaidEvent::Kind::returned);
     CHECK(events[0].gift_emoji == "💦");
-    CHECK(furniture_all(storage).at("alice") == "💦💦");
+    /* It comes back on her, where it travelled. */
+    CHECK(furniture_all(storage).at("alice") == "💦");
+    CHECK(house_of(storage, "alice") == "[]💦");
     CHECK(storage.transaction([](StorageSession &session) { return session.state().pregnancies.empty(); }));
 
     /* Thrown at the place it is the holder who is expecting; her 🎈 is never the slot taken. */
@@ -1642,7 +1731,7 @@ TEST_CASE("a 💦 leaves a child on the way, born on the name it landed on") {
     REQUIRE(events.size() == 1);
     CHECK(events[0].target == "carol");
     CHECK(events[0].blown == std::vector<std::string>{"⚡"});
-    CHECK(furniture_all(storage).at("carol") == "🎈👶");
+    CHECK(house_of(storage, "carol") == "🎈👶");
 }
 
 TEST_CASE("a child grows through its ages where it was born, then leaves, and nothing takes it before") {
@@ -1650,7 +1739,7 @@ TEST_CASE("a child grows through its ages where it was born, then leaves, and no
     {
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":null,"scores":{"alice":1000,"bob":100},"quotes_added":{},)"
-             << R"("furniture":{"alice":"🏴‍☠️🏴‍☠️","bob":"👶"},)"
+             << R"("furniture":{"bob":"👶"},"equipped":{"alice":"🏴‍☠️🏴‍☠️"},)"
              << R"("children":[{"owner":"bob","slot":0,"male":true,"born":0}]})";
     }
     Storage storage{paths.conquister, paths.quotes};
@@ -1671,23 +1760,23 @@ TEST_CASE("a child grows through its ages where it was born, then leaves, and no
     std::vector<RaidEvent> events = raid_due(storage, 15, rules);
     REQUIRE(events.size() == 1);
     CHECK(events[0].boarded.empty());
-    CHECK(furniture_all(storage).at("bob") == "👶");
+    CHECK(house_of(storage, "bob") == "👶");
     REQUIRE(raid_due(storage, 20, rules).size() == 1);
 
     /* Moved, it is the same child in another slot, and it goes on growing there. */
     CHECK(furniture_move(storage, "bob", 1, 3, 10, 30).status == FurnitureMoveStatus::moved);
-    CHECK(furniture_all(storage).at("bob") == "[][]👶");
+    CHECK(house_of(storage, "bob") == "[][]👶");
     const std::int64_t before = score();
     CHECK(raid_due(storage, 100, rules).empty());
-    CHECK(furniture_all(storage).at("bob") == "[][]👦");
+    CHECK(house_of(storage, "bob") == "[][]👦");
     CHECK(raid_due(storage, 200, rules).empty());
-    CHECK(furniture_all(storage).at("bob") == "[][]👨");
+    CHECK(house_of(storage, "bob") == "[][]👨");
     /* Only as a grown-up does it earn: nothing before, so much a second while it lasts. */
     CHECK(score() == before);
     CHECK(raid_due(storage, 240, rules).empty());
     CHECK(score() == before + 120);
     CHECK(raid_due(storage, 399, rules).empty());
-    CHECK(furniture_all(storage).at("bob") == "[][]👴");
+    CHECK(house_of(storage, "bob") == "[][]👴");
     /* The whole of that age is paid, and not a second of the next. */
     CHECK(score() == before + 300);
     /* A whole life lived, it leaves by itself and the slot is free again. */
@@ -1696,10 +1785,10 @@ TEST_CASE("a child grows through its ages where it was born, then leaves, and no
     CHECK(events[0].kind == RaidEvent::Kind::gone);
     CHECK(events[0].target == "bob");
     CHECK(events[0].gift_emoji == "👴");
-    CHECK(furniture_all(storage).count("bob") == 0);
+    CHECK(house_of(storage, "bob").empty());
     CHECK(storage.transaction([](StorageSession &session) { return session.state().children.empty(); }));
 
-    /* Nothing parts him from a child, not even leaving it at the place: it stays on his name. */
+    /* Nothing parts him from a child, not even leaving it at the place: it stays in his house. */
     storage.transaction([](StorageSession &session) {
         session.state().furniture["bob"] = "🍕👩";
         session.state().children.push_back(
@@ -1709,7 +1798,7 @@ TEST_CASE("a child grows through its ages where it was born, then leaves, and no
     CHECK(furniture_burn(storage, "bob", "👶", 1250, rules).status == FurnitureBurnStatus::not_owned);
     CHECK(furniture_burn(storage, "bob", "👩", 1250, rules).status == FurnitureBurnStatus::child);
     CHECK(furniture_burn(storage, "bob", "👩", 1250, rules, true).status == FurnitureBurnStatus::child);
-    CHECK(furniture_all(storage).at("bob") == "🍕👩");
+    CHECK(house_of(storage, "bob") == "🍕👩");
     CHECK(storage.transaction([](StorageSession &session) { return session.state().children.size() == 1; }));
 }
 
@@ -1786,8 +1875,8 @@ TEST_CASE("a grown-up girl and a grown-up boy of the same house may have a child
     CHECK(events[0].kind == RaidEvent::Kind::born);
     CHECK(events[0].raider.empty());
     CHECK(events[0].target == "bob");
-    CHECK(furniture_all(storage).at("bob") == "👨👩👶");
-    CHECK(furniture_all(storage).at("carol") == "👩");
+    CHECK(house_of(storage, "bob") == "👨👩👶");
+    CHECK(house_of(storage, "carol") == "👩");
 }
 
 TEST_CASE("a 🧊 freezes whoever it hits: no place and no setting off until he thaws") {
@@ -1826,7 +1915,7 @@ TEST_CASE("a 🧊 freezes whoever it hits: no place and no setting off until he 
     /* Each 🔥 he has with him melts a share of it, and enough of them melt it all. */
     rules.fire_percent = 20;
     storage.transaction([](StorageSession &session) {
-        session.state().furniture["bob"] = "🔥🔥";
+        session.state().equipped["bob"] = "🔥🔥";
         session.state().furniture["alice"] = "🧊🧊🧊🧊";
         session.state().raids.clear();
         return 0;
@@ -1839,7 +1928,7 @@ TEST_CASE("a 🧊 freezes whoever it hits: no place and no setting off until he 
     CHECK(melted[0].melted);
     static_cast<void>(raid_due(storage, 320, rules));
     storage.transaction([](StorageSession &session) {
-        session.state().furniture["bob"] = "🔥🔥🔥🔥🔥";
+        session.state().equipped["bob"] = "🔥🔥🔥🔥🔥";
         session.state().frozen.clear();
         return 0;
     });
@@ -1867,10 +1956,10 @@ TEST_CASE("every ⏳ with the claimer takes a share off the penalty of a failed 
            three tries below is made against a balloon nobody has touched yet. */
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":{"user_id":0,"username":"alice","since":0},"scores":{},"quotes_added":{},)"
-             << R"("furniture":{"alice":"🎈","bob":"⏳⏳⏳","carol":"⏳⏳⏳⏳⏳⏳⏳⏳⏳⏳"}})";
+             << R"("equipped":{"alice":"🎈","bob":"⏳⏳⏳","carol":"⏳⏳⏳⏳⏳"}})";
     }
     Storage storage{paths.conquister, paths.quotes};
-    const ClaimRules rules{.cooldown_seconds = 300, .signs = {}, .hourglass = 10};
+    const ClaimRules rules{.cooldown_seconds = 300, .signs = {}, .hourglass = 20};
     const auto failed = [&](const char *who, std::int64_t now) -> std::optional<ClaimResult> {
         for (int attempt = 0; attempt < 40; ++attempt) {
             storage.transaction([who](StorageSession &session) {
@@ -1887,12 +1976,12 @@ TEST_CASE("every ⏳ with the claimer takes a share off the penalty of a failed 
         }
         return std::nullopt;
     };
-    /* Three of them: three tenths off the five minutes. */
+    /* Three of them: three fifths off the five minutes. */
     const std::optional<ClaimResult> bob = failed("bob", 100);
     REQUIRE(bob);
-    CHECK(bob->penalty_seconds == 210);
+    CHECK(bob->penalty_seconds == 120);
     CHECK(conquister_claim(storage, 0, "bob", 200, rules).status == ClaimStatus::cooldown);
-    /* Ten of them: no wait at all. */
+    /* Five of them: no wait at all. */
     const std::optional<ClaimResult> carol = failed("carol", 100);
     REQUIRE(carol);
     CHECK(carol->penalty_seconds == 0);
@@ -1909,13 +1998,13 @@ TEST_CASE("a pile of poo is thrown, not hung: a full name takes it and keeps not
     Storage storage{paths.conquister, paths.quotes};
     REQUIRE(raid_start(storage, 0, "alice", "bob", 0, quick_rides(), RaidTargetKind::any, 0, "💩").status ==
             RaidStatus::started);
-    CHECK(furniture_all(storage).at("alice") == "[]🍕");
+    CHECK(house_of(storage, "alice") == "[]🍕");
     const std::vector<RaidEvent> arrival = raid_due(storage, 5, quick_rides());
     REQUIRE(arrival.size() == 1);
     CHECK(arrival[0].kind == RaidEvent::Kind::delivered);
     CHECK(arrival[0].gift_emoji == "💩");
     CHECK_FALSE(arrival[0].no_room);
-    CHECK(furniture_all(storage).at("bob") == "🐝🐝🐝🐝🐝🐝🐝🐝🐝🐝");
+    CHECK(house_of(storage, "bob") == "🐝🐝🐝🐝🐝🐝🐝🐝🐝🐝");
     /* Hit, bob is "lo smerdato" for a day from the splat; alice, who threw it, is not. */
     CHECK(arrival[0].target_smeared);
     CHECK_FALSE(arrival[0].raider_smeared);
@@ -1927,7 +2016,7 @@ TEST_CASE("a pile of poo is thrown, not hung: a full name takes it and keeps not
     REQUIRE(home.size() == 1);
     CHECK(home[0].gift_emoji.empty());
     CHECK(home[0].target_smeared);
-    CHECK(furniture_all(storage).at("alice") == "[]🍕");
+    CHECK(house_of(storage, "alice") == "[]🍕");
     CHECK(player_profile_of(storage, "bob", 5 + 86399).smeared);
     CHECK_FALSE(player_profile_of(storage, "bob", 5 + 86400).smeared);
     CHECK(smeared_all(storage, 5 + 86400).empty());
@@ -1953,7 +2042,7 @@ TEST_CASE("an emoji is carried to another player, or burnt at the place") {
     {
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":null,"scores":{"alice":10,"bob":10},"quotes_added":{},)"
-             << R"("furniture":{"alice":"🍕🎈"}})";
+             << R"("furniture":{"alice":"🍕🧀"},"equipped":{"alice":"🎈"}})";
     }
     Storage storage{paths.conquister, paths.quotes};
     const auto hung = [&storage](const std::string &player) {
@@ -1966,83 +2055,90 @@ TEST_CASE("an emoji is carried to another player, or burnt at the place") {
     CHECK(raid_start(storage, 0, "alice", "bob", 0, quick_rides(), RaidTargetKind::any, 0, "🐟").status ==
           RaidStatus::no_such_emoji);
 
-    /* It leaves her name as she sets off, a hole where it hung. */
+    /* It leaves her house as she sets off, a hole where it was, and goes in his. */
     REQUIRE(raid_start(storage, 0, "alice", "bob", 0, quick_rides(), RaidTargetKind::any, 0, "🍕").status ==
             RaidStatus::started);
-    CHECK(hung("alice") == "[]🎈");
+    CHECK(house_of(storage, "alice") == "[]🧀");
     const std::vector<RaidEvent> arrival = raid_due(storage, 5, quick_rides());
     REQUIRE(arrival.size() == 1);
     CHECK(arrival[0].kind == RaidEvent::Kind::delivered);
     CHECK(arrival[0].gift_emoji == "🍕");
     CHECK_FALSE(arrival[0].no_room);
-    CHECK(arrival[0].target_emoji == "🍕");
-    CHECK(hung("bob") == "🍕");
+    CHECK_FALSE(arrival[0].gift_with_him);
+    CHECK(house_of(storage, "bob") == "🍕");
     CHECK(conquister_user(storage, "bob")->score == 10);
     const std::vector<RaidEvent> home = raid_due(storage, 10, quick_rides());
     REQUIRE(home.size() == 1);
     CHECK(home[0].gift_emoji.empty());
 
-    /* A full name is refused at the start... */
+    /* A full house is refused at the start... */
     storage.transaction([](StorageSession &session) {
         session.state().furniture["bob"] = "🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕";
         return 0;
     });
-    CHECK(raid_start(storage, 0, "alice", "bob", 11, quick_rides(), RaidTargetKind::any, 0, "🎈").status ==
+    CHECK(raid_start(storage, 0, "alice", "bob", 11, quick_rides(), RaidTargetKind::any, 0, "🧀").status ==
           RaidStatus::no_room);
-    CHECK(hung("alice") == "[]🎈");
-
-    /* ...and one that fills up on the way sends it back home with her. */
-    storage.transaction([](StorageSession &session) {
-        session.state().furniture["bob"] = "🍕";
-        return 0;
-    });
-    REQUIRE(raid_start(storage, 0, "alice", "bob", 20, quick_rides(), RaidTargetKind::any, 0, "🎈").status ==
+    CHECK(house_of(storage, "alice") == "[]🧀");
+    /* ...unless it goes on him, who is home with room for it. */
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 12, quick_rides(), RaidTargetKind::any, 0, "🎈", true).status ==
             RaidStatus::started);
     CHECK(hung("alice").empty());
+    const std::vector<RaidEvent> worn = raid_due(storage, 17, quick_rides());
+    REQUIRE(worn.size() == 1);
+    CHECK(worn[0].gift_with_him);
+    CHECK(worn[0].target_emoji == "🎈");
+    CHECK(hung("bob") == "🎈");
+    REQUIRE(raid_due(storage, 22, quick_rides()).size() == 1);
+
+    /* One that fills up on the way sends it back with her, on her. */
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["bob"] = "🍕";
+        return 0;
+    });
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 30, quick_rides(), RaidTargetKind::any, 0, "🧀").status ==
+            RaidStatus::started);
+    CHECK(house_of(storage, "alice").empty());
     storage.transaction([](StorageSession &session) {
         session.state().furniture["bob"] = "🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕";
         return 0;
     });
-    const std::vector<RaidEvent> refused = raid_due(storage, 25, quick_rides());
+    const std::vector<RaidEvent> refused = raid_due(storage, 35, quick_rides());
     REQUIRE(refused.size() == 1);
     CHECK(refused[0].no_room);
-    const std::vector<RaidEvent> back = raid_due(storage, 30, quick_rides());
+    const std::vector<RaidEvent> back = raid_due(storage, 40, quick_rides());
     REQUIRE(back.size() == 1);
-    CHECK(back[0].gift_emoji == "🎈");
-    CHECK(hung("alice") == "🎈");
+    CHECK(back[0].gift_emoji == "🧀");
+    CHECK(hung("alice") == "🧀");
 
-    /* While it travels, her last empty slot stays kept for it: no gift can take it. Turning around,
-       it finds its way back home. */
+    /* What travels needs a free slot on her: with five on her, one from the house cannot leave. */
     storage.transaction([](StorageSession &session) {
+        session.state().furniture["alice"] = "🍕";
+        session.state().equipped["alice"] = "⚡⚡⚡⚡⚡";
         session.state().furniture["bob"] = "🍕";
-        session.state().furniture["carol"] = "🧀";
         return 0;
     });
-    REQUIRE(raid_start(storage, 0, "alice", "bob", 40, quick_rides(), RaidTargetKind::any, 0, "🎈").status ==
+    CHECK(raid_start(storage, 0, "alice", "bob", 50, quick_rides(), RaidTargetKind::any, 0, "🍕").status ==
+          RaidStatus::hands_full);
+    /* One on her travels in its own slot, and turning around it comes back to it. */
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 50, quick_rides(), RaidTargetKind::any, 0, "⚡").status ==
             RaidStatus::started);
-    /* Away from home she cannot hang anything on her name. */
+    CHECK(hung("alice") == "[]⚡⚡⚡⚡");
+    /* Away from home she cannot buy anything. */
     CHECK(furniture_buy(storage, "alice", "🐝", 0, 0, 10, 0).status == FurnitureStatus::not_home);
-    storage.transaction([](StorageSession &session) {
-        session.state().furniture["alice"] = "🐝🐝🐝🐝🐝🐝🐝🐝🐝";
-        return 0;
-    });
-    CHECK(raid_start(storage, 0, "carol", "alice", 41, quick_rides(), RaidTargetKind::any, 0, "🧀").status ==
-          RaidStatus::no_room);
-    const RaidResult turned = raid_start(storage, 0, "alice", "alice", 42, quick_rides());
+    const RaidResult turned = raid_start(storage, 0, "alice", "alice", 52, quick_rides());
     REQUIRE(turned.status == RaidStatus::coming_home);
-    const std::vector<RaidEvent> returned = raid_due(storage, 42 + turned.seconds, quick_rides());
+    const std::vector<RaidEvent> returned = raid_due(storage, 52 + turned.seconds, quick_rides());
     REQUIRE(returned.size() == 1);
-    CHECK(returned[0].gift_emoji == "🎈");
-    CHECK(hung("alice") == "🐝🐝🐝🐝🐝🐝🐝🐝🐝🎈");
-    CHECK(furniture_buy(storage, "alice", "🚀", 0, 0, 10, 0).status == FurnitureStatus::full);
+    CHECK(returned[0].gift_emoji == "⚡");
+    CHECK(hung("alice") == "⚡⚡⚡⚡⚡");
 
-    /* Brought to the place, an emoji is gone: the first copy, leaving a hole. */
-    const FurnitureBurnResult burnt = furniture_burn(storage, "alice", "🐝");
+    /* Brought to the place, an emoji is gone: the first copy, on her before the house, leaving a hole. */
+    const FurnitureBurnResult burnt = furniture_burn(storage, "alice", "⚡");
     CHECK(burnt.status == FurnitureBurnStatus::burned);
-    CHECK(burnt.shown == "[]🐝🐝🐝🐝🐝🐝🐝🐝🎈");
+    CHECK(burnt.shown == "[]⚡⚡⚡⚡");
+    CHECK(furniture_burn(storage, "alice", "🍕").shown == "[]⚡⚡⚡⚡");
+    CHECK(house_of(storage, "alice").empty());
     CHECK(furniture_burn(storage, "alice", "🎺").status == FurnitureBurnStatus::not_owned);
-    CHECK(furniture_burn(storage, "bob", "🍕").shown.empty());
-    CHECK(hung("bob").empty());
 }
 
 TEST_CASE("turning back mid journey only costs the road already walked") {
@@ -2098,17 +2194,17 @@ TEST_CASE("a 🦖 at the house eats one of the emoji the raider has with him") {
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":null,"scores":{"alice":0,"bob":100},"quotes_added":{},)"
              << R"("ids":{"alice":0,"bob":1000},)"
-             << R"("furniture":{"alice":"🎈🏴‍☠️🍕","bob":"🦖"}})";
+             << R"("furniture":{"alice":"🍕","bob":"🦖"},"equipped":{"alice":"🎈🏴‍☠️"}})";
     }
     Storage storage{paths.conquister, paths.quotes};
     const RaidRules rules{.loot_divisor = 50, .travel_divisor = 1, .signs = {}, .dino_percent = 100};
 
-    /* The 🏴‍☠️ goes with her and is eaten; the 🍕 stayed at home, and no 🎈 is ever eaten. */
+    /* The 🏴‍☠️ on her is eaten; the 🍕 stayed at home, and no 🎈 is ever eaten. */
     REQUIRE(raid_start(storage, 0, "alice", "bob", 0, rules).status == RaidStatus::started);
     std::vector<RaidEvent> events = raid_due(storage, 1000, rules);
     REQUIRE(events.size() == 1);
     CHECK(events[0].eaten == "🏴‍☠️");
-    CHECK(furniture_all(storage).at("alice") == "🎈[]🍕");
+    CHECK(furniture_all(storage).at("alice") == "🎈");
     REQUIRE(raid_due(storage, 2000, rules).size() == 1);
 
     /* With nothing left to eat, it finds nothing. */
@@ -2117,7 +2213,7 @@ TEST_CASE("a 🦖 at the house eats one of the emoji the raider has with him") {
     REQUIRE(!events.empty());
     CHECK(events[0].kind == RaidEvent::Kind::stolen);
     CHECK(events[0].eaten.empty());
-    CHECK(furniture_all(storage).at("alice") == "🎈[]🍕");
+    CHECK(furniture_all(storage).at("alice") == "🎈");
 }
 
 TEST_CASE("a raider who reaches a house with 🧂 again soon hands over a share of his palle, all of them at most") {
