@@ -550,8 +550,8 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
         break;
     }
     if (burnt.reset) {
-        return std::format("{} ha sganciato la bomba nucleare su {}: il gioco riparte da zero. Tutti senza palle e "
-                           "con il solo 🎈 di partenza, il posto è vuoto e nessuno è in viaggio.", context.username, conquister_place);
+        return std::format("{0} ha sganciato la bomba nucleare su {1}: il gioco riparte da zero. Tutti senza palle e "
+                           "con il solo 🎈 di partenza, {1} è vuoto e nessuno è in viaggio.", context.username, conquister_place);
     }
     if (is_power(emoji, power::poo)) {
         /* Whoever holds the place takes it full in the face. */
@@ -855,8 +855,8 @@ std::string handle_help(const CommandContext &context, std::string_view) {
         help += std::format("{} — {}\n", example, meaning);
     };
     line(std::format("We {} (o {}avventura)", conquister_place, slash),
-         "entri nel posto: 1 palla al secondo finché lo tieni");
-    line(std::format("We {}", me), "torni a casa tua, dal posto o dal viaggio");
+         std::format("entri in {}: 1 palla al secondo finché lo tieni", conquister_place));
+    line(std::format("We {}", me), std::format("torni a casa tua, da {} o dal viaggio", conquister_place));
     line(std::format("We {} 🍕 (o {}buy 🍕)", me, slash), "compri 🍕 e la appendi al nome nel primo posto libero, "
          "da casa tua");
     line(std::format("We {} 🍕 3 (o {}buy 🍕 3)", me, slash), "la compri e la appendi nel posto 3");
@@ -914,8 +914,8 @@ std::string power_help(const Power &power, const AppConfig &config) {
         return std::format("in {} diventa l'emoji che chi hai cacciato ha nello stesso posto", conquister_place);
     }
     if (is(power::balloon)) {
-        return std::format("il palloncino: difende il posto dove sei; bucato torna nuovo; uno nuovo costa {}",
-                           palle(config.balloon_cost));
+        return std::format("il palloncino: difende casa tua quando ci sei e {} quando lo tieni; bucato torna nuovo; "
+                           "uno nuovo costa {}", conquister_place, palle(config.balloon_cost));
     }
     if (is(power::ninja)) {
         return std::format("ognuno ha il {}% di farti passare oltre 🎈 e 🐶 senza toccarli", config.ninja_percent);

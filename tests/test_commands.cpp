@@ -675,7 +675,7 @@ TEST_CASE("the help lists every We line with the asker's own name") {
     CHECK(help.starts_with("Come si gioca\n\n"));
     CHECK(help.contains("\nWe @Alice 🍕 3 (o /buy 🍕 3) — la compri e la appendi nel posto 3\n"));
     CHECK_FALSE(help.contains("⚡"));
-    CHECK(help.contains("\nWe @Alice — torni a casa tua, dal posto o dal viaggio\n"));
+    CHECK(help.contains("\nWe @Alice — torni a casa tua, da @TheConquister37 o dal viaggio\n"));
     CHECK(help.ends_with("\n/link <nome> — collega account Telegram e nick IRC Azzurra registrato"));
     CHECK(help.contains("\nWe @giocatore 500 (o /give @giocatore 500) — gli porti 500 palle\n"));
     CHECK(help.contains("\nWe @TheConquister37 🍕 — bruci una 🍕\n"));
@@ -687,8 +687,8 @@ TEST_CASE("the help lists every We line with the asker's own name") {
     const std::string on_irc = command_dispatch(irc, "/help").value_or("");
     CHECK(on_irc.contains("\nWe Bob 1 2 — sposti l'emoji dal posto 1 al posto 2\n"));
     CHECK(on_irc.contains("\nWe giocatore — parti per razziarlo\n"));
-    CHECK(on_irc.contains("We @TheConquister37 (o !avventura) — entri nel posto"));
-    CHECK(help.contains("We @TheConquister37 (o /avventura) — entri nel posto"));
+    CHECK(on_irc.contains("We @TheConquister37 (o !avventura) — entri in @TheConquister37"));
+    CHECK(help.contains("We @TheConquister37 (o /avventura) — entri in @TheConquister37"));
     CHECK(on_irc.contains("\n!addquote <testo> — "));
 
     /* Every reply that names a command names it the way it is typed there. */
@@ -1030,7 +1030,7 @@ TEST_CASE("the ☢️ costs a million and starts the game over from the place") 
                                       "palle e con il solo 🎈 di partenza. Torni in Alice tra 5 secondi.");
     CHECK(command_dispatch(alice, "We @TheConquister37 ☢️") ==
           "Alice ha sganciato la bomba nucleare su @TheConquister37: il gioco riparte da zero. Tutti senza palle e "
-          "con il solo 🎈 di partenza, il posto è vuoto e nessuno è in viaggio.");
+          "con il solo 🎈 di partenza, @TheConquister37 è vuoto e nessuno è in viaggio.");
     CHECK(furniture_all(storage).at("tg:1") == "🎈");
     CHECK(furniture_all(storage).at("tg:2") == "🎈");
     CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 0);
@@ -1198,7 +1198,8 @@ TEST_CASE("/emoji tells every emoji with a power, where it is and what can hit i
     }
     CHECK(help.contains("\n🥺 chi ti razzia ruba il 10% in meno per ognuna\n"));
     CHECK(help.contains("\n⚡ +10% di palle in @TheConquister37 per ognuno\n"));
-    CHECK(help.contains("🎈 il palloncino: difende il posto dove sei; bucato torna nuovo; uno nuovo costa 1000 palle. "
+    CHECK(help.contains("🎈 il palloncino: difende casa tua quando ci sei e @TheConquister37 quando lo tieni; bucato "
+                        "torna nuovo; uno nuovo costa 1000 palle. "
                         "Invincibile: né bombe né furti\n"));
     CHECK(help.contains("\n💩 🇷🇺 🇮🇱 chi la prende è \"lo smerdato\" per 1 giorno\n"));
     CHECK(help.contains("Restano a casa"));
