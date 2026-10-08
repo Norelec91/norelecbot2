@@ -872,32 +872,25 @@ std::string handle_furniture(const CommandContext &context, std::string_view wan
 /* Every line the game understands, one example each, written the way the asker has to write it. */
 std::string handle_help(const CommandContext &context, std::string_view) {
     const bool irc = context.user_id == 0;
-    const std::string me = context.username.empty() ? std::string{irc ? "tuonick" : "@tuonome"}
-                                                    : own_name(context);
     const std::string_view other = irc ? "giocatore" : "@giocatore";
     const std::string_view slash = command_prefix(context);
     std::string help = "Come si gioca\n\n";
     const auto line = [&help](std::string_view example, std::string_view meaning) {
         help += std::format("{} — {}\n", example, meaning);
     };
+    /* The one We line the help still shows: the others all have a command of their own. */
     line(std::format("We {} (o {}avventura)", conquister_place, slash),
          std::format("entri in {}: 1 palla al secondo finché lo tieni", conquister_place));
-    line(std::format("We {}", me), std::format("torni a casa tua, da {} o dal viaggio", conquister_place));
-    line(std::format("We {} 🍕 (o {}buy 🍕)", me, slash), "compri 🍕 e la appendi al nome nel primo posto libero, "
-         "da casa tua");
-    line(std::format("We {} 🍕 3 (o {}buy 🍕 3)", me, slash), "la compri e la appendi nel posto 3");
-    line(std::format("We {} 1 2", me), "sposti l'emoji dal posto 1 al posto 2");
-    line(std::format("We {0} (o {1}raid {0})", other, slash), "parti per razziarlo");
-    line(std::format("We {0} 500 (o {1}give {0} 500)", other, slash), "gli porti 500 palle");
-    line(std::format("We {0} 🍕 (o {1}give {0} 🍕)", other, slash), "gli porti una 🍕");
-    line(std::format("We {0} 💣 (o {1}throw {0} 💣)", other, slash), "gli lanci una 💣, che gli esplode addosso");
-    line(std::format("{1}give {0} 💣", other, slash), "gli regali la 💣 intatta: la potrà usare lui");
-    line(std::format("We {} 500 (o {}burn 500)", conquister_place, slash), "bruci 500 palle");
-    line(std::format("We {} 🍕 (o {}burn 🍕)", conquister_place, slash), "bruci una 🍕");
-    line(std::format("{}burn 💣", slash), std::format("bruci la 💣 senza lanciarla su chi è in {}", conquister_place));
-    help += std::format("\nDa {0} le righe col tuo nome ti riportano prima a casa tua. "
-                        "Razzie e consegne partono solo da casa tua: da {0} esci prima con We {1}. "
-                        "In viaggio si può solo tornare indietro: We {1}.\n", conquister_place, me);
+    line(std::format("{}raid {}", slash, other), "parti per razziarlo");
+    line(std::format("{}give {} 500", slash, other), "gli porti 500 palle");
+    line(std::format("{}give {} 🍕", slash, other), "gli regali una 🍕; anche una 💣 arriva intatta e la potrà usare lui");
+    line(std::format("{}throw {} 💣", slash, other), "gli lanci una 💣, che gli esplode addosso");
+    line(std::format("{}buy 🍕", slash), "compri 🍕 e la appendi al nome nel primo posto libero, da casa tua");
+    line(std::format("{}buy 🍕 3", slash), "la compri e la appendi nel posto 3");
+    line(std::format("{}burn 500", slash), "bruci 500 palle");
+    line(std::format("{}burn 🍕", slash), std::format("bruci una 🍕; una 💣 brucia senza colpire chi è in {}",
+                                                     conquister_place));
+    help += "\nRazzie, regali e lanci partono solo da casa tua. In viaggio si può solo tornare indietro.\n";
     help += std::format("\n{0}leaderboard — classifica\n{0}profile [nome] — il tuo profilo o quello di un altro\n"
                         "{0}emoji — cosa fa ogni emoji con un potere, dove sta e cosa la può colpire\n"
                         "{0}addquote <testo> — aggiungi una citazione\n"

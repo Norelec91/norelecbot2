@@ -660,7 +660,7 @@ TEST_CASE("the profile shows where a player stands") {
     CHECK(command_dispatch(alice, "/profile @Bob")->contains("\nin viaggio verso Alice: rientra tra "));
 }
 
-TEST_CASE("the help lists every We line with the asker's own name") {
+TEST_CASE("the help lists the commands, and of the We lines only the one for the place") {
     const TestPaths paths{"help-command-test"};
     AppConfig config;
     config.starter_balloon = false;
@@ -673,20 +673,24 @@ TEST_CASE("the help lists every We line with the asker's own name") {
     CHECK(command_is_for_bot("/help"));
     const std::string help = command_dispatch(telegram, "/help").value_or("");
     CHECK(help.starts_with("Come si gioca\n\n"));
-    CHECK(help.contains("\nWe @Alice 🍕 3 (o /buy 🍕 3) — la compri e la appendi nel posto 3\n"));
+    CHECK(help.contains("\n/buy 🍕 3 — la compri e la appendi nel posto 3\n"));
     CHECK_FALSE(help.contains("⚡"));
-    CHECK(help.contains("\nWe @Alice — torni a casa tua, da @TheConquister37 o dal viaggio\n"));
     CHECK(help.ends_with("\n/link <nome> — collega account Telegram e nick IRC Azzurra registrato"));
-    CHECK(help.contains("\nWe @giocatore 500 (o /give @giocatore 500) — gli porti 500 palle\n"));
-    CHECK(help.contains("\nWe @TheConquister37 🍕 (o /burn 🍕) — bruci una 🍕\n"));
+    CHECK(help.contains("\n/give @giocatore 500 — gli porti 500 palle\n"));
+    CHECK(help.contains("\n/burn 🍕 — bruci una 🍕"));
     CHECK(help.contains("\n/leaderboard — classifica\n"));
     CHECK(help.contains("\n/profile [nome] — il tuo profilo o quello di un altro\n"));
-    CHECK(help.contains("Razzie e consegne partono solo da casa tua: da @TheConquister37 esci prima con We @Alice. "));
+    CHECK(help.contains("\nRazzie, regali e lanci partono solo da casa tua."));
+    /* No We line but the one for the place. */
+    std::size_t we_lines = 0;
+    for (std::size_t at = help.find("\nWe "); at != std::string::npos; at = help.find("\nWe ", at + 1)) {
+        ++we_lines;
+    }
+    CHECK(we_lines == 1);
 
     /* On IRC: bare nicks and the bang instead of the slash; the place keeps its @. */
     const std::string on_irc = command_dispatch(irc, "/help").value_or("");
-    CHECK(on_irc.contains("\nWe Bob 1 2 — sposti l'emoji dal posto 1 al posto 2\n"));
-    CHECK(on_irc.contains("\nWe giocatore (o !raid giocatore) — parti per razziarlo\n"));
+    CHECK(on_irc.contains("\n!raid giocatore — parti per razziarlo\n"));
     CHECK(on_irc.contains("We @TheConquister37 (o !avventura) — entri in @TheConquister37"));
     CHECK(help.contains("We @TheConquister37 (o /avventura) — entri in @TheConquister37"));
     CHECK(on_irc.contains("\n!addquote <testo> — "));
