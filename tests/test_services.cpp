@@ -1089,6 +1089,7 @@ TEST_CASE("every emoji with a power is listed once, with its kind") {
     CHECK(power::fire.kind == PowerKind::carried);
     CHECK(power::hourglass.kind == PowerKind::carried);
     CHECK(power::dino.kind == PowerKind::home);
+    CHECK(power::salt.kind == PowerKind::home);
     /* The 🕋 and the ⛪ are emoji like any other. */
     CHECK(power_of("🕋") == nullptr);
     CHECK(power_of("⛪") == nullptr);
@@ -1736,8 +1737,7 @@ TEST_CASE("a child grows through its ages where it was born, then leaves, and no
     CHECK(furniture_all(storage).count("bob") == 0);
     CHECK(storage.transaction([](StorageSession &session) { return session.state().children.empty(); }));
 
-    /* The one way to part with a child is to leave it at the place: it is gone, and so is what it would
-       have earned. */
+    /* Nothing parts him from a child, not even leaving it at the place: it stays on his name. */
     storage.transaction([](StorageSession &session) {
         session.state().furniture["bob"] = "🍕👩";
         session.state().children.push_back(
@@ -1745,11 +1745,9 @@ TEST_CASE("a child grows through its ages where it was born, then leaves, and no
         return 0;
     });
     CHECK(furniture_burn(storage, "bob", "👶", 1250, rules).status == FurnitureBurnStatus::not_owned);
-    const FurnitureBurnResult left = furniture_burn(storage, "bob", "👩", 1250, rules);
-    CHECK(left.status == FurnitureBurnStatus::burned);
-    CHECK(left.abandoned);
-    CHECK(left.shown == "🍕");
-    CHECK(storage.transaction([](StorageSession &session) { return session.state().children.empty(); }));
+    CHECK(furniture_burn(storage, "bob", "👩", 1250, rules).status == FurnitureBurnStatus::not_owned);
+    CHECK(furniture_all(storage).at("bob") == "🍕👩");
+    CHECK(storage.transaction([](StorageSession &session) { return session.state().children.size() == 1; }));
 }
 
 TEST_CASE("every 🐔 on a name lays palle for its owner minute after minute") {
@@ -2157,4 +2155,37 @@ TEST_CASE("a 🦖 at the house eats one of the emoji the raider has with him") {
     CHECK(events[0].kind == RaidEvent::Kind::stolen);
     CHECK(events[0].eaten.empty());
     CHECK(furniture_all(storage).at("alice") == "🎈[]🍕");
+}
+
+TEST_CASE("every 🧂 at the house earns its owner a share of his palle when the same raider comes again soon") {
+    const TestPaths paths{"salt-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":0,"bob":0,"lucy":1000},"quotes_added":{},)"
+             << R"("ids":{"alice":0,"bob":1,"lucy":90000},"furniture":{"lucy":"🧂🧂"}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    RaidRules rules = quick_rides();
+    rules.salt_percent = 10;
+    const auto score = [&storage](const char *player) {
+        return storage.transaction([player](StorageSession &session) { return session.state().scores.at(player); });
+    };
+    /* Sets off for lucy and turns around at once, home a second later. */
+    const auto knock = [&](const char *raider, std::int64_t now) {
+        const RaidResult result = raid_start(storage, 0, raider, "lucy", now, rules);
+        REQUIRE(result.status == RaidStatus::started);
+        REQUIRE(raid_start(storage, 0, raider, raider, now + 1, rules).status == RaidStatus::coming_home);
+        static_cast<void>(raid_due(storage, now + 2, rules));
+        return result.salted;
+    };
+
+    /* The first time is nothing, and so is somebody else's first time. */
+    CHECK(knock("alice", 0) == 0);
+    CHECK(knock("bob", 10) == 0);
+    /* alice again within five minutes: two 🧂 earn lucy a fifth of what she has. */
+    CHECK(knock("alice", 100) == 200);
+    CHECK(score("lucy") == 1200);
+    /* More than five minutes after her last time, lucy has forgotten her. */
+    CHECK(knock("alice", 401) == 0);
+    CHECK(score("lucy") == 1200);
 }

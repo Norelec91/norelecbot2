@@ -97,6 +97,15 @@ struct Child {
     bool operator==(const Child &) const = default;
 };
 
+/* A raid that set off: who went for whom, and when. Kept only as long as a 🧂 can still remember it. */
+struct Knock {
+    std::string raider;
+    std::string target;
+    std::int64_t at = 0;
+
+    bool operator==(const Knock &) const = default;
+};
+
 struct ConquisterState {
     std::optional<Holder> current;
     Counters scores;
@@ -147,6 +156,8 @@ struct ConquisterState {
     std::vector<Child> children;
     /* Up to when the 🐔 have been paid for their eggs; 0 before the first time. */
     std::int64_t eggs_at = 0;
+    /* The raids that set off lately, oldest first. */
+    std::vector<Knock> knocks{};
 
     bool operator==(const ConquisterState &) const = default;
 };

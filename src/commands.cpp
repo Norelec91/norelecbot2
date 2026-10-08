@@ -320,6 +320,7 @@ RaidRules raid_rules(const CommandContext &context) {
         .adult_per_second = context.config.adult_per_second,
         .mating_percent = context.config.mating_percent,
         .dino_percent = context.config.dino_percent,
+        .salt_percent = context.config.salt_percent,
         .frozen_seconds = context.config.frozen_seconds,
         .fire_percent = context.config.fire_percent,
     };
@@ -408,11 +409,15 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
             format_wait(result.seconds)
         );
     }
+    const std::string salted = result.salted > 0
+        ? std::format(" Ci torni troppo presto: il 🧂 di {} gli fa guadagnare {}.", result.target, palle(result.salted))
+        : std::string{};
     return std::format(
-        "{} parti per {}: arrivi tra {}. Casa tua resta scoperta.",
+        "{} parti per {}: arrivi tra {}. Casa tua resta scoperta.{}",
         username,
         result.target,
-        format_wait(result.seconds)
+        format_wait(result.seconds),
+        salted
     );
 }
 
@@ -548,10 +553,6 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
         return too_far_reply(context.username);
     case FurnitureBurnStatus::burned:
         break;
-    }
-    if (burnt.abandoned) {
-        return std::format("{} hai abbandonato {} in {}: non è più sul tuo nome.", context.username, emoji,
-                           conquister_place);
     }
     if (burnt.reset) {
         return std::format("{} ha sganciato la bomba nucleare su {}: il gioco riparte da zero. Tutti senza palle e "
@@ -914,6 +915,10 @@ std::string power_help(const Power &power, const AppConfig &config) {
     if (is(power::dino)) {
         return std::format("ognuno ha il {}% di mangiare a chi ti razzia un'emoji che ha con sé", config.dino_percent);
     }
+    if (is(power::salt)) {
+        return std::format("se la stessa persona ti razzia di nuovo entro {}, guadagni il {}% delle tue palle per ognuno",
+                           format_wait(salt_seconds), config.salt_percent);
+    }
     if (is(power::bolt)) {
         return std::format("+{}% di palle in {} per ognuno", config.lightning_percent, conquister_place);
     }
@@ -993,9 +998,9 @@ std::string handle_emoji_help(const CommandContext &context, std::string_view) {
                         "le tieni stanno a casa e sono colpibili. 🎈 e 🐶 non le fermano, solo la 📮.\n",
                         conquister_place) + list(PowerKind::thrown);
     help += std::format("\nI bambini (👶 👦 👧 👨 👩 👴 👵) nascono da una 💦, crescono di un'età ogni {}, da adulti "
-                        "fanno {} al secondo e poi se ne vanno. Sono intoccabili: si possono solo spostare o "
-                        "abbandonare in {}.\n", format_wait(context.config.child_stage_seconds),
-                        palle(context.config.adult_per_second), conquister_place);
+                        "fanno {} al secondo e poi se ne vanno. Sono intoccabili: si possono solo spostare, "
+                        "mai togliere.\n", format_wait(context.config.child_stage_seconds),
+                        palle(context.config.adult_per_second));
     help += "\nTutte le altre emoji sono decorative: non fanno niente, le bombe non le toccano, ma una 🏴‍☠️ può "
             "rubarle.";
     return help;

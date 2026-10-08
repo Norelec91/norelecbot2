@@ -1122,22 +1122,6 @@ bool is_child(const ConquisterState &state, const std::string &player, std::size
     });
 }
 
-/* Leaves at the place the first child of his that looks like that emoji; false when he has none. */
-bool abandon_child(ConquisterState &state, const std::string &player, std::string_view emoji) {
-    std::vector<std::string> slots = slots_of(state, player);
-    const auto found = std::ranges::find_if(state.children, [&](const Child &child) {
-        const auto slot = static_cast<std::size_t>(child.slot);
-        return child.owner == player && slot < slots.size() && same_emoji(slots[slot], emoji);
-    });
-    if (found == state.children.end()) {
-        return false;
-    }
-    slots[static_cast<std::size_t>(found->slot)].clear();
-    state.children.erase(found);
-    hang(state, player, std::move(slots));
-    return true;
-}
-
 /* The first slot that holds an emoji he can part with; nothing when there is none. */
 std::optional<std::size_t> slot_holding(const ConquisterState &state, const std::string &player,
                                         std::string_view emoji) {
@@ -1332,6 +1316,7 @@ void start_over(ConquisterState &state) {
     state.frozen.clear();
     state.pregnancies.clear();
     state.children.clear();
+    state.knocks.clear();
 }
 
 /* On a house it does the same to the one who lives there: no palle, no emoji, out of the place
@@ -1379,14 +1364,9 @@ FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, 
             outcome.status = FurnitureBurnStatus::too_far;
             return outcome;
         }
+        /* A child is neither burnt like an emoji nor left at the place: it stays until it leaves by itself. */
         if (!take_emoji(state, player, emoji)) {
-            /* A child cannot be burnt like an emoji, but it can be left at the place. */
-            if (!abandon_child(state, player, emoji)) {
-                outcome.status = FurnitureBurnStatus::not_owned;
-                return outcome;
-            }
-            outcome.abandoned = true;
-            outcome.shown = shown_furniture(state, player);
+            outcome.status = FurnitureBurnStatus::not_owned;
             return outcome;
         }
         if (is_power(emoji, power::nuke)) {
@@ -1708,6 +1688,21 @@ RaidResult raid_start(
             outcome.seconds = std::max(position::shortest_travel,
                                        outcome.seconds * 100 / (100 + rockets * rules.rocket_percent));
         }
+        /* A raider who comes for the same house again so soon pays the salt: every 🧂 there earns its
+           owner a share of the palle he has. Bringing something is no raid, and is not remembered. */
+        std::erase_if(state.knocks, [now](const Knock &knock) { return now - knock.at > salt_seconds; });
+        if (gift == 0 && gift_emoji.empty()) {
+            const bool again = std::ranges::any_of(state.knocks, [&](const Knock &knock) {
+                return knock.raider == username && knock.target == *known;
+            });
+            const std::int64_t share = copies_of(state, *known, power::salt) * std::max<std::int64_t>(rules.salt_percent, 0);
+            if (again && share > 0) {
+                const std::int64_t owned = counter(state.scores, *known);
+                outcome.salted = std::max<std::int64_t>(owned, 0) * share / 100;
+                state.scores[*known] = owned + outcome.salted;
+            }
+            state.knocks.push_back(Knock{.raider = username, .target = *known, .at = now});
+        }
         leave_home(state, username);
         state.raids.push_back(Raid{
             .raider = username,
@@ -1723,8 +1718,8 @@ RaidResult raid_start(
     });
 
     if (result.status == RaidStatus::started) {
-        log_info("raid started user={} target={} travel={} gift={} emoji={}", username, result.target,
-                 result.seconds, gift, gift_emoji);
+        log_info("raid started user={} target={} travel={} gift={} emoji={} salted={}", username, result.target,
+                 result.seconds, gift, gift_emoji, result.salted);
     }
     if (result.status == RaidStatus::left_place) {
         log_info("left the place user={} earned={}", username, result.earned);

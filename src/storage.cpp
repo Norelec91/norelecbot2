@@ -152,6 +152,25 @@ std::vector<Pregnancy> parse_pregnancies(const Json &state) {
     return pregnancies;
 }
 
+std::vector<Knock> parse_knocks(const Json &state) {
+    std::vector<Knock> knocks;
+    const auto section = state.find("knocks");
+    if (section == state.end() || !section->is_array()) {
+        return knocks;
+    }
+    for (const Json &entry : *section) {
+        if (!entry.is_object()) {
+            continue;
+        }
+        knocks.push_back(Knock{
+            .raider = entry.at("raider").get<std::string>(),
+            .target = entry.at("target").get<std::string>(),
+            .at = integer(entry.at("at")),
+        });
+    }
+    return knocks;
+}
+
 std::vector<Child> parse_children(const Json &state) {
     std::vector<Child> children;
     const auto section = state.find("children");
@@ -230,6 +249,7 @@ ConquisterState parse_state(const Json &json) {
         parse_pregnancies(json),
         parse_children(json),
         json.contains("eggs_at") ? integer(json.at("eggs_at")) : 0,
+        parse_knocks(json),
     };
     return state;
 }
@@ -256,6 +276,10 @@ Json state_to_json(const ConquisterState &state) {
     std::ranges::transform(state.children, std::back_inserter(children), [](const Child &child) {
         return Json{{"owner", child.owner}, {"slot", child.slot}, {"male", child.male}, {"born", child.born},
                     {"paid", child.paid}, {"courted", child.courted}};
+    });
+    Json knocks = Json::array();
+    std::ranges::transform(state.knocks, std::back_inserter(knocks), [](const Knock &knock) {
+        return Json{{"raider", knock.raider}, {"target", knock.target}, {"at", knock.at}};
     });
     Json current = nullptr;
     if (state.current) {
@@ -303,6 +327,7 @@ Json state_to_json(const ConquisterState &state) {
         {"pregnancies", std::move(pregnancies)},
         {"children", std::move(children)},
         {"eggs_at", state.eggs_at},
+        {"knocks", std::move(knocks)},
     };
 }
 
