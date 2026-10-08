@@ -1323,7 +1323,12 @@ FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, 
         }
         /* A child is neither burnt like an emoji nor left at the place: it stays until it leaves by itself. */
         if (!take_emoji(state, player, emoji)) {
-            outcome.status = FurnitureBurnStatus::not_owned;
+            const std::vector<std::string> slots = slots_of(state, player);
+            const bool child = std::ranges::any_of(state.children, [&](const Child &kid) {
+                const auto slot = static_cast<std::size_t>(kid.slot);
+                return kid.owner == player && slot < slots.size() && same_emoji(slots[slot], emoji);
+            });
+            outcome.status = child ? FurnitureBurnStatus::child : FurnitureBurnStatus::not_owned;
             return outcome;
         }
         /* Destroyed, even what is meant to be thrown goes up in smoke and touches nobody. */

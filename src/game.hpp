@@ -491,7 +491,8 @@ void debug_set(Storage &storage, const std::string &username, bool wanted);
 
 /* Palle brought back to @TheConquister37 leave the game: nobody receives them. Not from the road. */
 [[nodiscard]] BurnResult palle_burn(Storage &storage, const std::string &player, std::int64_t amount);
-enum class FurnitureBurnStatus { burned, not_owned, travelling };
+/* child: what he named is a child of his, which stays until it leaves by itself. */
+enum class FurnitureBurnStatus { burned, not_owned, travelling, child };
 
 struct FurnitureBurnResult {
     FurnitureBurnStatus status = FurnitureBurnStatus::burned;

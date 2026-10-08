@@ -1707,7 +1707,8 @@ TEST_CASE("a child grows through its ages where it was born, then leaves, and no
         return 0;
     });
     CHECK(furniture_burn(storage, "bob", "👶", 1250, rules).status == FurnitureBurnStatus::not_owned);
-    CHECK(furniture_burn(storage, "bob", "👩", 1250, rules).status == FurnitureBurnStatus::not_owned);
+    CHECK(furniture_burn(storage, "bob", "👩", 1250, rules).status == FurnitureBurnStatus::child);
+    CHECK(furniture_burn(storage, "bob", "👩", 1250, rules, true).status == FurnitureBurnStatus::child);
     CHECK(furniture_all(storage).at("bob") == "🍕👩");
     CHECK(storage.transaction([](StorageSession &session) { return session.state().children.size() == 1; }));
 }

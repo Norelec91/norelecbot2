@@ -565,6 +565,9 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
         return on_the_road(context, "si brucia da casa tua o da @TheConquister37.");
     case FurnitureBurnStatus::not_owned:
         return std::format("{} non hai {} in casa.", context.username, emoji);
+    case FurnitureBurnStatus::child:
+        return std::format("{} i bambini non si bruciano: {} resta con te finché non se ne va da solo.",
+                           context.username, emoji);
     case FurnitureBurnStatus::burned:
         break;
     }

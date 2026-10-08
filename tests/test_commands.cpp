@@ -1592,4 +1592,12 @@ TEST_CASE("/burn takes emoji and palle out of the game, and what is thrown hits 
     CHECK(furniture_all(storage).at("tg:2") == "⚡");
     CHECK(command_dispatch(alice, "/burn 100").value_or("").starts_with("Alice hai portato 100 palle in @TheConquister37"));
     CHECK(command_dispatch(alice, "/burn 🍩") == "Alice non hai 🍩 in casa.");
+    storage.transaction([](StorageSession &session) {
+        session.state().furniture["tg:1"] = "👧";
+        session.state().children.push_back(
+            Child{.owner = "tg:1", .slot = 0, .male = false, .born = 0, .paid = 0, .courted = false});
+        return 0;
+    });
+    CHECK(command_dispatch(alice, "/burn 👧") ==
+          "Alice i bambini non si bruciano: 👧 resta con te finché non se ne va da solo.");
 }
