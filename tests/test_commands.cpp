@@ -910,25 +910,26 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     RaidEvent eaten = robbed;
     eaten.eaten = "⚡";
     CHECK(raid_event_reply(eaten).value_or("").starts_with("Il 🦖 di "));
-    CHECK(raid_event_reply(eaten).value_or("").contains(" ti mangia ⚡.\n"));
+    CHECK(raid_event_reply(eaten).value_or("").contains(" ti mangia ⚡: ora non hai più niente con te.\n"));
     /* Named as he came, before the 🦖 ate. */
     eaten.raider_emoji_before = "🎈⚡";
     eaten.raider_emoji = "🎈";
     eaten.seconds = 5;
-    CHECK(raid_event_reply(eaten).value_or("").contains("\nCarol (🎈⚡) hai rubato 3 palle a "));
+    CHECK(raid_event_reply(eaten).value_or("").contains(" ti mangia ⚡: ora hai con te 🎈.\nCarol (🎈⚡) hai rubato 3 palle a "));
     CHECK(raid_event_reply(eaten).value_or("").ends_with("! Torni in Carol tra 5 secondi."));
     RaidEvent boarded = robbed;
     boarded.boarded = "🍕";
+    boarded.raider_emoji = "🍕";
     boarded.seconds = 5;
     CHECK(raid_event_reply(boarded).value_or("").ends_with(
-        "\nArrembaggio: ti porti via anche 🍕 da casa sua, e ora è con te: non dà nessun bonus."));
+        "\nArrembaggio: ti porti via anche 🍕 da casa sua: ora hai con te 🍕. Non dà nessun bonus."));
     /* What works on him says what it is worth there, all the copies he has on him counted. */
     boarded.boarded = "⚡";
     boarded.raider_emoji = "⚡⚡";
     AppConfig numbers;
     numbers.lightning_percent = 10;
     CHECK(raid_event_reply(boarded, numbers).value_or("").ends_with(
-        "\nArrembaggio: ti porti via anche ⚡ da casa sua, e ora è con te: ora ne hai 2 con te: +20% di palle in "
+        "\nArrembaggio: ti porti via anche ⚡ da casa sua: ora hai con te ⚡⚡. Ora ne hai 2 con te: +20% di palle in "
         "@TheConquister37."));
     RaidEvent caught = robbed;
     caught.loot = 0;
@@ -992,7 +993,7 @@ TEST_CASE("a 💩 thrown at the place makes the holder \"lo smerdato\" for a day
         return 0;
     });
     CHECK(command_dispatch(alice, "We @TheConquister37 💣") ==
-          "Alice la tua bomba esplode addosso a @Bob (🍕⚡) in @TheConquister37 e si porta via ⚡!");
+          "Alice la tua bomba esplode addosso a @Bob (🍕⚡) in @TheConquister37 e si porta via ⚡: ora @Bob ha con sé 🍕.");
     CHECK(command_dispatch(alice, "We @TheConquister37 💣") ==
           "Alice la tua bomba esplode addosso a @Bob (🍕) in @TheConquister37 ma non trova niente da portarsi via.");
 

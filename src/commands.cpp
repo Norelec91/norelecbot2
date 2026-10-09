@@ -164,6 +164,16 @@ std::string with_furniture(std::string_view name, std::string_view furniture, bo
     return furniture.empty() ? titled : std::format("{} ({})", titled, furniture);
 }
 
+/* What somebody has on him once a reply has changed it, said where the change is told: of whoever is
+   spoken to when no name is given. */
+std::string now_on(std::string_view gear, std::string_view name = {}) {
+    if (name.empty()) {
+        return gear.empty() ? std::string{"ora non hai più niente con te"} : std::format("ora hai con te {}", gear);
+    }
+    return gear.empty() ? std::format("ora {} non ha più niente con sé", name)
+                        : std::format("ora {} ha con sé {}", name, gear);
+}
+
 /* Everything that changes how the names read: the emoji beside them, and who was hit by a 💩. */
 struct Looks {
     Authors furniture;
@@ -743,8 +753,8 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
         return blown.empty()
             ? std::format("{} la tua bomba esplode addosso a {} in {} ma non trova niente da portarsi via.",
                           context.username, holder, conquister_place)
-            : std::format("{} la tua bomba esplode addosso a {} in {} e si porta via {}!", context.username, holder,
-                          conquister_place, blown);
+            : std::format("{} la tua bomba esplode addosso a {} in {} e si porta via {}: {}.", context.username, holder,
+                          conquister_place, blown, now_on(burnt.hit_furniture, name));
     }
     /* Nobody there to hit, or only himself. */
     return std::format("{} lanci {} in {}, ma non colpisci nessuno: è uscita dal gioco.", context.username, emoji,
@@ -1607,8 +1617,8 @@ std::optional<std::string> raid_event_story(const RaidEvent &event, const AppCon
         }
         /* What went on him rather than in his house: what it does for him there. */
         const std::string kept = event.gift_with_him
-            ? std::format("\n{}{} {} ora è con te: {}.", mention, event.target, event.gift_emoji,
-                          bonus_note(config, "/", event.gift_emoji, event.target_emoji, {}, true))
+            ? std::format("\n{}{} {} ora è con te, {}: {}.", mention, event.target, event.gift_emoji,
+                          now_on(event.target_emoji), bonus_note(config, "/", event.gift_emoji, event.target_emoji, {}, true))
             : std::string{};
         /* A present arrives as it is, whatever it would do if thrown. */
         if (event.intact) {
@@ -1688,7 +1698,8 @@ std::optional<std::string> raid_event_story(const RaidEvent &event, const AppCon
         ? std::format("L'allarme di {}{} ti scopre: devi vedertela con le sue difese.\n", mention, event.target)
         : std::string{};
     if (!event.eaten.empty()) {
-        alarm += std::format("Il 🦖 di {}{} ti mangia {}.\n", mention, event.target, event.eaten);
+        alarm += std::format("Il 🦖 di {}{} ti mangia {}: {}.\n", mention, event.target, event.eaten,
+                             now_on(event.raider_emoji));
     }
     if (event.salted > 0) {
         alarm += std::format("Ci torni troppo presto: il 🧂 di {}{} ti costa {}, che vanno a lui.\n", mention,
@@ -1721,8 +1732,9 @@ std::optional<std::string> raid_event_story(const RaidEvent &event, const AppCon
     }
     reply += std::format("! Torni in {} tra {}.", home, format_wait(event.seconds));
     if (!event.boarded.empty()) {
-        reply += std::format("\nArrembaggio: ti porti via anche {} da casa sua, e ora è con te: {}.", event.boarded,
-                             bonus_note(config, "/", event.boarded, event.raider_emoji, {}, true));
+        reply += std::format("\nArrembaggio: ti porti via anche {} da casa sua: {}. {}.", event.boarded,
+                             now_on(event.raider_emoji),
+                             capitalized(bonus_note(config, "/", event.boarded, event.raider_emoji, {}, true)));
     }
     if (event.spared > 0) {
         reply += std::format("\n{} ti ha impietosito: gli rubi {} invece di {} ({}% in meno).", target,
