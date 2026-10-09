@@ -415,10 +415,8 @@ std::string own_name(const CommandContext &context) {
 constexpr std::string_view buy_command = "/buy";
 
 /* "/back" is another way to write "We yourname", and "/move from to" of "We yourname from to": only
-   two slots, so that nothing else after it is ever taken for a purchase. "/home", its old name, still
-   works for whoever learnt it, though nothing names it any more. */
+   two slots, so that nothing else after it is ever taken for a purchase. */
 constexpr std::string_view back_command = "/back";
-constexpr std::string_view home_command = "/home";
 constexpr std::string_view move_command = "/move";
 
 bool two_slots(std::string_view argument) {
@@ -432,7 +430,7 @@ std::string expand_buy(const CommandContext &context, std::string message) {
     if (context.username.empty()) {
         return message;
     }
-    if (command.name == back_command || command.name == home_command) {
+    if (command.name == back_command) {
         return std::format("{}{}", raid_trigger, own_name(context));
     }
     if (command.name == move_command && two_slots(command.argument)) {
@@ -1030,10 +1028,11 @@ std::string handle_help(const CommandContext &context, std::string_view) {
     line(std::format("{}burn 500", slash), "bruci 500 palle");
     line(std::format("{}burn 🍕", slash), std::format("bruci una 🍕; una 💣 brucia senza colpire chi è in {}",
                                                      conquister_place));
-    help += std::format("\nAccanto al nome si vede quello che hai con te; la casa è nel {}profile. Razzie, regali e "
+    help += std::format("\nAccanto al nome si vede quello che hai con te; la casa la vedi con {}house. Razzie, regali e "
                         "lanci partono solo da casa tua, e quello che porti a qualcuno viaggia con te. In viaggio si "
                         "può solo tornare indietro, con {}back.\n", slash, slash);
     help += std::format("\n{0}leaderboard — classifica\n{0}profile [nome] — il tuo profilo o quello di un altro\n"
+                        "{0}house [nome] — la tua casa posto per posto, o quella di un altro\n"
                         "{0}emoji — cosa fa ogni emoji con un potere, dove sta e cosa la può colpire\n"
                         "{0}addquote <testo> — aggiungi una citazione\n"
                         "{0}link <nome> — collega account Telegram e nick IRC Azzurra registrato",
@@ -1137,8 +1136,8 @@ std::string handle_emoji_help(const CommandContext &context, std::string_view) {
     };
     std::string help = "Emoji con un potere\n\n";
     const std::string_view slash = command_prefix(context);
-    help += std::format("Hai due posti per le emoji: con te ({} posti), accanto al nome, e la casa ({} posti), nel "
-                        "{}profile. Con {}take le prendi dalla casa, con {}store le rimetti in casa. Un'emoji dove non "
+    help += std::format("Hai due posti per le emoji: con te ({} posti), accanto al nome, e la casa ({} posti), con "
+                        "{}house. Con {}take le prendi dalla casa, con {}store le rimetti in casa. Un'emoji dove non "
                         "funziona non fa niente.\n\n", carried_limit, context.config.furniture_limit, slash, slash,
                         slash);
     help += "Funzionano in casa, anche quando sei fuori. Colpibili da una 💣 lanciata a casa tua e rubabili da una "
@@ -1158,23 +1157,53 @@ std::string handle_emoji_help(const CommandContext &context, std::string_view) {
     return help;
 }
 
-/* "/profile [name]": his own card, or the one of the player named as on that platform. */
-std::string handle_profile(const CommandContext &context, std::string_view argument) {
+/* The player a command asks about: the sender when nobody is named, else the one named as on that
+   platform. Nothing, and what to say instead, when there is no such player. */
+std::optional<Profile> asked_about(const CommandContext &context, std::string_view argument, std::int64_t now,
+                                   std::string &refusal) {
     const std::string_view wanted = text::trim(argument);
-    const std::int64_t now = seconds_now();
-    std::optional<Profile> found;
     if (wanted.empty()) {
         if (context.username.empty()) {
-            return missing_username_reply();
+            refusal = missing_username_reply();
+            return std::nullopt;
         }
-        found = player_profile_of(context.storage, std::string{context.player_key}, now);
-    } else {
-        const bool telegram = wanted.starts_with('@');
-        found = player_profile(context.storage, telegram ? wanted.substr(1) : wanted,
-                               telegram ? RaidTargetKind::telegram : RaidTargetKind::irc, now);
-        if (!found) {
-            return std::format("{} non conosco nessun giocatore di nome {}.", context.username, wanted);
-        }
+        return player_profile_of(context.storage, std::string{context.player_key}, now);
+    }
+    const bool telegram = wanted.starts_with('@');
+    std::optional<Profile> found = player_profile(context.storage, telegram ? wanted.substr(1) : wanted,
+                                                  telegram ? RaidTargetKind::telegram : RaidTargetKind::irc, now);
+    if (!found) {
+        refusal = std::format("{} non conosco nessun giocatore di nome {}.", context.username, wanted);
+    }
+    return found;
+}
+
+/* "/house [name]": what is in his house, slot by slot with their numbers, and what he has on him. */
+std::string handle_house(const CommandContext &context, std::string_view argument) {
+    std::string refusal;
+    const std::optional<Profile> found = asked_about(context, argument, seconds_now(), refusal);
+    if (!found) {
+        return refusal;
+    }
+    const std::vector<std::string> slots = furniture_slots(found->house);
+    const std::size_t shown = std::max(slots.size(), static_cast<std::size_t>(context.config.furniture_limit));
+    const auto used = std::ranges::count_if(slots, [](const std::string &slot) { return !slot.empty(); });
+    std::string reply = std::format("Casa di {} ({}/{}):\n", found->name, used, context.config.furniture_limit);
+    for (std::size_t slot = 0; slot < shown; ++slot) {
+        reply += std::format("{}{} {}", slot == 0 ? "" : "  ", slot + 1,
+                             slot < slots.size() && !slots[slot].empty() ? slots[slot] : std::string{"·"});
+    }
+    reply += std::format("\nCon te: {}", found->furniture.empty() ? std::string{"niente"} : found->furniture);
+    return reply;
+}
+
+/* "/profile [name]": his own card, or the one of the player named as on that platform. */
+std::string handle_profile(const CommandContext &context, std::string_view argument) {
+    const std::int64_t now = seconds_now();
+    std::string refusal;
+    const std::optional<Profile> found = asked_about(context, argument, now, refusal);
+    if (!found) {
+        return refusal;
     }
     const Profile &profile = *found;
     /* The bare name at the top, then the two places of his emoji; his home below is written like everywhere else. */
@@ -1482,7 +1511,7 @@ constexpr std::array commands{
     CommandDefinition{"/throw", handle_throw},
     CommandDefinition{"/burn", handle_burn_usage},
     CommandDefinition{"/back", handle_home},
-    CommandDefinition{"/home", handle_home},
+    CommandDefinition{"/house", handle_house},
     CommandDefinition{"/move", handle_move_usage},
     CommandDefinition{"/take", handle_take},
     CommandDefinition{"/store", handle_store},
