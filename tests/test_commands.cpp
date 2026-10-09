@@ -687,6 +687,8 @@ TEST_CASE("the help lists the commands, and of the We lines only the one for the
     CHECK(help.contains("\n/take ⚡ — prendi ⚡ dalla casa e lo porti con te, dove dà il suo bonus\n"));
     CHECK(help.contains("\n/take ⚡ 🚀 — prendi ⚡ e rimetti in casa 🚀 al suo posto\n"));
     CHECK(help.contains("\n/store ⚡ — rimetti ⚡ in casa\n"));
+    CHECK(help.contains("\n/back — torni a casa tua, da @TheConquister37 o dal viaggio\n"));
+    CHECK_FALSE(help.contains("/home"));
     CHECK(help.contains("\n/move 1 2 — sposti l'emoji dal posto 1 al posto 2 della casa\n"));
     CHECK(help.ends_with("\n/link <nome> — collega account Telegram e nick IRC Azzurra registrato"));
     CHECK(help.contains("\n/give @giocatore 500 — gli porti 500 palle\n"));
@@ -779,13 +781,13 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     CHECK(house_of(storage, "tg:1") == "[]🎈");
     /* On the road she cannot buy, and the old command only points to the new way. */
     CHECK(command_dispatch(alice, "We @Alice 🚀") ==
-          "Alice sei in viaggio: le emoji si comprano da casa tua. Per tornare indietro scrivi We @Alice.");
+          "Alice sei in viaggio: le emoji si comprano da casa tua. Per tornare indietro scrivi /back.");
     CHECK(command_dispatch(alice, "We @Alice 1 2") ==
-          "Alice sei in viaggio: le emoji si spostano da casa tua. Per tornare indietro scrivi We @Alice.");
+          "Alice sei in viaggio: le emoji si spostano da casa tua. Per tornare indietro scrivi /back.");
     CHECK(command_dispatch(alice, "We @TheConquister37 🎈") ==
-          "Alice sei in viaggio: si brucia da casa tua o da @TheConquister37. Per tornare indietro scrivi We @Alice.");
+          "Alice sei in viaggio: si brucia da casa tua o da @TheConquister37. Per tornare indietro scrivi /back.");
     CHECK(command_dispatch(alice, "We @TheConquister37 1") ==
-          "Alice sei in viaggio: si brucia da casa tua o da @TheConquister37. Per tornare indietro scrivi We @Alice.");
+          "Alice sei in viaggio: si brucia da casa tua o da @TheConquister37. Per tornare indietro scrivi /back.");
 
     /* Once the pizza is handed over she is on her way back: nothing to turn around, just when she is home. */
     const std::int64_t later = std::chrono::duration_cast<std::chrono::seconds>(
@@ -1632,7 +1634,7 @@ TEST_CASE("/burn takes emoji and palle out of the game, and what is thrown hits 
           "Alice i bambini non si bruciano: 👧 resta in casa finché non se ne va da solo.");
 }
 
-TEST_CASE("/home takes him home, /move swaps two slots and nothing else") {
+TEST_CASE("/back takes him home, as /home still does, and /move swaps two slots and nothing else") {
     const TestPaths paths{"home-move-test"};
     AppConfig config;
     config.starter_balloon = false;
@@ -1648,11 +1650,13 @@ TEST_CASE("/home takes him home, /move swaps two slots and nothing else") {
         return 0;
     });
 
+    CHECK(command_is_for_bot("/back"));
     CHECK(command_is_for_bot("/home"));
     CHECK(command_is_for_bot("/move 1 2"));
+    CHECK(command_dispatch(alice, "/back") == "Alice sei già in @Alice!");
     CHECK(command_dispatch(alice, "/home") == "Alice sei già in @Alice!");
     REQUIRE(command_dispatch(alice, "We @TheConquister37").value_or("").contains("@TheConquister37"));
-    CHECK(command_dispatch(alice, "/home").value_or("").starts_with("Alice torni da @TheConquister37 in @Alice"));
+    CHECK(command_dispatch(alice, "/back").value_or("").starts_with("Alice torni da @TheConquister37 in @Alice"));
     CHECK(command_dispatch(alice, "/move 1 2") == "Alice hai scambiato 🍕 e 🍩: ora 🍕 è nel posto 2 e 🍩 nel posto 1. Casa: 🍩🍕");
     /* An emoji after /move is never bought. */
     CHECK(command_dispatch(alice, "/move 🍔 3").value_or("").starts_with("Uso: /move <da> <a>"));
@@ -1718,5 +1722,5 @@ TEST_CASE("/take puts an emoji on him, /store back in the house, and both tell w
     /* Not from the road. */
     REQUIRE(command_dispatch(alice, "/raid Kio").value_or("").starts_with("Alice parti per Kio"));
     CHECK(command_dispatch(alice, "/take ⚡") ==
-          "Alice sei in viaggio: le emoji si prendono da casa tua. Per tornare indietro scrivi We @Alice.");
+          "Alice sei in viaggio: le emoji si prendono da casa tua. Per tornare indietro scrivi /back.");
 }

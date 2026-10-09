@@ -414,8 +414,10 @@ std::string own_name(const CommandContext &context) {
    its command, which says how to use it. */
 constexpr std::string_view buy_command = "/buy";
 
-/* "/home" is another way to write "We yourname", and "/move from to" of "We yourname from to": only
-   two slots, so that nothing else after it is ever taken for a purchase. */
+/* "/back" is another way to write "We yourname", and "/move from to" of "We yourname from to": only
+   two slots, so that nothing else after it is ever taken for a purchase. "/home", its old name, still
+   works for whoever learnt it, though nothing names it any more. */
+constexpr std::string_view back_command = "/back";
 constexpr std::string_view home_command = "/home";
 constexpr std::string_view move_command = "/move";
 
@@ -430,7 +432,7 @@ std::string expand_buy(const CommandContext &context, std::string message) {
     if (context.username.empty()) {
         return message;
     }
-    if (command.name == home_command) {
+    if (command.name == back_command || command.name == home_command) {
         return std::format("{}{}", raid_trigger, own_name(context));
     }
     if (command.name == move_command && two_slots(command.argument)) {
@@ -492,8 +494,8 @@ std::string on_the_road(const CommandContext &context, std::string_view what) {
         return std::format("{} sei sulla via del ritorno: {} Rientri tra {}.", context.username, what,
                            format_wait(*left));
     }
-    return std::format("{} sei in viaggio: {} Per tornare indietro scrivi We {}.", context.username, what,
-                       own_name(context));
+    return std::format("{} sei in viaggio: {} Per tornare indietro scrivi {}back.", context.username, what,
+                       context.user_id == 0 ? "!" : "/");
 }
 
 /* A pile of poo is not handed over or burnt: it is thrown, at the place or at a player. */
@@ -1024,13 +1026,13 @@ std::string handle_help(const CommandContext &context, std::string_view) {
     line(std::format("{}take ⚡ 🚀", slash), "prendi ⚡ e rimetti in casa 🚀 al suo posto");
     line(std::format("{}store ⚡", slash), "rimetti ⚡ in casa");
     line(std::format("{}move 1 2", slash), "sposti l'emoji dal posto 1 al posto 2 della casa");
-    line(std::format("{}home", slash), std::format("torni a casa tua, da {} o dal viaggio", conquister_place));
+    line(std::format("{}back", slash), std::format("torni a casa tua, da {} o dal viaggio", conquister_place));
     line(std::format("{}burn 500", slash), "bruci 500 palle");
     line(std::format("{}burn 🍕", slash), std::format("bruci una 🍕; una 💣 brucia senza colpire chi è in {}",
                                                      conquister_place));
     help += std::format("\nAccanto al nome si vede quello che hai con te; la casa è nel {}profile. Razzie, regali e "
                         "lanci partono solo da casa tua, e quello che porti a qualcuno viaggia con te. In viaggio si "
-                        "può solo tornare indietro, con {}home.\n", slash, slash);
+                        "può solo tornare indietro, con {}back.\n", slash, slash);
     help += std::format("\n{0}leaderboard — classifica\n{0}profile [nome] — il tuo profilo o quello di un altro\n"
                         "{0}emoji — cosa fa ogni emoji con un potere, dove sta e cosa la può colpire\n"
                         "{0}addquote <testo> — aggiungi una citazione\n"
@@ -1413,7 +1415,7 @@ std::string handle_store(const CommandContext &context, std::string_view argumen
                                    bonus_note(context.config, slash, emoji, result.shown, result.house, false));
 }
 
-/* "/home" and a good "/move" are expanded before they get here: only what cannot be is left. */
+/* "/back" and a good "/move" are expanded before they get here: only what cannot be is left. */
 std::string handle_home(const CommandContext &, std::string_view) {
     return missing_username_reply();
 }
@@ -1479,6 +1481,7 @@ constexpr std::array commands{
     CommandDefinition{"/give", handle_give},
     CommandDefinition{"/throw", handle_throw},
     CommandDefinition{"/burn", handle_burn_usage},
+    CommandDefinition{"/back", handle_home},
     CommandDefinition{"/home", handle_home},
     CommandDefinition{"/move", handle_move_usage},
     CommandDefinition{"/take", handle_take},
