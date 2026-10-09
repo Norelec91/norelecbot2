@@ -648,7 +648,7 @@ TEST_CASE("the profile shows where a player stands") {
     CHECK(command_is_for_bot("/profile"));
     const std::string mine = command_dispatch(alice, "/profile").value_or("");
     /* Carol has no palle yet, so the ranking has two players. */
-    CHECK(mine.starts_with("Alice\nCon te: ⚡\nCasa: 🍕\n5000 palle, 2° su 2 in classifica\n"));
+    CHECK(mine.starts_with("Alice\nCon te: ⚡\n5000 palle, 2° su 2 in classifica\n"));
     CHECK(mine.contains(": oggi è giorno di "));
     CHECK(mine.contains("\na casa, in @Alice\n"));
     /* The balloon stays out of it, worn or not. */
@@ -659,7 +659,7 @@ TEST_CASE("the profile shows where a player stands") {
     CHECK(command_dispatch(bob, "/profile @Alice") == mine);
     CHECK(command_dispatch(bob, "/profile @Nessuno") == "Bob non conosco nessun giocatore di nome @Nessuno.");
     const std::string irc = command_dispatch(bob, "/profile Carol").value_or("");
-    CHECK(irc.starts_with("Carol\nCon te: niente\nCasa: vuota\nnessuna palla ancora\n"));
+    CHECK(irc.starts_with("Carol\nCon te: niente\nnessuna palla ancora\n"));
     CHECK_FALSE(irc.contains("🎈"));
     CHECK(irc.contains("\na casa, in Carol"));
 
@@ -775,7 +775,8 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
         return 0;
     });
     /* Owning a 💩 is not being hit by one. */
-    CHECK(command_dispatch(alice, "/profile").value_or("").starts_with("Alice\nCon te: niente\nCasa: 🍕🎈💩\n"));
+    CHECK(command_dispatch(alice, "/profile").value_or("").starts_with("Alice\nCon te: niente\n"));
+    CHECK(command_dispatch(alice, "/house").value_or("").contains("1 🍕  2 🎈  3 💩"));
     CHECK(command_dispatch(alice, "We @TheConquister37 💩") ==
           "@Alice, tiri una palla di cacca a @TheConquister37, bravo hai fatto centro, l'hai completamente smerdato!");
     CHECK(house_of(storage, "tg:1") == "🍕🎈");
@@ -1729,7 +1730,7 @@ TEST_CASE("/take puts an emoji on him, /store back in the house, and both tell w
           "Alice sei in viaggio: le emoji si prendono da casa tua. Per tornare indietro scrivi /back.");
 }
 
-TEST_CASE("/house shows the house slot by slot, with its numbers, and what he has on him") {
+TEST_CASE("/house shows the house slot by slot, with its numbers") {
     const TestPaths paths{"house-command-test"};
     AppConfig config;
     config.starter_balloon = false;
@@ -1748,11 +1749,11 @@ TEST_CASE("/house shows the house slot by slot, with its numbers, and what he ha
 
     CHECK(command_is_for_bot("/house"));
     CHECK(command_dispatch(alice, "/house") ==
-          "Casa di Alice (3/10):\n1 👶  2 ·  3 ·  4 🧂  5 👶  6 ·  7 ·  8 ·  9 ·  10 ·\nCon te: 🎈⚡");
+          "Casa di Alice (3/10):\n1 👶  2 ·  3 ·  4 🧂  5 👶  6 ·  7 ·  8 ·  9 ·  10 ·");
     /* Somebody else's, named as on that platform. */
     CHECK(command_dispatch(kio, "/house @Alice") == command_dispatch(alice, "/house"));
     CHECK(command_dispatch(alice, "/house Kio") ==
-          "Casa di Kio (0/10):\n1 ·  2 ·  3 ·  4 ·  5 ·  6 ·  7 ·  8 ·  9 ·  10 ·\nCon te: niente");
+          "Casa di Kio (0/10):\n1 ·  2 ·  3 ·  4 ·  5 ·  6 ·  7 ·  8 ·  9 ·  10 ·");
     CHECK(command_dispatch(alice, "/house @Nessuno") == "Alice non conosco nessun giocatore di nome @Nessuno.");
     /* /home is gone: it is not a command any more. */
     CHECK_FALSE(command_is_for_bot("/home"));

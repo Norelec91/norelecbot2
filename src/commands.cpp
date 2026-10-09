@@ -1180,7 +1180,7 @@ std::optional<Profile> asked_about(const CommandContext &context, std::string_vi
     return found;
 }
 
-/* "/house [name]": what is in his house, slot by slot with their numbers, and what he has on him. */
+/* "/house [name]": what is in his house, slot by slot with their numbers. */
 std::string handle_house(const CommandContext &context, std::string_view argument) {
     std::string refusal;
     const std::optional<Profile> found = asked_about(context, argument, seconds_now(), refusal);
@@ -1195,7 +1195,6 @@ std::string handle_house(const CommandContext &context, std::string_view argumen
         reply += std::format("{}{} {}", slot == 0 ? "" : "  ", slot + 1,
                              slot < slots.size() && !slots[slot].empty() ? slots[slot] : std::string{"·"});
     }
-    reply += std::format("\nCon te: {}", found->furniture.empty() ? std::string{"niente"} : found->furniture);
     return reply;
 }
 
@@ -1208,10 +1207,10 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
         return refusal;
     }
     const Profile &profile = *found;
-    /* The bare name at the top, then the two places of his emoji; his home below is written like everywhere else. */
+    /* The bare name at the top, then what he has on him: the house has /house. His home below is written like
+       everywhere else. */
     std::string card = std::format("{}\n", with_furniture(profile.name, {}, profile.smeared));
     card += std::format("Con te: {}\n", profile.furniture.empty() ? std::string{"niente"} : profile.furniture);
-    card += std::format("Casa: {}\n", profile.house.empty() ? std::string{"vuota"} : profile.house);
     card += profile.rank == 0 ? std::string{"nessuna palla ancora\n"}
                               : std::format("{}, {}° su {} in classifica\n", palle(profile.score), profile.rank,
                                             profile.players);
