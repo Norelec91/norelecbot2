@@ -158,10 +158,10 @@ int price(const CommandContext &context, int cost) {
     return debug_on(context.storage, std::string{context.player_key}) ? 0 : cost;
 }
 
-/* A name with its title, if a 💩 hit him lately, and in front of it what he has on him. */
+/* A name with its title, if a 💩 hit him lately, and after it, in brackets, what he has on him. */
 std::string with_furniture(std::string_view name, std::string_view furniture, bool smeared) {
     const std::string titled = smeared ? std::format("{} lo smerdato", name) : std::string{name};
-    return furniture.empty() ? titled : std::format("{} {}", furniture, titled);
+    return furniture.empty() ? titled : std::format("{} ({})", titled, furniture);
 }
 
 /* Everything that changes how the names read: the emoji beside them, and who was hit by a 💩. */
@@ -182,8 +182,8 @@ std::string dressed(const Looks &looks, std::string_view key, std::string_view u
                           mine == looks.furniture.end() ? std::string_view{} : std::string_view{mine->second}, smeared);
 }
 
-/* The name as an action tells it: with his title, but not what he has on him, which would only crowd the
-   line. */
+/* The name once a reply has already told what he has on him: with his title, without the emoji again, which
+   would only crowd the line. */
 std::string titled(const Looks &looks, std::string_view key, std::string_view username) {
     return dressed(Looks{.furniture = {}, .smeared = looks.smeared}, key, username);
 }
@@ -737,7 +737,8 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
         if (burnt.backfired) {
             return dud_reply(context.username, blown);
         }
-        const std::string holder = std::format("{}{}", burnt.hit_on_telegram ? "@" : "", burnt.hit);
+        const std::string holder =
+            with_furniture(std::format("{}{}", burnt.hit_on_telegram ? "@" : "", burnt.hit), burnt.hit_furniture, false);
         return blown.empty()
             ? std::format("{} la tua bomba esplode addosso a {} in {} ma non trova niente da portarsi via.",
                           context.username, holder, conquister_place)
@@ -807,36 +808,43 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
         return std::format(
             "{} il palloncino di {} ha resistito{}. "
             "Ora il palloncino ha il {}% di probabilità di essere bucato.",
-            titled(furniture, context.player_key, username),
-            titled(furniture, result.previous_key, result.previous_username),
+            dressed(furniture, context.player_key, username),
+            dressed(furniture, result.previous_key, result.previous_username),
             toll,
             result.next_chance
         );
     }
+    /* Each player is named with what he has on him the first time the reply names him, and bare after. The
+       kicked holder has the mention where it reaches him. */
+    const std::string kicked_name = std::format("{}{}", mention, result.previous_username);
+    std::string claimer = dressed(furniture, context.player_key, username);
+    std::string kicked = dressed(furniture, result.previous_key, kicked_name);
+    const auto named = [&] {
+        claimer = titled(furniture, context.player_key, username);
+        kicked = titled(furniture, result.previous_key, kicked_name);
+    };
     std::string reply;
-    /* The kicked holder named, with the mention where it reaches him. */
-    const std::string kicked =
-        titled(furniture, result.previous_key, std::format("{}{}", mention, result.previous_username));
     if (result.sneaked) {
-        reply = std::format("{} scivoli di nascosto oltre il palloncino di {}!\n",
-                            titled(furniture, context.player_key, username), kicked);
+        reply = std::format("{} scivoli di nascosto oltre il palloncino di {}!\n", claimer, kicked);
+        named();
     }
     if (result.balloon_popped) {
-        reply = std::format("{} hai bucato il palloncino di {}!\n", titled(furniture, context.player_key, username),
-                            kicked);
+        reply = std::format("{} hai bucato il palloncino di {}!\n", claimer, kicked);
+        named();
     }
     if (!result.previous_username.empty()) {
         reply += std::format(
-            "{0} hai cacciato {4} da {2}.\n{1} hai guadagnato {3}{5}!\n",
-            titled(furniture, context.player_key, username),
-            titled(furniture, result.previous_key, result.previous_username),
-            conquister_place,
-            palle(result.earned),
+            "{} hai cacciato {} da {}.\n{} hai guadagnato {}{}!\n",
+            claimer,
             kicked,
+            conquister_place,
+            titled(furniture, result.previous_key, result.previous_username),
+            palle(result.earned),
             hold_note(context, result.previous_username, result.lightning, result.zodiac_percent, now)
         );
+        named();
     }
-    reply += std::format("{} sei in {}!", titled(furniture, context.player_key, username), conquister_place);
+    reply += std::format("{} sei in {}!", claimer, conquister_place);
     if (!result.lobsters_became.empty()) {
         std::string became;
         for (const std::string &emoji : result.lobsters_became) {
@@ -1546,12 +1554,12 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event, const AppCon
     const std::string_view mention = event.target_on_telegram ? "@" : "";
     /* His planet, with the mention where it reaches him, as everywhere else. */
     const std::string home = std::format("{}{}", event.raider_on_telegram ? "@" : "", event.raider);
-    /* The names with their titles, not what they have on them, which would only crowd the line. */
-    const std::string raider = with_furniture(event.raider, {}, event.raider_smeared);
+    /* Each named once with what he has on him; the target, named again further on, bare the second time. */
+    const std::string raider = with_furniture(event.raider, event.raider_emoji, event.raider_smeared);
     const std::string target = with_furniture(event.target, {}, event.target_smeared);
-    /* The same with the mention where it reaches him. */
+    /* The target as he is first named, with the mention where it reaches him. */
     const std::string named =
-        with_furniture(std::format("{}{}", mention, event.target), {}, event.target_smeared);
+        with_furniture(std::format("{}{}", mention, event.target), event.target_emoji, event.target_smeared);
     if (event.kind == RaidEvent::Kind::gone) {
         return std::format("{} {} ha vissuto la sua vita e se n'è andato: il posto è di nuovo libero.",
                            named, event.gift_emoji);
