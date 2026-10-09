@@ -1222,9 +1222,35 @@ TEST_CASE("/emoji tells every emoji with a power, where it is and what can hit i
     CHECK(help.contains("Funzionano in casa"));
     CHECK(help.contains("Funzionano con te"));
     CHECK(help.contains("Si lanciano"));
-    CHECK(command_dispatch(alice, "/help").value_or("").contains("\n/emoji — "));
+    CHECK(command_dispatch(alice, "/help").value_or("").contains("\n/emoji [emoji] — "));
     /* It fits in one Telegram message. */
     CHECK(help.size() < 4096);
+}
+
+TEST_CASE("/emoji with emoji after it tells just those, one line each") {
+    const TestPaths paths{"emoji-glossary-test"};
+    AppConfig config;
+    config.starter_balloon = false;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    Storage storage{config.conquister_path, config.quotes_path};
+    const CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
+    CHECK(command_dispatch(alice, "/emoji 🧂").value_or("") ==
+          "🧂 funziona in casa, anche quando sei fuori: se la stessa persona arriva a razziarti di nuovo entro 5 "
+          "minuti, ti dà il 10% delle sue palle per ognuno, fino a tutte.");
+    /* Several at once, each once, in the order written. */
+    CHECK(command_dispatch(alice, "/emoji ⚡💣⚡").value_or("") ==
+          "⚡ funziona con te, dove sei tu: +10% di palle in @TheConquister37 per ognuno.\n"
+          "💣 si lancia: distrugge un'emoji con un potere dove esplode; il 10% sono difettose e scoppiano in mano.");
+    /* A flag that counts as 💩 says what 💩 does. */
+    CHECK(command_dispatch(alice, "/emoji 🇷🇺").value_or("").starts_with("🇷🇺 si lancia: chi la prende è "));
+    CHECK(command_dispatch(alice, "/emoji 🎈").value_or("").starts_with("🎈 il palloncino: con te difende te"));
+    CHECK(command_dispatch(alice, "/emoji 🎈").value_or("").ends_with(". Invincibile: né bombe né furti."));
+    CHECK(command_dispatch(alice, "/emoji 👴").value_or("").starts_with("👴 è un'età dei bambini"));
+    CHECK(command_dispatch(alice, "/emoji 🍕").value_or("") ==
+          "🍕 è decorativa: non fa niente, le bombe non la toccano, ma una 🏴‍☠️ può rubarla dalla casa.");
+    CHECK(command_dispatch(alice, "/emoji sale").value_or("") ==
+          "Scrivi /emoji per tutte, o /emoji seguito da una o più emoji, per esempio /emoji 🧂⚡");
 }
 
 TEST_CASE("the quotes are open to the admins as well as to the owner") {

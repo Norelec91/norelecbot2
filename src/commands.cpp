@@ -1064,7 +1064,7 @@ std::string handle_help(const CommandContext &context, std::string_view) {
                         "può solo tornare indietro, con {}back.\n", slash, slash);
     help += std::format("\n{0}leaderboard — classifica\n{0}profile [nome] — il tuo profilo o quello di un altro\n"
                         "{0}house [nome] — la tua casa posto per posto, o quella di un altro\n"
-                        "{0}emoji — cosa fa ogni emoji con un potere, dove sta e cosa la può colpire\n"
+                        "{0}emoji [emoji] — cosa fa ogni emoji con un potere, o solo quelle che scrivi\n"
                         "{0}addquote <testo> — aggiungi una citazione\n"
                         "{0}link <nome> — collega account Telegram e nick IRC Azzurra registrato",
                         slash);
@@ -1147,8 +1147,62 @@ std::string power_help(const Power &power, const AppConfig &config) {
     return {};
 }
 
-/* "/emoji": every emoji with a power, by where it is, with what can and cannot hit it. */
-std::string handle_emoji_help(const CommandContext &context, std::string_view) {
+/* "/emoji 🧂⚡": just the emoji written, one line each, with where it works and what it does. */
+std::string emoji_glossary(const CommandContext &context, const std::vector<std::string> &asked) {
+    const AppConfig &config = context.config;
+    constexpr std::array<std::string_view, 7> children{"👶", "👦", "👧", "👨", "👩", "👴", "👵"};
+    std::vector<std::string> told;
+    std::string lines;
+    for (const std::string &emoji : asked) {
+        if (std::ranges::find(told, emoji) != told.end()) {
+            continue;
+        }
+        told.push_back(emoji);
+        if (!lines.empty()) {
+            lines += '\n';
+        }
+        if (const Power *power = power_of(emoji)) {
+            std::string_view where;
+            switch (power->kind) {
+            case PowerKind::home:
+                where = "funziona in casa, anche quando sei fuori";
+                break;
+            case PowerKind::carried:
+                where = "funziona con te, dove sei tu";
+                break;
+            case PowerKind::thrown:
+                where = "si lancia";
+                break;
+            }
+            /* The balloon tells where it works itself. */
+            lines += std::format("{} {}{}{}.", emoji,
+                                 is_power(emoji, power::balloon) ? "" : std::format("{}: ", where),
+                                 power_help(*power, config),
+                                 power->untouchable ? ". Invincibile: né bombe né furti" : "");
+        } else if (std::ranges::find(children, emoji) != children.end()) {
+            lines += std::format("{} è un'età dei bambini, che nascono da una 💦 nella casa: crescono di un'età ogni "
+                                 "{}, da adulti fanno {} al secondo e poi se ne vanno; sono intoccabili. Comprata è "
+                                 "solo decorativa.", emoji, format_wait(config.child_stage_seconds),
+                                 palle(config.adult_per_second));
+        } else {
+            lines += std::format("{} è decorativa: non fa niente, le bombe non la toccano, ma una 🏴‍☠️ può rubarla "
+                                 "dalla casa.", emoji);
+        }
+    }
+    return lines;
+}
+
+/* "/emoji": every emoji with a power, by where it is, with what can and cannot hit it; with emoji after
+   it, just those. */
+std::string handle_emoji_help(const CommandContext &context, std::string_view argument) {
+    if (const std::string_view wanted = text::trim(argument); !wanted.empty()) {
+        const auto asked = text::emoji_split(wanted);
+        if (!asked || asked->empty()) {
+            return std::format("Scrivi {0}emoji per tutte, o {0}emoji seguito da una o più emoji, per esempio "
+                               "{0}emoji 🧂⚡", command_prefix(context));
+        }
+        return emoji_glossary(context, *asked);
+    }
     const auto list = [&context](PowerKind kind) {
         std::string lines;
         for (const Power &power : powers) {
