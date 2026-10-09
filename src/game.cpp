@@ -164,7 +164,7 @@ Settlement hold_value(const ConquisterState &state, const Holder &hold, std::int
         }
         settled.earned = settled.earned * settled.lightning / 100;
     }
-    settled.zodiac_percent = zodiac::percent_for(display_name(state, holder), now, signs);
+    settled.zodiac_percent = day_percent(display_name(state, holder), now, signs);
     settled.earned = settled.earned / 100 * settled.zodiac_percent +
                      settled.earned % 100 * settled.zodiac_percent / 100;
     return settled;
@@ -868,6 +868,10 @@ std::string without_tone(std::string emoji) {
     return emoji;
 }
 
+}
+
+int day_percent(std::string_view username, std::int64_t now, zodiac::Overrides signs) {
+    return zodiac_counts ? zodiac::percent_for(username, now, signs) : 100;
 }
 
 bool is_power(std::string_view emoji, const Power &power) {
@@ -2246,8 +2250,8 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                     const position::Point to =
                         position::coordinates_of(player_id(session, state, raid.target));
                     event.distance = position::distance(from, to);
-                    event.raider_percent = zodiac::percent_for(event.raider, now, rules.signs);
-                    event.target_percent = zodiac::percent_for(event.target, now, rules.signs);
+                    event.raider_percent = day_percent(event.raider, now, rules.signs);
+                    event.target_percent = day_percent(event.target, now, rules.signs);
                     const std::int64_t walked =
                         rules.loot_divisor > 0 ? event.distance / rules.loot_divisor : event.distance;
                     const std::int64_t carried = walked * event.raider_percent / event.target_percent;

@@ -182,6 +182,12 @@ std::string dressed(const Looks &looks, std::string_view key, std::string_view u
                           mine == looks.furniture.end() ? std::string_view{} : std::string_view{mine->second}, smeared);
 }
 
+/* The name as an action tells it: with his title, but not what he has on him, which would only crowd the
+   line. */
+std::string titled(const Looks &looks, std::string_view key, std::string_view username) {
+    return dressed(Looks{.furniture = {}, .smeared = looks.smeared}, key, username);
+}
+
 /* A percentage as a multiplier: 150 is x1.5, 200 is x2, 75 is x0.75. */
 std::string multiplier_text(std::int64_t percent) {
     std::string decimals = std::format("{:02}", percent % 100);
@@ -731,8 +737,7 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
         if (burnt.backfired) {
             return dud_reply(context.username, blown);
         }
-        const std::string holder = with_furniture(std::format("{}{}", burnt.hit_on_telegram ? "@" : "", burnt.hit),
-                                                  burnt.hit_furniture, false);
+        const std::string holder = std::format("{}{}", burnt.hit_on_telegram ? "@" : "", burnt.hit);
         return blown.empty()
             ? std::format("{} la tua bomba esplode addosso a {} in {} ma non trova niente da portarsi via.",
                           context.username, holder, conquister_place)
@@ -802,36 +807,36 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
         return std::format(
             "{} il palloncino di {} ha resistito{}. "
             "Ora il palloncino ha il {}% di probabilità di essere bucato.",
-            dressed(furniture, context.player_key, username),
-            dressed(furniture, result.previous_key, result.previous_username),
+            titled(furniture, context.player_key, username),
+            titled(furniture, result.previous_key, result.previous_username),
             toll,
             result.next_chance
         );
     }
     std::string reply;
-    /* The kicked holder named, with the mention on the name, after what he has on him. */
+    /* The kicked holder named, with the mention where it reaches him. */
     const std::string kicked =
-        dressed(furniture, result.previous_key, std::format("{}{}", mention, result.previous_username));
+        titled(furniture, result.previous_key, std::format("{}{}", mention, result.previous_username));
     if (result.sneaked) {
         reply = std::format("{} scivoli di nascosto oltre il palloncino di {}!\n",
-                            dressed(furniture, context.player_key, username), kicked);
+                            titled(furniture, context.player_key, username), kicked);
     }
     if (result.balloon_popped) {
-        reply = std::format("{} hai bucato il palloncino di {}!\n", dressed(furniture, context.player_key, username),
+        reply = std::format("{} hai bucato il palloncino di {}!\n", titled(furniture, context.player_key, username),
                             kicked);
     }
     if (!result.previous_username.empty()) {
         reply += std::format(
             "{0} hai cacciato {4} da {2}.\n{1} hai guadagnato {3}{5}!\n",
-            dressed(furniture, context.player_key, username),
-            dressed(furniture, result.previous_key, result.previous_username),
+            titled(furniture, context.player_key, username),
+            titled(furniture, result.previous_key, result.previous_username),
             conquister_place,
             palle(result.earned),
             kicked,
             hold_note(context, result.previous_username, result.lightning, result.zodiac_percent, now)
         );
     }
-    reply += std::format("{} sei in {}!", dressed(furniture, context.player_key, username), conquister_place);
+    reply += std::format("{} sei in {}!", titled(furniture, context.player_key, username), conquister_place);
     if (!result.lobsters_became.empty()) {
         std::string became;
         for (const std::string &emoji : result.lobsters_became) {
@@ -855,16 +860,16 @@ std::string handle_leaderboard(const CommandContext &context, std::string_view) 
         );
     }
     const Looks furniture = looks_of(context.storage);
-    std::string reply = std::format(
-        "Classifica {}\nOggi è giorno di {}.\n",
-        conquister_place,
-        zodiac::element_name(zodiac::element_of_day(seconds_now()))
-    );
+    std::string reply = std::format("Classifica {}\n", conquister_place);
+    if (zodiac_counts) {
+        reply += std::format("Oggi è giorno di {}.\n", zodiac::element_name(zodiac::element_of_day(seconds_now())));
+    }
     for (std::size_t position = 1; const LeaderboardEntry &entry : leaderboard.entries) {
         reply += std::format(
-            "\n{}) {} {} — {}",
+            "\n{}) {}{} — {}",
             position++,
-            zodiac::sign_of(entry.username, context.config.zodiac_signs).symbol,
+            zodiac_counts ? std::format("{} ", zodiac::sign_of(entry.username, context.config.zodiac_signs).symbol)
+                          : std::string{},
             dressed(furniture, entry.player_key, entry.username),
             palle(entry.score)
         );
@@ -1214,11 +1219,13 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
     card += profile.rank == 0 ? std::string{"nessuna palla ancora\n"}
                               : std::format("{}, {}° su {} in classifica\n", palle(profile.score), profile.rank,
                                             profile.players);
-    const zodiac::Sign sign = zodiac::sign_of(profile.name, context.config.zodiac_signs);
-    const int percent = zodiac::percent_for(profile.name, now, context.config.zodiac_signs);
-    card += std::format("{} {}: oggi è giorno di {}, {}\n", sign.symbol, sign.name,
-                        zodiac::element_name(zodiac::element_of_day(now)),
-                        multiplier_text(percent));
+    if (zodiac_counts) {
+        const zodiac::Sign sign = zodiac::sign_of(profile.name, context.config.zodiac_signs);
+        const int percent = zodiac::percent_for(profile.name, now, context.config.zodiac_signs);
+        card += std::format("{} {}: oggi è giorno di {}, {}\n", sign.symbol, sign.name,
+                            zodiac::element_name(zodiac::element_of_day(now)),
+                            multiplier_text(percent));
+    }
     if (profile.frozen_for > 0) {
         card += std::format("congelato da una 🧊 ancora per {}\n", format_wait(profile.frozen_for));
     }
@@ -1539,12 +1546,12 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event, const AppCon
     const std::string_view mention = event.target_on_telegram ? "@" : "";
     /* His planet, with the mention where it reaches him, as everywhere else. */
     const std::string home = std::format("{}{}", event.raider_on_telegram ? "@" : "", event.raider);
-    /* The bare name for whoever is spoken to, the dressed one when somebody is named. */
-    const std::string raider = with_furniture(event.raider, event.raider_emoji, event.raider_smeared);
-    const std::string target = with_furniture(event.target, event.target_emoji, event.target_smeared);
-    /* The same with the mention, which goes on the name, after what he has on him. */
+    /* The names with their titles, not what they have on them, which would only crowd the line. */
+    const std::string raider = with_furniture(event.raider, {}, event.raider_smeared);
+    const std::string target = with_furniture(event.target, {}, event.target_smeared);
+    /* The same with the mention where it reaches him. */
     const std::string named =
-        with_furniture(std::format("{}{}", mention, event.target), event.target_emoji, event.target_smeared);
+        with_furniture(std::format("{}{}", mention, event.target), {}, event.target_smeared);
     if (event.kind == RaidEvent::Kind::gone) {
         return std::format("{} {} ha vissuto la sua vita e se n'è andato: il posto è di nuovo libero.",
                            named, event.gift_emoji);

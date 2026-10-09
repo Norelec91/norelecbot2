@@ -16,9 +16,10 @@ using namespace norelecbot;
 
 namespace {
 
-/* Seconds held, times the ⚡ in percent, times what the house of the day was worth to the holder. */
+/* Seconds held, times the ⚡ in percent, times what the house of the day was worth to the holder: nothing more
+   while the zodiac does not count. */
 std::int64_t earnings(std::string_view holder, std::int64_t seconds, std::int64_t now, std::int64_t lightning = 100) {
-    return seconds * lightning / 100 * zodiac::percent_for(holder, now) / 100;
+    return seconds * lightning / 100 * day_percent(holder, now) / 100;
 }
 
 Json read_json(const std::string &path) {
@@ -524,7 +525,7 @@ TEST_CASE("a raid takes what the road allows, up to all the target has, and carr
     /* A palla for every unit of road, never more than the target owns. */
     CHECK(arrival[0].distance > 0);
     const std::int64_t carried = (arrival[0].distance / 50) *
-        zodiac::percent_for("bob", 5) / zodiac::percent_for("alice", 5);
+        day_percent("bob", 5) / day_percent("alice", 5);
     const std::int64_t loot = std::min(carried, std::int64_t{1000});
     CHECK(arrival[0].loot == loot);
     /* alice has never written to the bot from Telegram, so her name carries no mention. */
@@ -769,7 +770,7 @@ TEST_CASE("naming yourself is the way home") {
         static_cast<void>(conquister_claim(storage, 1, "alice", 100));
         const RaidResult left = raid_start(storage, 1, "alice", "alice", 400, quick_rides());
         CHECK(left.status == RaidStatus::left_place);
-        CHECK(left.earned == 300 * zodiac::percent_for("alice", 400) / 100);
+        CHECK(left.earned == 300 * day_percent("alice", 400) / 100);
         CHECK(conquister_user(storage, "alice")->score == 1000 + left.earned);
         /* The place is empty now, and she can leave on a raid. */
         CHECK_FALSE(conquister_leaderboard(storage, 10).current);
@@ -2268,4 +2269,13 @@ TEST_CASE("a raider who reaches a house with 🧂 again soon hands over a share 
     CHECK(raid("alice", 620) == 640);
     CHECK(score("alice") == 0);
     CHECK(score("lucy") == 1000);
+}
+
+TEST_CASE("with the zodiac switched off every day is worth the same to everybody") {
+    CHECK_FALSE(zodiac_counts);
+    for (const char *player : {"alice", "bob", "Giangiui", "mifaisonno"}) {
+        for (std::int64_t day = 0; day < 8; ++day) {
+            CHECK(day_percent(player, day * 86400 + 3600) == 100);
+        }
+    }
 }

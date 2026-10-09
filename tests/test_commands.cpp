@@ -106,8 +106,9 @@ TEST_CASE("the bot answers the commands it knows and ignores the rest") {
         CHECK(answer.contains("\n\ncitazione di prova"));
         CHECK_FALSE(answer.contains("Palloncino gratuito attivo"));
         answer = reply("/leaderboard");
-        CHECK(answer.contains("Classifica @TheConquister37\nOggi è giorno di "));
-        CHECK(answer.contains("\n\n1) "));
+        /* No house of the day: the zodiac does not count. */
+        CHECK(answer.contains("Classifica @TheConquister37\n\n1) "));
+        CHECK_FALSE(answer.contains("giorno di"));
         CHECK(answer.contains(" — 1 citazione\n"));
         CHECK(answer.contains("\n\nIn @TheConquister37 ora: bob"));
 
@@ -337,8 +338,8 @@ TEST_CASE("the balloon replies are the ones the players read") {
     context.user_id = 2;
     context.username = "bob";
     const std::string popped = reply("We @TheConquister37");
-    CHECK(popped.starts_with("bob hai bucato il palloncino di 🎈 @alice!\n"));
-    CHECK(popped.contains("bob hai cacciato 🎈 @alice da @TheConquister37.\n"));
+    CHECK(popped.starts_with("bob hai bucato il palloncino di @alice!\n"));
+    CHECK(popped.contains("bob hai cacciato @alice da @TheConquister37.\n"));
     CHECK(popped.contains("bob sei in @TheConquister37!"));
 }
 
@@ -437,7 +438,7 @@ TEST_CASE("the balloon replies follow the same rule") {
 
     const CommandContext context{.storage = storage, .config = config, .user_id = 2, .username = "bob"};
     const std::string reply = command_dispatch(context, "We @TheConquister37").value_or("<nessuna risposta>");
-    CHECK(reply.starts_with("bob hai bucato il palloncino di 🎈 alice!\n"));
+    CHECK(reply.starts_with("bob hai bucato il palloncino di alice!\n"));
     CHECK_FALSE(reply.contains("@alice"));
 }
 
@@ -649,7 +650,7 @@ TEST_CASE("the profile shows where a player stands") {
     const std::string mine = command_dispatch(alice, "/profile").value_or("");
     /* Carol has no palle yet, so the ranking has two players. */
     CHECK(mine.starts_with("Alice\nCon te: ⚡\n5000 palle, 2° su 2 in classifica\n"));
-    CHECK(mine.contains(": oggi è giorno di "));
+    CHECK_FALSE(mine.contains("giorno di"));
     CHECK(mine.contains("\na casa, in @Alice\n"));
     /* The balloon stays out of it, worn or not. */
     CHECK_FALSE(mine.contains("🎈"));
@@ -810,7 +811,7 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     given.gift_emoji = "🍕";
     given.target_emoji = "🍕";
     given.seconds = 5;
-    CHECK(raid_event_reply(given) == "Alice hai consegnato 🍕 a 🍕 @Bob! Torni in Alice tra 5 secondi.");
+    CHECK(raid_event_reply(given) == "Alice hai consegnato 🍕 a @Bob! Torni in Alice tra 5 secondi.");
     /* A pile of poo that lands is a throw, like the one at the place. */
     RaidEvent poo = given;
     poo.gift_emoji = "💩";
@@ -821,11 +822,11 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     RaidEvent bomb = given;
     bomb.gift_emoji = "💣";
     bomb.target_emoji = "🍕";
-    CHECK(raid_event_reply(bomb) == "Alice la tua bomba esplode in casa di 🍕 @Bob ma non trova niente da "
+    CHECK(raid_event_reply(bomb) == "Alice la tua bomba esplode in casa di @Bob ma non trova niente da "
                                     "portarsi via. Torni in Alice tra 5 secondi.");
     bomb.blown = {"🥺", "⚡"};
     CHECK(raid_event_reply(bomb) ==
-          "Alice la tua bomba esplode in casa di 🍕 @Bob e si porta via 🥺⚡! Torni in Alice tra 5 secondi.");
+          "Alice la tua bomba esplode in casa di @Bob e si porta via 🥺⚡! Torni in Alice tra 5 secondi.");
     RaidEvent bounced = bomb;
     bounced.sent_back = true;
     CHECK(raid_event_reply(bounced) == "La cassetta di @Bob rispedisce 💣 al mittente: Alice esplode a casa tua e si "
@@ -842,7 +843,7 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     empty_house.gift_emoji = "💦";
     empty_house.nobody_home = true;
     CHECK(raid_event_reply(empty_house) ==
-          "Alice a casa di 🍕 @Bob non c'è nessuno: la 💦 te la riporti a casa. Torni in Alice tra 5 secondi.");
+          "Alice a casa di @Bob non c'è nessuno: la 💦 te la riporti a casa. Torni in Alice tra 5 secondi.");
     RaidEvent iced = given;
     iced.gift_emoji = "🧊";
     iced.froze = 300;
@@ -862,15 +863,15 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     birth.target_on_telegram = true;
     birth.target_emoji = "🍕👶";
     birth.gift_emoji = "👶";
-    CHECK(raid_event_reply(birth) == "🍕👶 @Bob è nata una femmina 👶: il padre è @Alice.");
+    CHECK(raid_event_reply(birth) == "@Bob è nata una femmina 👶: il padre è @Alice.");
     birth.gift = 1;
     birth.target_emoji = "👶";
     birth.blown = {"🍕"};
     CHECK(raid_event_reply(birth) ==
-          "👶 @Bob è nato un maschio 👶: il padre è @Alice. Non c'era un posto libero: ha preso quello di 🍕.");
+          "@Bob è nato un maschio 👶: il padre è @Alice. Non c'era un posto libero: ha preso quello di 🍕.");
     birth.raider.clear();
     birth.blown.clear();
-    CHECK(raid_event_reply(birth) == "👶 @Bob è nato un maschio 👶: i genitori sono il 👨 e la 👩 di casa.");
+    CHECK(raid_event_reply(birth) == "@Bob è nato un maschio 👶: i genitori sono il 👨 e la 👩 di casa.");
     RaidEvent left;
     left.kind = RaidEvent::Kind::gone;
     left.target = "Bob";
@@ -890,17 +891,17 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     robbed.target_smeared = true;
     robbed.target_emoji = "🍕";
     robbed.loot = 3;
-    CHECK(raid_event_reply(robbed).value_or("").contains("🍕 Bob lo smerdato"));
+    CHECK(raid_event_reply(robbed).value_or("").contains("Bob lo smerdato"));
     RaidEvent quiet = robbed;
     quiet.sneaked = true;
     quiet.seconds = 5;
-    CHECK(raid_event_reply(quiet) == "Carol scivoli di nascosto oltre le difese di 🍕 Bob lo smerdato e rubi 3 palle! "
+    CHECK(raid_event_reply(quiet) == "Carol scivoli di nascosto oltre le difese di Bob lo smerdato e rubi 3 palle! "
                                      "Torni in Carol tra 5 secondi.");
     RaidEvent found = robbed;
     found.alarmed = true;
     found.seconds = 5;
     CHECK(raid_event_reply(found).value_or("").starts_with(
-        "L'allarme di Bob ti scopre: devi vedertela con le sue difese.\nCarol hai rubato 3 palle a 🍕 Bob lo smerdato"));
+        "L'allarme di Bob ti scopre: devi vedertela con le sue difese.\nCarol hai rubato 3 palle a Bob lo smerdato"));
     RaidEvent eaten = robbed;
     eaten.eaten = "⚡";
     CHECK(raid_event_reply(eaten).value_or("").starts_with("Il 🦖 di "));
@@ -923,16 +924,16 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     caught.intercepted = true;
     caught.seconds = 5;
     CHECK(raid_event_reply(caught) ==
-          "Carol il cane di 🍕 Bob lo smerdato ti ha intercettato: niente bottino. Torni in Carol tra 5 secondi.");
+          "Carol il cane di Bob lo smerdato ti ha intercettato: niente bottino. Torni in Carol tra 5 secondi.");
     robbed.target_emoji = "🥺🥺";
     robbed.spared = 1;
     robbed.pleaded_percent = 10;
     CHECK(raid_event_reply(robbed).value_or("").ends_with(
-        "\n🥺🥺 Bob lo smerdato ti ha impietosito: gli rubi 3 palle invece di 4 palle (10% in meno)."));
+        "\nBob lo smerdato ti ha impietosito: gli rubi 3 palle invece di 4 palle (10% in meno)."));
     given.no_room = true;
     given.target_emoji = "🐝🐝";
     CHECK(raid_event_reply(given) ==
-          "Alice 🐝🐝 @Bob non ha più posto per 🍕: te la riporti a casa tua. Torni in Alice tra 5 secondi.");
+          "Alice @Bob non ha più posto per 🍕: te la riporti a casa tua. Torni in Alice tra 5 secondi.");
 
     RaidEvent home;
     home.kind = RaidEvent::Kind::returned;
@@ -980,9 +981,9 @@ TEST_CASE("a 💩 thrown at the place makes the holder \"lo smerdato\" for a day
         return 0;
     });
     CHECK(command_dispatch(alice, "We @TheConquister37 💣") ==
-          "Alice la tua bomba esplode addosso a 🍕 @Bob in @TheConquister37 e si porta via ⚡!");
+          "Alice la tua bomba esplode addosso a @Bob in @TheConquister37 e si porta via ⚡!");
     CHECK(command_dispatch(alice, "We @TheConquister37 💣") ==
-          "Alice la tua bomba esplode addosso a 🍕 @Bob in @TheConquister37 ma non trova niente da portarsi via.");
+          "Alice la tua bomba esplode addosso a @Bob in @TheConquister37 ma non trova niente da portarsi via.");
 
     /* A day later he is clean, and the entry is gone. */
     storage.transaction([](StorageSession &session) {
@@ -1127,7 +1128,7 @@ TEST_CASE("a popped 🎈 stays on the name, and a player is handed only one") {
         for (int attempt = 0; attempt < 8 && !reply.contains("hai cacciato"); ++attempt) {
             reply = command_dispatch(bob, "We @TheConquister37").value_or("");
         }
-        CHECK(reply.contains("hai bucato il palloncino di 🎈 @Alice"));
+        CHECK(reply.contains("hai bucato il palloncino di @Alice"));
         CHECK(furniture_of_alice(storage) == "🎈");
         /* Burnt, it is gone for good: nothing she does hands her another. */
         REQUIRE(command_dispatch(alice, "/burn 🎈"));
@@ -1161,8 +1162,8 @@ TEST_CASE("a 🥷 takes the claimer past the holder's 🎈") {
         return 0;
     });
     const std::string reply = command_dispatch(bob, "We @TheConquister37").value_or("");
-    CHECK(reply.starts_with("🥷🏿 bob scivoli di nascosto oltre il palloncino di 🎈 alice!\n"));
-    CHECK(reply.contains("🥷🏿 bob hai cacciato 🎈 alice da @TheConquister37.\n"));
+    CHECK(reply.starts_with("bob scivoli di nascosto oltre il palloncino di alice!\n"));
+    CHECK(reply.contains("bob hai cacciato alice da @TheConquister37.\n"));
     CHECK_FALSE(reply.contains("bucato"));
 }
 
@@ -1403,7 +1404,7 @@ TEST_CASE("a bought emoji follows the name everywhere") {
     /* And taking the seat, too. */
     const std::optional<std::string> claimed = command_dispatch(context, conquister_trigger);
     REQUIRE(claimed);
-    CHECK(claimed->contains("🎈 alice sei in"));
+    CHECK(claimed->contains("alice sei in"));
 
     /* From the place the purchase takes her home first; a keycap is an emoji like any other and fills
        the first hole of the house. */

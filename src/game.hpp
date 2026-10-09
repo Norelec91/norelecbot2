@@ -24,6 +24,14 @@ enum class PowerKind { home, carried, thrown };
 /* How many emoji a player can have on him: the house has the rest. */
 inline constexpr std::size_t carried_limit = 5;
 
+/* Whether the house of the day and the signs change what a hold or a raid is worth. Switched off: every day
+   is worth the same to everybody, and nobody is told about signs. */
+inline constexpr bool zodiac_counts = false;
+
+/* What the house of the day makes a hold or a raid worth to a player, in percent: always 100 while the
+   zodiac does not count. */
+[[nodiscard]] int day_percent(std::string_view username, std::int64_t now, zodiac::Overrides signs = {});
+
 /* An emoji that does something beyond hanging beside a name. */
 struct Power {
     std::string_view emoji;
