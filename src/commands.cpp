@@ -164,6 +164,15 @@ std::string with_furniture(std::string_view name, std::string_view furniture, bo
     return furniture.empty() ? titled : std::format("{} ({})", titled, furniture);
 }
 
+/* What somebody has on him once a reply has changed it, told after the line that changed it; nothing when
+   it is the same as before. */
+std::string after_line(std::string_view name, std::string_view before, std::string_view after) {
+    if (before == after) {
+        return {};
+    }
+    return std::format("\nDopo: {} ({})", name, after.empty() ? std::string_view{"niente"} : after);
+}
+
 /* Everything that changes how the names read: the emoji beside them, and who was hit by a 💩. */
 struct Looks {
     Authors furniture;
@@ -737,13 +746,14 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
         if (burnt.backfired) {
             return dud_reply(context.username, blown);
         }
-        const std::string holder =
-            with_furniture(std::format("{}{}", burnt.hit_on_telegram ? "@" : "", burnt.hit), burnt.hit_furniture, false);
+        const std::string name = std::format("{}{}", burnt.hit_on_telegram ? "@" : "", burnt.hit);
+        /* Named as he was when it went off, then as it left him. */
+        const std::string holder = with_furniture(name, burnt.hit_before, false);
         return blown.empty()
             ? std::format("{} la tua bomba esplode addosso a {} in {} ma non trova niente da portarsi via.",
                           context.username, holder, conquister_place)
-            : std::format("{} la tua bomba esplode addosso a {} in {} e si porta via {}!", context.username, holder,
-                          conquister_place, blown);
+            : std::format("{} la tua bomba esplode addosso a {} in {} e si porta via {}!{}", context.username, holder,
+                          conquister_place, blown, after_line(name, burnt.hit_before, burnt.hit_furniture));
     }
     /* Nobody there to hit, or only himself. */
     return std::format("{} lanci {} in {}, ma non colpisci nessuno: è uscita dal gioco.", context.username, emoji,
@@ -815,9 +825,10 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
         );
     }
     /* Each player is named with what he has on him the first time the reply names him, and bare after. The
+       claimer comes in as he was, before his 🦞 became anything: what they became is told at the end. The
        kicked holder has the mention where it reaches him. */
     const std::string kicked_name = std::format("{}{}", mention, result.previous_username);
-    std::string claimer = dressed(furniture, context.player_key, username);
+    std::string claimer = with_furniture(titled(furniture, context.player_key, username), result.carried_before, false);
     std::string kicked = dressed(furniture, result.previous_key, kicked_name);
     const auto named = [&] {
         claimer = titled(furniture, context.player_key, username);
@@ -850,7 +861,12 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
         for (const std::string &emoji : result.lobsters_became) {
             became += emoji;
         }
-        reply += std::format("\nLe tue aragoste diventano {} finché resti qui.", became);
+        const auto now_on = std::ranges::find_if(furniture.furniture, [&](const Authors::value_type &entry) {
+            return text::equals_ignore_case(entry.first, context.player_key);
+        });
+        reply += std::format("\nLe tue aragoste diventano {} finché resti qui.{}", became,
+                             after_line(username, result.carried_before,
+                                        now_on == furniture.furniture.end() ? std::string{} : now_on->second));
     }
     if (const std::optional<std::string> quote = optional_random_quote(context.storage)) {
         reply += std::format("\n\n{}", *quote);
@@ -1550,16 +1566,21 @@ bool command_is_for_bot(std::string_view text) {
            (!message.empty() && find_command(parse_command(message).name) != nullptr);
 }
 
-std::optional<std::string> raid_event_reply(const RaidEvent &event, const AppConfig &config) {
+namespace {
+
+/* The reply itself, naming the two as they were when the raider got there. */
+std::optional<std::string> raid_event_story(const RaidEvent &event, const AppConfig &config) {
     const std::string_view mention = event.target_on_telegram ? "@" : "";
     /* His planet, with the mention where it reaches him, as everywhere else. */
     const std::string home = std::format("{}{}", event.raider_on_telegram ? "@" : "", event.raider);
     /* Each named once with what he has on him; the target, named again further on, bare the second time. */
-    const std::string raider = with_furniture(event.raider, event.raider_emoji, event.raider_smeared);
+    const std::string raider =
+        with_furniture(event.raider, event.raider_emoji_before.value_or(event.raider_emoji), event.raider_smeared);
     const std::string target = with_furniture(event.target, {}, event.target_smeared);
     /* The target as he is first named, with the mention where it reaches him. */
     const std::string named =
-        with_furniture(std::format("{}{}", mention, event.target), event.target_emoji, event.target_smeared);
+        with_furniture(std::format("{}{}", mention, event.target), event.target_emoji_before.value_or(event.target_emoji),
+                       event.target_smeared);
     if (event.kind == RaidEvent::Kind::gone) {
         return std::format("{} {} ha vissuto la sua vita e se n'è andato: il posto è di nuovo libero.",
                            named, event.gift_emoji);
@@ -1716,6 +1737,21 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event, const AppCon
     if (event.spared > 0) {
         reply += std::format("\n{} ti ha impietosito: gli rubi {} invece di {} ({}% in meno).", target,
                              palle(event.loot), palle(event.spared + event.loot), event.pleaded_percent);
+    }
+    return reply;
+}
+
+}
+
+std::optional<std::string> raid_event_reply(const RaidEvent &event, const AppConfig &config) {
+    std::optional<std::string> reply = raid_event_story(event, config);
+    /* Whoever the arrival changed is told again as he is now, after the story of how. */
+    if (reply && event.raider_emoji_before) {
+        *reply += after_line(event.raider, *event.raider_emoji_before, event.raider_emoji);
+    }
+    if (reply && event.target_emoji_before) {
+        *reply += after_line(std::format("{}{}", event.target_on_telegram ? "@" : "", event.target),
+                             *event.target_emoji_before, event.target_emoji);
     }
     return reply;
 }

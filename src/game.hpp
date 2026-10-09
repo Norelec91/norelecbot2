@@ -126,6 +126,8 @@ struct ClaimResult {
     std::int64_t entered_lightning = 0;
     /* taken: what the 🦞 on his name became, slot by slot, copying the kicked holder's; empty if none did. */
     std::vector<std::string> lobsters_became;
+    /* taken: what he had on him as he came in, before his 🦞 became anything. */
+    std::string carried_before;
     int next_chance = 0;
     /* cooldown: seconds still to wait. defended: the penalty just handed out. */
     std::int64_t penalty_seconds = 0;
@@ -339,6 +341,10 @@ struct RaidEvent {
     /* What the two have on them, shown beside their names. */
     std::string raider_emoji;
     std::string target_emoji;
+    /* What the two had on them when the raider got there, if that changed meanwhile: a 🦖 ate, a 🏴‍☠️ boarded,
+       a present went on the target, a ☢️ started him over. Nothing when it is the same. */
+    std::optional<std::string> raider_emoji_before{};
+    std::optional<std::string> target_emoji_before{};
     /* Whether each of the two is "lo smerdato" right now: a delivered 💩 makes the target one. */
     bool raider_smeared = false;
     bool target_smeared = false;
@@ -529,6 +535,8 @@ struct FurnitureBurnResult {
     std::string hit;
     bool hit_on_telegram = false;
     std::string hit_furniture;
+    /* What the holder had on him before it landed. */
+    std::string hit_before;
     std::vector<std::string> blown{};
     /* The 💣 was a dud: what it took is the thrower's own, among what he had with him. */
     bool backfired = false;

@@ -640,6 +640,7 @@ ClaimResult conquister_claim(
         for (const auto &[slot, emoji] : lobsters) {
             outcome.lobsters_became.push_back(emoji);
         }
+        outcome.carried_before = shown_gear(state, username);
         state.current = Holder{.user_id = user_id, .username = username, .since = now,
                                .lightning_percent = 0, .bolts = 0, .banked = 0, .counted_from = 0,
                                .lobsters = std::move(lobsters)};
@@ -1357,6 +1358,7 @@ FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, 
         if (is_thrown(emoji) && state.current && !state.current->username.empty() &&
             state.current->username != player) {
             const std::string holder = state.current->username;
+            outcome.hit_before = worn(state, holder);
             Landing landing = land(session, state, emoji, player, holder, Whereabouts::conquister, now, rules);
             outcome.backfired = landing.backfired;
             outcome.expecting = landing.expecting;
@@ -2156,6 +2158,8 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 event.raider_on_telegram = counter(state.telegram_ids, raid.raider) != 0;
                 event.raider_emoji = worn(state, raid.raider);
                 event.target_emoji = worn(state, raid.target);
+                const std::string raider_then = event.raider_emoji;
+                const std::string target_then = event.target_emoji;
                 event.raider_smeared = is_smeared(state, raid.raider, now);
                 event.target_smeared = is_smeared(state, raid.target, now);
                 /* Whoever comes to rob may meet the 🦖 of the house, whatever else happens to him there:
@@ -2272,6 +2276,15 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                         event.raider_emoji = worn(state, raid.raider);
                         event.target_emoji = worn(state, raid.target);
                     }
+                }
+                /* What either has on him now, and what he had when the raider got there, if it changed. */
+                if (const std::string now_on = worn(state, raid.raider); now_on != raider_then) {
+                    event.raider_emoji = now_on;
+                    event.raider_emoji_before = raider_then;
+                }
+                if (const std::string now_on = worn(state, raid.target); now_on != target_then) {
+                    event.target_emoji = now_on;
+                    event.target_emoji_before = target_then;
                 }
                 settled.push_back(std::move(event));
             }

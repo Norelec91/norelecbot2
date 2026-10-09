@@ -2205,6 +2205,10 @@ TEST_CASE("a 🦖 at the house eats one of the emoji the raider has with him") {
     std::vector<RaidEvent> events = raid_due(storage, 1000, rules);
     REQUIRE(events.size() == 1);
     CHECK(events[0].eaten == "🏴‍☠️");
+    /* The event keeps what she had on her when she got there, and what is left. */
+    CHECK(events[0].raider_emoji_before == std::optional<std::string>{"🎈🏴‍☠️"});
+    CHECK(events[0].raider_emoji == "🎈");
+    CHECK_FALSE(events[0].target_emoji_before);
     CHECK(furniture_all(storage).at("alice") == "🎈");
     REQUIRE(raid_due(storage, 2000, rules).size() == 1);
 
