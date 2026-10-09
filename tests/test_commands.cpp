@@ -748,9 +748,13 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     CHECK(command_dispatch(alice, "We @Alice 🍕")->contains("ce ne sono già 1 in giro"));
     CHECK(command_dispatch(alice, "We @Nessuno 🍕") == "Alice non conosco nessun giocatore di nome @Nessuno.");
 
+    /* Nothing is brought to the place any more: it is burnt with /burn. */
     CHECK(command_dispatch(alice, "We @TheConquister37 🐟") ==
-          "Alice hai portato 🐟 in @TheConquister37: è uscita dal gioco.");
-    CHECK(command_dispatch(alice, "We @TheConquister37 🐟") == "Alice non hai 🐟, né con te né in casa.");
+          "Alice a @TheConquister37 non si porta niente: per bruciare 🐟 scrivi /burn 🐟.");
+    CHECK(command_dispatch(alice, "/give @TheConquister37 🐟") ==
+          "Alice a @TheConquister37 non si porta niente: per bruciare 🐟 scrivi /burn 🐟.");
+    CHECK(command_dispatch(alice, "/burn 🐟") == "Alice hai bruciato 🐟: è uscita dal gioco.");
+    CHECK(command_dispatch(alice, "/burn 🐟") == "Alice non hai 🐟, né con te né in casa.");
     /* Two slots of her house: the emoji change places. */
     CHECK(command_is_for_bot("We @Alice 1 2"));
     CHECK(command_dispatch(alice, "We @Alice 1 2") ==
@@ -785,9 +789,9 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
           "Alice sei in viaggio: le emoji si comprano da casa tua. Per tornare indietro scrivi /back.");
     CHECK(command_dispatch(alice, "We @Alice 1 2") ==
           "Alice sei in viaggio: le emoji si spostano da casa tua. Per tornare indietro scrivi /back.");
-    CHECK(command_dispatch(alice, "We @TheConquister37 🎈") ==
+    CHECK(command_dispatch(alice, "/burn 🎈") ==
           "Alice sei in viaggio: si brucia da casa tua o da @TheConquister37. Per tornare indietro scrivi /back.");
-    CHECK(command_dispatch(alice, "We @TheConquister37 1") ==
+    CHECK(command_dispatch(alice, "/burn 1") ==
           "Alice sei in viaggio: si brucia da casa tua o da @TheConquister37. Per tornare indietro scrivi /back.");
 
     /* Once the pizza is handed over she is on her way back: nothing to turn around, just when she is home. */
@@ -1125,7 +1129,7 @@ TEST_CASE("a popped 🎈 stays on the name, and a player is handed only one") {
         CHECK(reply.contains("hai bucato il palloncino di 🎈 @Alice"));
         CHECK(furniture_of_alice(storage) == "🎈");
         /* Burnt, it is gone for good: nothing she does hands her another. */
-        REQUIRE(command_dispatch(alice, "We @TheConquister37 🎈"));
+        REQUIRE(command_dispatch(alice, "/burn 🎈"));
         CHECK(furniture_of_alice(storage).empty());
         REQUIRE(command_dispatch(alice, "/profile"));
         CHECK(furniture_of_alice(storage).empty());
@@ -1260,7 +1264,7 @@ TEST_CASE("We with a number for yourself does nothing") {
     CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->in_conquister);
 }
 
-TEST_CASE("We with a number for the place destroys the palle") {
+TEST_CASE("/burn with a number destroys the palle, which are no longer brought to the place") {
     const TestPaths paths{"burn-command-test"};
     AppConfig config;
     config.starter_balloon = false;
@@ -1274,17 +1278,18 @@ TEST_CASE("We with a number for the place destroys the palle") {
         return 0;
     });
 
-    CHECK(command_is_for_bot("We @TheConquister37 400"));
-    CHECK(command_dispatch(alice, "We @TheConquister37 0")->contains("maggiore di zero"));
-    CHECK(command_dispatch(alice, "We @TheConquister37 1001")->contains("hai solo 1000 palle a disposizione"));
+    CHECK(command_is_for_bot("/burn 400"));
+    CHECK(command_dispatch(alice, "/burn 0")->contains("maggiore di zero"));
+    CHECK(command_dispatch(alice, "/burn 1001")->contains("hai solo 1000 palle a disposizione"));
     CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 1000);
 
-    CHECK(command_dispatch(alice, "We @TheConquister37 400") ==
-          "Alice hai portato 400 palle in @TheConquister37: sono uscite dal gioco. Te ne restano 600.");
+    CHECK(command_dispatch(alice, "/burn 400") == "Alice hai bruciato 400 palle: sono uscite dal gioco. Te ne restano 600.");
     CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 600);
-    /* The place is the place however it is written, and taking it is still a claim. */
-    CHECK(command_dispatch(alice, "We theconquister37 100")->contains("uscite dal gioco"));
-    CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 500);
+    /* Brought to the place, however it is written, they stay where they are; taking it is still a claim. */
+    CHECK(command_dispatch(alice, "We @TheConquister37 400") ==
+          "Alice a @TheConquister37 non si portano palle: per bruciarle scrivi /burn 400.");
+    CHECK(command_dispatch(alice, "We theconquister37 100")->contains("non si portano palle"));
+    CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 600);
     CHECK(command_dispatch(alice, "We @TheConquister37")->contains("Alice"));
 }
 
@@ -1579,7 +1584,7 @@ TEST_CASE("/raid robs, /give makes a present of anything, /throw lands what is t
     CHECK(command_dispatch(alice, "/throw @Alice 💣") == "Alice non puoi lanciare a te stesso.");
     CHECK(command_dispatch(alice, "/throw @Bob 🍕") == "Alice 🍕 non si lancia: per regalarla scrivi /give @Bob 🍕.");
     CHECK(command_dispatch(alice, "/give @TheConquister37 500").value_or("").starts_with(
-        "Alice a @TheConquister37 non si regala niente"));
+        "Alice a @TheConquister37 non si portano palle: per bruciarle scrivi /burn 500."));
 
     /* Given, the 💣 arrives as it is and goes in his house. */
     CHECK(command_dispatch(alice, "/give @Bob 💣").value_or("").starts_with("Alice parti per Bob con 💣 da regalare"));
@@ -1623,7 +1628,7 @@ TEST_CASE("/burn takes emoji and palle out of the game, and what is thrown hits 
     /* Not even a ☢️ starts the game over. */
     CHECK(command_dispatch(alice, "/burn ☢️") == "Alice hai bruciato ☢️: è uscita dal gioco.");
     CHECK(furniture_all(storage).at("tg:2") == "⚡");
-    CHECK(command_dispatch(alice, "/burn 100").value_or("").starts_with("Alice hai portato 100 palle in @TheConquister37"));
+    CHECK(command_dispatch(alice, "/burn 100").value_or("").starts_with("Alice hai bruciato 100 palle: sono uscite dal gioco."));
     CHECK(command_dispatch(alice, "/burn 🍩") == "Alice non hai 🍩, né con te né in casa.");
     storage.transaction([](StorageSession &session) {
         session.state().furniture["tg:1"] = "👧";

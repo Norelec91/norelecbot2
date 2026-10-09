@@ -516,7 +516,7 @@ bool names_the_place(std::string_view target) {
     return text::equals_ignore_case(name, conquister_place.substr(1));
 }
 
-/* "We @TheConquister37 numero": the palle go back where they were earned, which is out of the game. */
+/* "/burn numero": the palle leave the game. */
 std::string handle_burn(const CommandContext &context, std::int64_t amount) {
     if (context.username.empty()) {
         return missing_username_reply();
@@ -533,10 +533,9 @@ std::string handle_burn(const CommandContext &context, std::int64_t amount) {
         break;
     }
     return std::format(
-        "{} hai portato {} in {}: {} dal gioco. Te ne {} {}.",
+        "{} hai bruciato {}: {} dal gioco. Te ne {} {}.",
         context.username,
         palle(result.amount),
-        conquister_place,
         result.amount == 1 ? "è uscita" : "sono uscite",
         result.score == 1 ? "resta" : "restano",
         result.score
@@ -677,8 +676,9 @@ std::string handle_furniture_move(const CommandContext &context, const ParsedMov
                        username, result.moved, move.from, move.to, result.shown);
 }
 
-/* "We @TheConquister37 emoji": the first copy on his name goes back to the place, out of the game.
-   "/burn emoji" destroys it there and then: even one meant to be thrown hits nobody. */
+/* "We @TheConquister37 emoji", or "/throw @TheConquister37 emoji", with one that is thrown: it lands on whoever
+   holds the place. "/burn emoji" destroys the first copy he has there and then: even one meant to be thrown
+   hits nobody. */
 std::string handle_emoji_burn(const CommandContext &context, std::string_view emoji, bool destroy = false) {
     if (context.username.empty()) {
         return missing_username_reply();
@@ -739,7 +739,9 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
             : std::format("{} la tua bomba esplode addosso a {} in {} e si porta via {}!", context.username, holder,
                           conquister_place, blown);
     }
-    return std::format("{} hai portato {} in {}: è uscita dal gioco.", context.username, emoji, conquister_place);
+    /* Nobody there to hit, or only himself. */
+    return std::format("{} lanci {} in {}, ma non colpisci nessuno: è uscita dal gioco.", context.username, emoji,
+                       conquister_place);
 }
 
 /* "We nome numero" toward somebody else: the palle travel with him and change hands when he arrives. */
@@ -1746,10 +1748,11 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
                 return verb_usage(context, verb);
             }
             remember_sender();
+            /* Nothing is brought to the place any more: palle are burnt with /burn. */
             if (names_the_place(transfer->target)) {
-                if (verb == Verb::give) {
-                    return std::format("{0} a {1} non si regala niente: per bruciare palle scrivi We {1} {2}.",
-                                       context.username, conquister_place, transfer->amount);
+                if (verb != Verb::burn) {
+                    return std::format("{} a {} non si portano palle: per bruciarle scrivi {}burn {}.",
+                                       context.username, conquister_place, command_prefix(context), transfer->amount);
                 }
                 return handle_burn(bound, transfer->amount);
             }
@@ -1802,12 +1805,17 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
                 return std::format("{} la posizione si sceglie solo sul tuo nome: scrivi We {} {}.",
                                    context.username, carried->target, carried->emoji);
             }
+            /* At the place an emoji is only thrown, at whoever holds it; anything else is burnt with /burn. */
             if (names_the_place(carried->target)) {
-                if (verb == Verb::give) {
-                    return std::format("{0} a {1} non si regala niente: per bruciare {2} scrivi We {1} {2}.",
-                                       context.username, conquister_place, carried->emoji);
+                if (verb == Verb::burn) {
+                    return handle_emoji_burn(bound, carried->emoji, true);
                 }
-                return handle_emoji_burn(bound, carried->emoji, verb == Verb::burn);
+                if (verb == Verb::give || power == nullptr || power->kind != PowerKind::thrown) {
+                    return std::format("{} a {} non si porta niente: per bruciare {} scrivi {}burn {}.",
+                                       context.username, conquister_place, carried->emoji, command_prefix(context),
+                                       carried->emoji);
+                }
+                return handle_emoji_burn(bound, carried->emoji);
             }
             return handle_raid(bound, carried->target, 0, carried->emoji, verb == Verb::give);
         }
