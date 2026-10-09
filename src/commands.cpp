@@ -164,15 +164,6 @@ std::string with_furniture(std::string_view name, std::string_view furniture, bo
     return furniture.empty() ? titled : std::format("{} ({})", titled, furniture);
 }
 
-/* What somebody has on him once a reply has changed it, told after the line that changed it; nothing when
-   it is the same as before. */
-std::string after_line(std::string_view name, std::string_view before, std::string_view after) {
-    if (before == after) {
-        return {};
-    }
-    return std::format("\nDopo: {} ({})", name, after.empty() ? std::string_view{"niente"} : after);
-}
-
 /* Everything that changes how the names read: the emoji beside them, and who was hit by a 💩. */
 struct Looks {
     Authors furniture;
@@ -747,13 +738,13 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
             return dud_reply(context.username, blown);
         }
         const std::string name = std::format("{}{}", burnt.hit_on_telegram ? "@" : "", burnt.hit);
-        /* Named as he was when it went off, then as it left him. */
+        /* Named as he was when it went off. */
         const std::string holder = with_furniture(name, burnt.hit_before, false);
         return blown.empty()
             ? std::format("{} la tua bomba esplode addosso a {} in {} ma non trova niente da portarsi via.",
                           context.username, holder, conquister_place)
-            : std::format("{} la tua bomba esplode addosso a {} in {} e si porta via {}!{}", context.username, holder,
-                          conquister_place, blown, after_line(name, burnt.hit_before, burnt.hit_furniture));
+            : std::format("{} la tua bomba esplode addosso a {} in {} e si porta via {}!", context.username, holder,
+                          conquister_place, blown);
     }
     /* Nobody there to hit, or only himself. */
     return std::format("{} lanci {} in {}, ma non colpisci nessuno: è uscita dal gioco.", context.username, emoji,
@@ -855,18 +846,17 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
         );
         named();
     }
+    /* Named again once his 🦞 became something: as he is now. */
+    if (!result.lobsters_became.empty()) {
+        claimer = dressed(furniture, context.player_key, username);
+    }
     reply += std::format("{} sei in {}!", claimer, conquister_place);
     if (!result.lobsters_became.empty()) {
         std::string became;
         for (const std::string &emoji : result.lobsters_became) {
             became += emoji;
         }
-        const auto now_on = std::ranges::find_if(furniture.furniture, [&](const Authors::value_type &entry) {
-            return text::equals_ignore_case(entry.first, context.player_key);
-        });
-        reply += std::format("\nLe tue aragoste diventano {} finché resti qui.{}", became,
-                             after_line(username, result.carried_before,
-                                        now_on == furniture.furniture.end() ? std::string{} : now_on->second));
+        reply += std::format("\nLe tue aragoste diventano {} finché resti qui.", became);
     }
     if (const std::optional<std::string> quote = optional_random_quote(context.storage)) {
         reply += std::format("\n\n{}", *quote);
@@ -1744,16 +1734,7 @@ std::optional<std::string> raid_event_story(const RaidEvent &event, const AppCon
 }
 
 std::optional<std::string> raid_event_reply(const RaidEvent &event, const AppConfig &config) {
-    std::optional<std::string> reply = raid_event_story(event, config);
-    /* Whoever the arrival changed is told again as he is now, after the story of how. */
-    if (reply && event.raider_emoji_before) {
-        *reply += after_line(event.raider, *event.raider_emoji_before, event.raider_emoji);
-    }
-    if (reply && event.target_emoji_before) {
-        *reply += after_line(std::format("{}{}", event.target_on_telegram ? "@" : "", event.target),
-                             *event.target_emoji_before, event.target_emoji);
-    }
-    return reply;
+    return raid_event_story(event, config);
 }
 
 std::optional<std::string> command_dispatch(const CommandContext &context, std::string_view text) {

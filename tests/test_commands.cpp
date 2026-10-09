@@ -422,7 +422,8 @@ TEST_CASE("getting in tells what the 🦞 became") {
         return 0;
     });
     const std::string reply = play(2, "bob");
-    CHECK(reply.contains("\nLe tue aragoste diventano 🍕⚡ finché resti qui.\nDopo: bob (🍕🦞⚡)"));
+    /* Named again as he is once his 🦞 became something. */
+    CHECK(reply.contains("\nbob (🍕🦞⚡) sei in @TheConquister37!\nLe tue aragoste diventano 🍕⚡ finché resti qui."));
     /* He comes in as he was, with his 🦞. */
     CHECK(reply.contains("bob (🦞🦞🦞) hai cacciato "));
 }
@@ -910,14 +911,12 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     eaten.eaten = "⚡";
     CHECK(raid_event_reply(eaten).value_or("").starts_with("Il 🦖 di "));
     CHECK(raid_event_reply(eaten).value_or("").contains(" ti mangia ⚡.\n"));
-    /* Named as he came, then as the 🦖 left him. */
+    /* Named as he came, before the 🦖 ate. */
     eaten.raider_emoji_before = "🎈⚡";
     eaten.raider_emoji = "🎈";
     eaten.seconds = 5;
     CHECK(raid_event_reply(eaten).value_or("").contains("\nCarol (🎈⚡) hai rubato 3 palle a "));
-    CHECK(raid_event_reply(eaten).value_or("").ends_with("! Torni in Carol tra 5 secondi.\nDopo: Carol (🎈)"));
-    eaten.raider_emoji = "";
-    CHECK(raid_event_reply(eaten).value_or("").ends_with("\nDopo: Carol (niente)"));
+    CHECK(raid_event_reply(eaten).value_or("").ends_with("! Torni in Carol tra 5 secondi."));
     RaidEvent boarded = robbed;
     boarded.boarded = "🍕";
     boarded.seconds = 5;
@@ -993,7 +992,7 @@ TEST_CASE("a 💩 thrown at the place makes the holder \"lo smerdato\" for a day
         return 0;
     });
     CHECK(command_dispatch(alice, "We @TheConquister37 💣") ==
-          "Alice la tua bomba esplode addosso a @Bob (🍕⚡) in @TheConquister37 e si porta via ⚡!\nDopo: @Bob (🍕)");
+          "Alice la tua bomba esplode addosso a @Bob (🍕⚡) in @TheConquister37 e si porta via ⚡!");
     CHECK(command_dispatch(alice, "We @TheConquister37 💣") ==
           "Alice la tua bomba esplode addosso a @Bob (🍕) in @TheConquister37 ma non trova niente da portarsi via.");
 
