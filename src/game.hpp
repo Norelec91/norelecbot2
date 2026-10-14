@@ -346,6 +346,9 @@ struct RaidEvent {
     /* Whether each of the two is "lo smerdato" right now: a delivered 💩 makes the target one. */
     bool raider_smeared = false;
     bool target_smeared = false;
+    /* Whether each of the two is "il pugliese": a delivered ☢️ makes the one it lands on one. */
+    bool raider_pugliese = false;
+    bool target_pugliese = false;
     /* The road between the two, which is also what can be carried off. */
     std::int64_t distance = 0;
     /* The ride home. */
@@ -437,6 +440,8 @@ struct Profile {
     std::string house;
     /* Hit by a 💩 not long ago: he is "lo smerdato". */
     bool smeared = false;
+    /* Started over by a ☢️ this season: he is "il pugliese". */
+    bool pugliese = false;
     /* How many 🐔 lay for him, in his house. */
     std::int64_t hens = 0;
     /* Seconds until he thaws after a 🧊; 0 when he is not frozen. */
@@ -556,6 +561,8 @@ struct FurnitureBurnResult {
                                                  const RaidRules &rules = {}, bool destroy = false);
 /* The players who are "lo smerdato" right now. */
 [[nodiscard]] std::vector<std::string> smeared_all(Storage &storage, std::int64_t now);
+/* The players who are "il pugliese" this season. */
+[[nodiscard]] std::vector<std::string> pugliesi_all(Storage &storage);
 
 /* Sends a player to rob another one, if he is at home and the target is somebody the bot knows.
    Naming himself sends him home instead: at once from @TheConquister37, at the end of the ride if he

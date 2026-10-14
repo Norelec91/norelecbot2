@@ -156,6 +156,9 @@ struct ConquisterState {
     /* Whether what used to hang on a single name has been sorted into the house and what he has with
        him: done once, for the saves from before there were two. */
     bool split = false;
+    /* The players a ☢️ started over, mapped to when: each is "il pugliese" until the season ends, which is
+       when a ☢️ starts the whole game over. */
+    Counters pugliesi{};
 
     bool operator==(const ConquisterState &) const = default;
 };

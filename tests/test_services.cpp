@@ -1374,6 +1374,9 @@ TEST_CASE("a ☢️ starts over the player whose house it lands on, and on the p
     const std::vector<RaidEvent> landed = raid_due(storage, 15, quick_rides());
     REQUIRE(landed.size() == 1);
     CHECK(landed[0].reset);
+    /* And he is "il pugliese" for the rest of the season. */
+    CHECK(landed[0].target_pugliese);
+    CHECK_FALSE(landed[0].raider_pugliese);
     {
         const ConquisterState local = storage.transaction([](StorageSession &session) { return session.state(); });
         CHECK(local.scores.at("bob") == 0);
@@ -1385,6 +1388,7 @@ TEST_CASE("a ☢️ starts over the player whose house it lands on, and on the p
         /* Nobody else is touched. */
         CHECK(local.scores.at("carol") == 70);
         CHECK(local.furniture.at("carol") == "🥺");
+        CHECK(local.pugliesi == Counters{{"bob", 15}});
         CHECK(local.raids.size() == 2);
         CHECK(read_json(paths.conquister + ".before-reset-15").at("scores").at("bob") == 900);
         std::filesystem::remove(paths.conquister + ".before-reset-15");
@@ -1404,6 +1408,8 @@ TEST_CASE("a ☢️ starts over the player whose house it lands on, and on the p
         ConquisterState &state = session.state();
         CHECK(state.raids.empty());
         CHECK(state.scores.at("carol") == 0);
+        /* A second one does not change when he became one. */
+        CHECK(state.pugliesi == Counters{{"bob", 15}, {"carol", 21}});
         state.scores["bob"] = 900;
         state.current = Holder{.user_id = 0, .username = "bob", .since = 0};
         return 0;
@@ -1425,6 +1431,8 @@ TEST_CASE("a ☢️ starts over the player whose house it lands on, and on the p
     CHECK(after.balloons.empty());
     CHECK(after.cooldowns.empty());
     CHECK(after.smeared.empty());
+    /* A new season: nobody is "il pugliese" any more. */
+    CHECK(after.pugliesi.empty());
     /* Who they are, where they live and what they quoted stay. */
     CHECK(after.ids == Counters{{"alice", 1}, {"bob", 2}, {"carol", 3}, {"dave", 4}});
     CHECK(after.telegram_ids == Counters{{"alice", 11}});

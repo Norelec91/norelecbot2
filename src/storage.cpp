@@ -230,6 +230,7 @@ ConquisterState parse_state(const Json &json) {
         parse_knocks(json),
         parse_authors(json, "equipped"),
         json.contains("split") && json.at("split").get<bool>(),
+        parse_counters(json, "pugliesi"),
     };
     return state;
 }
@@ -308,6 +309,7 @@ Json state_to_json(const ConquisterState &state) {
         {"knocks", std::move(knocks)},
         {"equipped", state.equipped},
         {"split", state.split},
+        {"pugliesi", state.pugliesi},
     };
 }
 

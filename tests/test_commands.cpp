@@ -1075,7 +1075,19 @@ TEST_CASE("the ☢️ costs a million and starts the game over from the place") 
     landed.reset = true;
     landed.seconds = 5;
     CHECK(raid_event_reply(landed) == "Alice ha sganciato la bomba nucleare su casa di @Bob: riparte da zero, senza "
-                                      "palle e con il solo 🎈 di partenza. Torni in Alice tra 5 secondi.");
+                                      "palle e con il solo 🎈 di partenza, e fino alla prossima stagione è il pugliese. "
+                                      "Torni in Alice tra 5 secondi.");
+    /* From then on his name carries it, wherever it is shown. */
+    landed.target_pugliese = true;
+    landed.kind = RaidEvent::Kind::gone;
+    landed.gift_emoji = "👴";
+    CHECK(raid_event_reply(landed).value_or("").starts_with("@Bob il pugliese 👴 ha vissuto la sua vita"));
+    storage.transaction([](StorageSession &session) {
+        session.state().pugliesi["tg:2"] = 1;
+        return 0;
+    });
+    CHECK(command_dispatch(alice, "/profile @Bob").value_or("").starts_with("Bob il pugliese\n"));
+    CHECK(command_dispatch(alice, "/leaderboard").value_or("").contains("Bob il pugliese"));
     CHECK(command_dispatch(alice, "/throw @TheConquister37 ☢️") ==
           "Alice ha sganciato la bomba nucleare su @TheConquister37: il gioco riparte da zero. Tutti senza palle e "
           "con il solo 🎈 di partenza, @TheConquister37 è vuoto e nessuno è in viaggio.");

@@ -46,6 +46,7 @@ Landing land(StorageSession &session, ConquisterState &state, std::string_view t
 std::string worn(const ConquisterState &state, const std::string &player);
 /* Hit by a 💩 and not clean yet. */
 bool is_smeared(const ConquisterState &state, const std::string &player, std::int64_t now);
+bool is_pugliese(const ConquisterState &state, const std::string &player);
 /* Hands a player the 🎈 everybody starts with, once, if he has none and a free slot. */
 void welcome(ConquisterState &state, const std::string &player, std::size_t limit);
 bool has_balloon(const ConquisterState &state, const std::string &player);
@@ -719,6 +720,7 @@ Profile profile_from(ConquisterState &state, const std::string &key, std::int64_
     profile.furniture = shown_gear(state, key);
     profile.house = stored_in(state.furniture, key);
     profile.smeared = is_smeared(state, key, now);
+    profile.pugliese = is_pugliese(state, key);
     profile.hens = house_copies(state, key, power::hen);
     profile.frozen_for = frozen_for(state, key, now);
     profile.on_telegram = counter(state.telegram_ids, key) != 0;
@@ -968,6 +970,10 @@ std::string worn(const ConquisterState &state, const std::string &player) {
 
 bool is_smeared(const ConquisterState &state, const std::string &player, std::int64_t now) {
     return counter(state.smeared, player) > now;
+}
+
+bool is_pugliese(const ConquisterState &state, const std::string &player) {
+    return state.pugliesi.find(player) != state.pugliesi.end();
 }
 
 /* A 💩 that lands makes him "lo smerdato" from now, however long he already was. */
@@ -1308,6 +1314,8 @@ void start_over(ConquisterState &state) {
     state.pregnancies.clear();
     state.children.clear();
     state.knocks.clear();
+    /* A new season: nobody is "il pugliese" any more. */
+    state.pugliesi.clear();
 }
 
 /* On a house it does the same to the one who lives there: no palle, no emoji, out of the place
@@ -1337,6 +1345,10 @@ void start_over(ConquisterState &state, const std::string &player, std::int64_t 
     state.balloons.erase(player);
     state.cooldowns.erase(player);
     state.smeared.erase(player);
+    /* And he is "il pugliese" for the rest of the season, whatever happens to him. */
+    if (state.pugliesi.find(player) == state.pugliesi.end()) {
+        state.pugliesi[player] = now;
+    }
 }
 
 }
@@ -1403,6 +1415,16 @@ FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, 
         log_info("emoji burned user={} emoji={} hit={}", player, emoji, result.hit);
     }
     return result;
+}
+
+std::vector<std::string> pugliesi_all(Storage &storage) {
+    return storage.transaction([](StorageSession &session) {
+        std::vector<std::string> pugliesi;
+        for (const auto &[player, since] : session.state().pugliesi) {
+            pugliesi.push_back(player);
+        }
+        return pugliesi;
+    });
 }
 
 std::vector<std::string> smeared_all(Storage &storage, std::int64_t now) {
@@ -2177,6 +2199,8 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 const std::string target_then = event.target_emoji;
                 event.raider_smeared = is_smeared(state, raid.raider, now);
                 event.target_smeared = is_smeared(state, raid.target, now);
+                event.raider_pugliese = is_pugliese(state, raid.raider);
+                event.target_pugliese = is_pugliese(state, raid.target);
                 /* Whoever comes to rob may meet the 🦖 of the house, whatever else happens to him there:
                    it may eat one of the emoji he has on him, never a 🎈. */
                 if (raid.gift == 0 && raid.gift_emoji.empty()) {
@@ -2232,6 +2256,8 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                                                now, rules);
                                 event.target_smeared = event.target_smeared || landing.smeared;
                             }
+                            event.raider_pugliese = is_pugliese(state, raid.raider);
+                            event.target_pugliese = is_pugliese(state, raid.target);
                             raid.gift_emoji.clear();
                             event.backfired = landing.backfired;
                             event.reset = landing.reset;
@@ -2327,6 +2353,8 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                     .target_emoji = worn(state, raid.target),
                     .raider_smeared = is_smeared(state, raid.raider, now),
                     .target_smeared = is_smeared(state, raid.target, now),
+                    .raider_pugliese = is_pugliese(state, raid.raider),
+                    .target_pugliese = is_pugliese(state, raid.target),
                     .raider_on_telegram = counter(state.telegram_ids, raid.raider) != 0,
                 });
             }

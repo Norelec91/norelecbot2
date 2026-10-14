@@ -158,9 +158,16 @@ int price(const CommandContext &context, int cost) {
     return debug_on(context.storage, std::string{context.player_key}) ? 0 : cost;
 }
 
-/* A name with its title, if a 💩 hit him lately, and after it, in brackets, what he has on him. */
-std::string with_furniture(std::string_view name, std::string_view furniture, bool smeared) {
-    const std::string titled = smeared ? std::format("{} lo smerdato", name) : std::string{name};
+/* A name with its titles, "il pugliese" for the season after a ☢️ and "lo smerdato" for a while after a 💩,
+   and after it, in brackets, what he has on him. */
+std::string with_furniture(std::string_view name, std::string_view furniture, bool smeared, bool pugliese = false) {
+    std::string titled{name};
+    if (pugliese) {
+        titled += " il pugliese";
+    }
+    if (smeared) {
+        titled += " lo smerdato";
+    }
     return furniture.empty() ? titled : std::format("{} ({})", titled, furniture);
 }
 
@@ -178,6 +185,7 @@ std::string now_on(std::string_view gear, std::string_view name = {}) {
 struct Looks {
     Authors furniture;
     std::vector<std::string> smeared;
+    std::vector<std::string> pugliesi{};
 };
 
 /* The name as it is shown: the real one, plus whatever he hung beside it. */
@@ -185,17 +193,20 @@ std::string dressed(const Looks &looks, std::string_view key, std::string_view u
     const auto mine = std::ranges::find_if(looks.furniture, [key](const Authors::value_type &entry) {
         return text::equals_ignore_case(entry.first, key);
     });
-    const bool smeared = std::ranges::any_of(looks.smeared, [key](const std::string &player) {
-        return text::equals_ignore_case(player, key);
-    });
+    const auto among = [key](const std::vector<std::string> &players) {
+        return std::ranges::any_of(players, [key](const std::string &player) {
+            return text::equals_ignore_case(player, key);
+        });
+    };
     return with_furniture(username,
-                          mine == looks.furniture.end() ? std::string_view{} : std::string_view{mine->second}, smeared);
+                          mine == looks.furniture.end() ? std::string_view{} : std::string_view{mine->second},
+                          among(looks.smeared), among(looks.pugliesi));
 }
 
 /* The name once a reply has already told what he has on him: with his title, without the emoji again, which
    would only crowd the line. */
 std::string titled(const Looks &looks, std::string_view key, std::string_view username) {
-    return dressed(Looks{.furniture = {}, .smeared = looks.smeared}, key, username);
+    return dressed(Looks{.furniture = {}, .smeared = looks.smeared, .pugliesi = looks.pugliesi}, key, username);
 }
 
 /* A percentage as a multiplier: 150 is x1.5, 200 is x2, 75 is x0.75. */
@@ -239,7 +250,8 @@ std::int64_t seconds_now() {
 }
 
 Looks looks_of(Storage &storage) {
-    return Looks{.furniture = furniture_all(storage), .smeared = smeared_all(storage, seconds_now())};
+    return Looks{.furniture = furniture_all(storage), .smeared = smeared_all(storage, seconds_now()),
+                 .pugliesi = pugliesi_all(storage)};
 }
 
 /* A count of palle, in the singular when there is just one. */
@@ -1129,7 +1141,8 @@ std::string power_help(const Power &power, const AppConfig &config) {
                            format_wait(config.pregnancy_seconds));
     }
     if (is(power::nuke)) {
-        return std::format("costa {}: azzera un giocatore, o tutto il gioco se lanciata a {}", palle(config.nuke_cost),
+        return std::format("costa {}: azzera un giocatore, che resta \"il pugliese\" fino alla prossima stagione, o "
+                           "tutto il gioco se lanciata a {}, e lì comincia una nuova stagione", palle(config.nuke_cost),
                            conquister_place);
     }
     if (is(power::ice)) {
@@ -1291,7 +1304,7 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
     const Profile &profile = *found;
     /* The bare name at the top, then what he has on him: the house has /house. His home below is written like
        everywhere else. */
-    std::string card = std::format("{}\n", with_furniture(profile.name, {}, profile.smeared));
+    std::string card = std::format("{}\n", with_furniture(profile.name, {}, profile.smeared, profile.pugliese));
     card += std::format("Con te: {}\n", profile.furniture.empty() ? std::string{"niente"} : profile.furniture);
     card += profile.rank == 0 ? std::string{"nessuna palla ancora\n"}
                               : std::format("{}, {}° su {} in classifica\n", palle(profile.score), profile.rank,
@@ -1628,12 +1641,13 @@ std::optional<std::string> raid_event_story(const RaidEvent &event, const AppCon
     const std::string home = std::format("{}{}", event.raider_on_telegram ? "@" : "", event.raider);
     /* Each named once with what he has on him; the target, named again further on, bare the second time. */
     const std::string raider =
-        with_furniture(event.raider, event.raider_emoji_before.value_or(event.raider_emoji), event.raider_smeared);
-    const std::string target = with_furniture(event.target, {}, event.target_smeared);
+        with_furniture(event.raider, event.raider_emoji_before.value_or(event.raider_emoji), event.raider_smeared,
+                       event.raider_pugliese);
+    const std::string target = with_furniture(event.target, {}, event.target_smeared, event.target_pugliese);
     /* The target as he is first named, with the mention where it reaches him. */
     const std::string named =
         with_furniture(std::format("{}{}", mention, event.target), event.target_emoji_before.value_or(event.target_emoji),
-                       event.target_smeared);
+                       event.target_smeared, event.target_pugliese);
     if (event.kind == RaidEvent::Kind::gone) {
         return std::format("{} {} ha vissuto la sua vita e se n'è andato: il posto è di nuovo libero.",
                            named, event.gift_emoji);
@@ -1689,7 +1703,7 @@ std::optional<std::string> raid_event_story(const RaidEvent &event, const AppCon
                 : is_power(event.gift_emoji, power::seed)
                 ? std::format("tra {} si vedrà, e sarà tutto tuo", format_wait(event.expecting))
                 : is_power(event.gift_emoji, power::poo) ? "ora lo smerdato sei tu"
-                : is_power(event.gift_emoji, power::nuke) ? "riparti da zero, senza palle e con il solo 🎈 di partenza"
+                : is_power(event.gift_emoji, power::nuke) ? "riparti da zero, senza palle e con il solo 🎈 di partenza, e fino alla prossima stagione sei il pugliese"
                 : blown.empty() ? "esplode a casa tua ma non trova niente da portarsi via"
                 : std::format("esplode a casa tua e si porta via {}", blown);
             return std::format("La cassetta di {}{} rispedisce {} al mittente: {} {}! Torni in {} tra {}.", mention,
@@ -1717,8 +1731,8 @@ std::optional<std::string> raid_event_story(const RaidEvent &event, const AppCon
         }
         if (is_power(event.gift_emoji, power::nuke)) {
             return std::format("{} ha sganciato la bomba nucleare su casa di {}{}: riparte da zero, senza palle e "
-                               "con il solo 🎈 di partenza. Torni in {} tra {}.", raider, mention, event.target, home,
-                               format_wait(event.seconds));
+                               "con il solo 🎈 di partenza, e fino alla prossima stagione è il pugliese. Torni in {} "
+                               "tra {}.", raider, mention, event.target, home, format_wait(event.seconds));
         }
         if (is_power(event.gift_emoji, power::bomb)) {
             std::string blown;
