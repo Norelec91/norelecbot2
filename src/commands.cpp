@@ -318,13 +318,17 @@ RaidRules raid_rules(const CommandContext &context) {
         .pregnancy_seconds = context.config.pregnancy_seconds,
         .child_stage_seconds = context.config.child_stage_seconds,
         .hen_per_minute = context.config.hen_per_minute,
-        .adult_per_second = context.config.adult_per_second,
         .mating_percent = context.config.mating_percent,
         .dino_percent = context.config.dino_percent,
         .salt_percent = context.config.salt_percent,
         .frozen_seconds = context.config.frozen_seconds,
         .fire_percent = context.config.fire_percent,
     };
+}
+
+/* How commands are typed where he is: a slash on Telegram, a bang on IRC, where the slash belongs to the client. */
+std::string_view command_prefix(const CommandContext &context) {
+    return context.user_id == 0 ? "!" : "/";
 }
 
 std::string handle_raid(const CommandContext &context, std::string_view target, std::int64_t gift = 0,
@@ -355,8 +359,8 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
         return std::format("{} sei già in viaggio, torni tra {}.", username, format_wait(result.seconds));
     case RaidStatus::holding_place:
         /* Journeys are measured between planets, and the place is not on the map. */
-        return std::format("{} razzie e consegne partono da casa tua: esci prima da {} con We {}.",
-                           username, conquister_place, home);
+        return std::format("{} razzie e consegne partono da casa tua: esci prima da {} con {}back.",
+                           username, conquister_place, command_prefix(context));
     case RaidStatus::unknown_target:
         return std::format("{} non conosco nessun giocatore di nome {}.", username, target);
     case RaidStatus::left_place:
@@ -558,11 +562,6 @@ std::string handle_burn(const CommandContext &context, std::int64_t amount) {
     );
 }
 
-/* How commands are typed where he is: a slash on Telegram, a bang on IRC, where the slash belongs to the client. */
-std::string_view command_prefix(const CommandContext &context) {
-    return context.user_id == 0 ? "!" : "/";
-}
-
 /* A share of a chance, said as it is or as the most it can be. */
 std::string capped(std::int64_t percent) {
     return percent >= 100 ? std::string{"100%, il massimo"} : std::format("{}%", percent);
@@ -707,8 +706,8 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
     case FurnitureBurnStatus::not_owned:
         return std::format("{} non hai {}, né con te né in casa.", context.username, emoji);
     case FurnitureBurnStatus::child:
-        return std::format("{} i bambini non si bruciano: {} resta in casa finché non se ne va da solo.",
-                           context.username, emoji);
+        return std::format("{} i bambini non si portano in {}: per bruciare {} scrivi {}burn {}.", context.username,
+                           conquister_place, emoji, command_prefix(context), emoji);
     case FurnitureBurnStatus::burned:
         break;
     }
@@ -1181,9 +1180,9 @@ std::string emoji_glossary(const CommandContext &context, const std::vector<std:
                                  power->untouchable ? ". Invincibile: né bombe né furti" : "");
         } else if (std::ranges::find(children, emoji) != children.end()) {
             lines += std::format("{} è un'età dei bambini, che nascono da una 💦 nella casa: crescono di un'età ogni "
-                                 "{}, da adulti fanno {} al secondo e poi se ne vanno; sono intoccabili. Comprata è "
-                                 "solo decorativa.", emoji, format_wait(config.child_stage_seconds),
-                                 palle(config.adult_per_second));
+                                 "{} e poi se ne vanno; non fanno niente, né bombe né furti li toccano, ma puoi "
+                                 "bruciarli con {}burn. Comprata è solo decorativa.", emoji,
+                                 format_wait(config.child_stage_seconds), command_prefix(context));
         } else {
             lines += std::format("{} è decorativa: non fa niente, le bombe non la toccano, ma una 🏴‍☠️ può rubarla "
                                  "dalla casa.", emoji);
@@ -1230,13 +1229,13 @@ std::string handle_emoji_help(const CommandContext &context, std::string_view ar
     help += std::format("\nFunzionano con te, dove sei tu. Colpibili da una 💣 lanciata su di te in {0} e da un 🦖 "
                         "di chi razzi. Quelle che ti regalano mentre sei fuori vanno in casa.\n", conquister_place) +
         list(PowerKind::carried);
-    help += std::format("\nSi lanciano: {0}throw nome emoji su casa sua, We {1} emoji su chi è dentro. Si consumano e "
-                        "partono con te. 🎈 e 🐶 non le fermano, solo la 📮.\n", slash, conquister_place) +
+    help += std::format("\nSi lanciano: {0}throw nome emoji su casa sua, {0}throw {1} emoji su chi è dentro. Si "
+                        "consumano e partono con te. 🎈 e 🐶 non le fermano, solo la 📮.\n", slash, conquister_place) +
         list(PowerKind::thrown);
-    help += std::format("\nI bambini (👶 👦 👧 👨 👩 👴 👵) nascono da una 💦 nella casa, crescono di un'età ogni {}, da "
-                        "adulti fanno {} al secondo e poi se ne vanno. Sono intoccabili: restano in casa, si possono "
-                        "solo spostare, mai togliere.\n", format_wait(context.config.child_stage_seconds),
-                        palle(context.config.adult_per_second));
+    help += std::format("\nI bambini (👶 👦 👧 👨 👩 👴 👵) nascono da una 💦 nella casa, crescono di un'età ogni {} e "
+                        "poi se ne vanno. Non fanno niente: né bombe né furti li toccano, restano in casa e puoi "
+                        "solo spostarli o bruciarli con {}burn.\n", format_wait(context.config.child_stage_seconds),
+                        slash);
     help += "\nTutte le altre emoji sono decorative: non fanno niente, le bombe non le toccano, ma una 🏴‍☠️ può "
             "rubarle dalla casa.";
     return help;
@@ -1803,6 +1802,50 @@ std::optional<std::string> raid_event_reply(const RaidEvent &event, const AppCon
     return raid_event_story(event, config);
 }
 
+/* The command that now does what an old "We name ..." line did; nothing for any other line, "We
+   @TheConquister37" itself among them. */
+template <typename NamesMe, typename Remember>
+std::optional<std::string> old_line_instead(const CommandContext &context, std::string_view text,
+                                            const NamesMe &names_me, const Remember &remember_sender) {
+    const std::string adventured = expand_adventure(text::trim(text));
+    const std::string_view old = adventured;
+    if (!old.starts_with(raid_trigger) || old == conquister_trigger) {
+        return std::nullopt;
+    }
+    const std::string_view slash = command_prefix(context);
+    const auto thrown = [](std::string_view emoji) {
+        const Power *power = power_of(emoji);
+        return power != nullptr && power->kind == PowerKind::thrown;
+    };
+    if (const auto transfer = amount_target(old)) {
+        return names_the_place(transfer->target)
+            ? std::format("{}burn {}", slash, transfer->amount)
+            : std::format("{}give {} {}", slash, transfer->target, transfer->amount);
+    }
+    if (const auto move = slot_move(old)) {
+        return std::format("{}move {} {}", slash, move->from, move->to);
+    }
+    if (const auto carried = emoji_target(old)) {
+        if (names_the_place(carried->target)) {
+            return thrown(carried->emoji)
+                ? std::format("{}throw {} {}", slash, conquister_place, carried->emoji)
+                : std::format("{}burn {}", slash, carried->emoji);
+        }
+        remember_sender();
+        if (names_me(carried->target)) {
+            return carried->position ? std::format("{}buy {} {}", slash, carried->emoji, *carried->position)
+                                     : std::format("{}buy {}", slash, carried->emoji);
+        }
+        return std::format("{}{} {} {}", slash, thrown(carried->emoji) ? "throw" : "give", carried->target,
+                           carried->emoji);
+    }
+    if (const std::string_view target = raid_target(old); !target.empty()) {
+        remember_sender();
+        return names_me(target) ? std::format("{}back", slash) : std::format("{}raid {}", slash, target);
+    }
+    return std::nullopt;
+}
+
 std::optional<std::string> command_dispatch(const CommandContext &context, std::string_view text) {
     try {
         const Verbed verbed = expand_verb(expand_buy(context, expand_adventure(text::trim(text))));
@@ -1827,6 +1870,14 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
                 names_player(context.storage, bound_key, telegram ? target.substr(1) : target,
                              telegram ? RaidTargetKind::telegram : RaidTargetKind::irc);
         };
+        /* The old "We name ..." lines are gone, all but the one that enters the place: each now only says
+           which command does what it did. */
+        if (const std::optional<std::string> instead = old_line_instead(context, text, names_me, remember_sender)) {
+            if (!context.claims_allowed) {
+                return std::nullopt;
+            }
+            return std::format("{} questo comando non c'è più: scrivi {}", context.username, *instead);
+        }
         if (message == conquister_trigger) {
             if (!context.claims_allowed) {
                 return std::nullopt;
@@ -1887,6 +1938,10 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
             }
             const Power *power = power_of(carried->emoji);
             if (verb == Verb::throw_ && (power == nullptr || power->kind != PowerKind::thrown)) {
+                if (names_the_place(carried->target)) {
+                    return std::format("{} {} non si lancia: per bruciarla scrivi {}burn {}.", context.username,
+                                       carried->emoji, command_prefix(context), carried->emoji);
+                }
                 return std::format("{} {} non si lancia: per regalarla scrivi {}give {} {}.", context.username,
                                    carried->emoji, command_prefix(context), carried->target, carried->emoji);
             }
@@ -1899,8 +1954,9 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
             }
             /* The slot is his choice only on his own name: elsewhere the emoji takes the first free one. */
             if (carried->position) {
-                return std::format("{} la posizione si sceglie solo sul tuo nome: scrivi We {} {}.",
-                                   context.username, carried->target, carried->emoji);
+                return std::format("{} la posizione si sceglie solo in casa tua: scrivi {}{} {} {}.",
+                                   context.username, command_prefix(context),
+                                   verb == Verb::throw_ ? "throw" : "give", carried->target, carried->emoji);
             }
             /* At the place an emoji is only thrown, at whoever holds it; anything else is burnt with /burn. */
             if (names_the_place(carried->target)) {

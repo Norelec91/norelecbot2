@@ -168,7 +168,6 @@ std::vector<Child> parse_children(const Json &state) {
             .slot = integer(entry.at("slot")),
             .male = entry.at("male").get<bool>(),
             .born = integer(entry.at("born")),
-            .paid = entry.contains("paid") ? integer(entry.at("paid")) : 0,
             .courted = entry.contains("courted") && entry.at("courted").get<bool>(),
         });
     }
@@ -257,7 +256,7 @@ Json state_to_json(const ConquisterState &state) {
     Json children = Json::array();
     std::ranges::transform(state.children, std::back_inserter(children), [](const Child &child) {
         return Json{{"owner", child.owner}, {"slot", child.slot}, {"male", child.male}, {"born", child.born},
-                    {"paid", child.paid}, {"courted", child.courted}};
+                    {"courted", child.courted}};
     });
     Json knocks = Json::array();
     std::ranges::transform(state.knocks, std::back_inserter(knocks), [](const Knock &knock) {

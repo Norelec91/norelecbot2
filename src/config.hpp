@@ -52,8 +52,6 @@ struct AppConfig {
     static constexpr int default_child_stage_seconds = 24 * 60 * 60;
     /* The palle each 🐔 on a name lays for its owner every minute. */
     static constexpr int default_hen_per_minute = 1;
-    /* The palle a child makes every second of its grown-up age. */
-    static constexpr int default_adult_per_second = 1;
     /* The chance, in percent, that a grown-up girl and boy of the same house have a child. */
     static constexpr int default_mating_percent = 50;
     /* The chance, in percent, that each 🦖 at a house eats one of the emoji a raider has with him. */
@@ -105,7 +103,6 @@ struct AppConfig {
     int pregnancy_seconds = default_pregnancy_seconds;
     int child_stage_seconds = default_child_stage_seconds;
     int hen_per_minute = default_hen_per_minute;
-    int adult_per_second = default_adult_per_second;
     int mating_percent = default_mating_percent;
     int dino_percent = default_dino_percent;
     int salt_percent = default_salt_percent;

@@ -89,8 +89,6 @@ struct Child {
     std::int64_t slot = 0;
     bool male = false;
     std::int64_t born = 0;
-    /* Up to when its grown-up age has been paid to the owner; 0 before the first time. */
-    std::int64_t paid = 0;
     /* A grown-up girl who already had her chance with a grown-up boy of the same house. */
     bool courted = false;
 

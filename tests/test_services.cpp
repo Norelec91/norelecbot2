@@ -1747,7 +1747,6 @@ TEST_CASE("a child grows through its ages where it was born, then leaves, and no
     RaidRules rules = quick_rides();
     rules.child_stage_seconds = 100;
     rules.pirate_percent = 50;
-    rules.adult_per_second = 3;
     const auto score = [&storage] {
         return storage.transaction([](StorageSession &session) { return session.state().scores.at("bob"); });
     };
@@ -1772,14 +1771,10 @@ TEST_CASE("a child grows through its ages where it was born, then leaves, and no
     CHECK(house_of(storage, "bob") == "[][]👦");
     CHECK(raid_due(storage, 200, rules).empty());
     CHECK(house_of(storage, "bob") == "[][]👨");
-    /* Only as a grown-up does it earn: nothing before, so much a second while it lasts. */
-    CHECK(score() == before);
-    CHECK(raid_due(storage, 240, rules).empty());
-    CHECK(score() == before + 120);
     CHECK(raid_due(storage, 399, rules).empty());
     CHECK(house_of(storage, "bob") == "[][]👴");
-    /* The whole of that age is paid, and not a second of the next. */
-    CHECK(score() == before + 300);
+    /* It makes no palle at any age. */
+    CHECK(score() == before);
     /* A whole life lived, it leaves by itself and the slot is free again. */
     events = raid_due(storage, 400, rules);
     REQUIRE(events.size() == 1);
@@ -1789,18 +1784,19 @@ TEST_CASE("a child grows through its ages where it was born, then leaves, and no
     CHECK(house_of(storage, "bob").empty());
     CHECK(storage.transaction([](StorageSession &session) { return session.state().children.empty(); }));
 
-    /* Nothing parts him from a child, not even leaving it at the place: it stays in his house. */
+    /* A child is not left at the place, but it can be burnt, which frees its slot. */
     storage.transaction([](StorageSession &session) {
         session.state().furniture["bob"] = "🍕👩";
         session.state().children.push_back(
-            Child{.owner = "bob", .slot = 1, .male = false, .born = 1000, .paid = 0, .courted = false});
+            Child{.owner = "bob", .slot = 1, .male = false, .born = 1000, .courted = false});
         return 0;
     });
     CHECK(furniture_burn(storage, "bob", "👶", 1250, rules).status == FurnitureBurnStatus::not_owned);
     CHECK(furniture_burn(storage, "bob", "👩", 1250, rules).status == FurnitureBurnStatus::child);
-    CHECK(furniture_burn(storage, "bob", "👩", 1250, rules, true).status == FurnitureBurnStatus::child);
     CHECK(house_of(storage, "bob") == "🍕👩");
-    CHECK(storage.transaction([](StorageSession &session) { return session.state().children.size() == 1; }));
+    CHECK(furniture_burn(storage, "bob", "👩", 1250, rules, true).status == FurnitureBurnStatus::burned);
+    CHECK(house_of(storage, "bob") == "🍕");
+    CHECK(storage.transaction([](StorageSession &session) { return session.state().children.empty(); }));
 }
 
 TEST_CASE("every 🐔 on a name lays palle for its owner minute after minute") {

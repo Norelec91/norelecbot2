@@ -83,7 +83,6 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
         .pregnancy_seconds = config.pregnancy_seconds,
         .child_stage_seconds = config.child_stage_seconds,
         .hen_per_minute = config.hen_per_minute,
-        .adult_per_second = config.adult_per_second,
         .mating_percent = config.mating_percent,
         .dino_percent = config.dino_percent,
         .salt_percent = config.salt_percent,

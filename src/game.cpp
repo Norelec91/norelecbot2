@@ -1124,6 +1124,21 @@ bool names_child(const ConquisterState &state, const std::string &player, std::s
     });
 }
 
+/* The first child of his that looks like that leaves his house: its slot is free again. */
+void burn_child(ConquisterState &state, const std::string &player, std::string_view emoji) {
+    std::vector<std::string> slots = slots_of(state, player);
+    const auto kid = std::ranges::find_if(state.children, [&](const Child &child) {
+        const auto slot = static_cast<std::size_t>(child.slot);
+        return child.owner == player && slot < slots.size() && same_emoji(slots[slot], emoji);
+    });
+    if (kid == state.children.end()) {
+        return;
+    }
+    slots[static_cast<std::size_t>(kid->slot)].clear();
+    state.children.erase(kid);
+    hang(state, player, std::move(slots));
+}
+
 /* The first slot of the house that holds an emoji he can part with; nothing when there is none. */
 std::optional<std::size_t> slot_holding(const ConquisterState &state, const std::string &player,
                                         std::string_view emoji) {
@@ -1335,10 +1350,18 @@ FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, 
             outcome.status = FurnitureBurnStatus::travelling;
             return outcome;
         }
-        /* A child is neither burnt like an emoji nor left at the place: it stays until it leaves by itself. */
+        /* A child is not left at the place, but it can be burnt: it is gone, and its slot is free. */
         if (!take_emoji(state, player, emoji)) {
-            outcome.status = names_child(state, player, emoji) ? FurnitureBurnStatus::child
-                                                               : FurnitureBurnStatus::not_owned;
+            if (!names_child(state, player, emoji)) {
+                outcome.status = FurnitureBurnStatus::not_owned;
+                return outcome;
+            }
+            if (!destroy) {
+                outcome.status = FurnitureBurnStatus::child;
+                return outcome;
+            }
+            burn_child(state, player, emoji);
+            outcome.shown = shown_gear(state, player);
             return outcome;
         }
         /* Destroyed, even what is meant to be thrown goes up in smoke and touches nobody. */
@@ -1936,7 +1959,7 @@ std::vector<RaidEvent> births(StorageSession &session, ConquisterState &state, s
         slots[*place] = event.gift_emoji;
         hang(state, mother, std::move(slots));
         state.children.push_back(Child{.owner = mother, .slot = static_cast<std::int64_t>(*place), .male = male,
-                                       .born = now, .paid = 0, .courted = false});
+                                       .born = now, .courted = false});
         event.target_emoji = worn(state, mother);
         born.push_back(std::move(event));
     }
@@ -1952,14 +1975,6 @@ std::vector<RaidEvent> grow(StorageSession &session, ConquisterState &state, std
     const std::vector<Child> children = state.children;
     const std::int64_t stage = std::max<std::int64_t>(rules.child_stage_seconds, 1);
     for (Child child : children) {
-        /* Grown up, the third of its four ages, it works for the name it lives on: so much a second,
-           paid for the seconds of that age gone by since the last round. */
-        const std::int64_t from = std::max(child.paid, child.born + 2 * stage);
-        const std::int64_t until = std::min(now, child.born + 3 * stage);
-        if (rules.adult_per_second > 0 && until > from) {
-            state.scores[child.owner] = counter(state.scores, child.owner) + (until - from) * rules.adult_per_second;
-            child.paid = until;
-        }
         const std::int64_t age = std::max<std::int64_t>(now - child.born, 0) / stage;
         const std::string looks = child_emoji(child.male, age);
         std::vector<std::string> slots = slots_of(state, child.owner);
