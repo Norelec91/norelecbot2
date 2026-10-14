@@ -158,7 +158,7 @@ int price(const CommandContext &context, int cost) {
     return debug_on(context.storage, std::string{context.player_key}) ? 0 : cost;
 }
 
-/* A name with its titles, "il pugliese" for the season after a ☢️ and "lo smerdato" for a while after a 💩,
+/* A name with its titles, "il pugliese" for whoever has it this season and "lo smerdato" for a while after a 💩,
    and after it, in brackets, what he has on him. */
 std::string with_furniture(std::string_view name, std::string_view furniture, bool smeared, bool pugliese = false) {
     std::string titled{name};
@@ -1141,8 +1141,7 @@ std::string power_help(const Power &power, const AppConfig &config) {
                            format_wait(config.pregnancy_seconds));
     }
     if (is(power::nuke)) {
-        return std::format("costa {}: azzera un giocatore, che resta \"il pugliese\" fino alla prossima stagione, o "
-                           "tutto il gioco se lanciata a {}, e lì comincia una nuova stagione", palle(config.nuke_cost),
+        return std::format("costa {}: azzera un giocatore, o tutto il gioco se lanciata a {}", palle(config.nuke_cost),
                            conquister_place);
     }
     if (is(power::ice)) {
@@ -1703,7 +1702,7 @@ std::optional<std::string> raid_event_story(const RaidEvent &event, const AppCon
                 : is_power(event.gift_emoji, power::seed)
                 ? std::format("tra {} si vedrà, e sarà tutto tuo", format_wait(event.expecting))
                 : is_power(event.gift_emoji, power::poo) ? "ora lo smerdato sei tu"
-                : is_power(event.gift_emoji, power::nuke) ? "riparti da zero, senza palle e con il solo 🎈 di partenza, e fino alla prossima stagione sei il pugliese"
+                : is_power(event.gift_emoji, power::nuke) ? "riparti da zero, senza palle e con il solo 🎈 di partenza"
                 : blown.empty() ? "esplode a casa tua ma non trova niente da portarsi via"
                 : std::format("esplode a casa tua e si porta via {}", blown);
             return std::format("La cassetta di {}{} rispedisce {} al mittente: {} {}! Torni in {} tra {}.", mention,
@@ -1731,8 +1730,8 @@ std::optional<std::string> raid_event_story(const RaidEvent &event, const AppCon
         }
         if (is_power(event.gift_emoji, power::nuke)) {
             return std::format("{} ha sganciato la bomba nucleare su casa di {}{}: riparte da zero, senza palle e "
-                               "con il solo 🎈 di partenza, e fino alla prossima stagione è il pugliese. Torni in {} "
-                               "tra {}.", raider, mention, event.target, home, format_wait(event.seconds));
+                               "con il solo 🎈 di partenza. Torni in {} tra {}.", raider, mention, event.target, home,
+                               format_wait(event.seconds));
         }
         if (is_power(event.gift_emoji, power::bomb)) {
             std::string blown;

@@ -1345,10 +1345,6 @@ void start_over(ConquisterState &state, const std::string &player, std::int64_t 
     state.balloons.erase(player);
     state.cooldowns.erase(player);
     state.smeared.erase(player);
-    /* And he is "il pugliese" for the rest of the season, whatever happens to him. */
-    if (state.pugliesi.find(player) == state.pugliesi.end()) {
-        state.pugliesi[player] = now;
-    }
 }
 
 }

@@ -346,7 +346,7 @@ struct RaidEvent {
     /* Whether each of the two is "lo smerdato" right now: a delivered 💩 makes the target one. */
     bool raider_smeared = false;
     bool target_smeared = false;
-    /* Whether each of the two is "il pugliese": a delivered ☢️ makes the one it lands on one. */
+    /* Whether each of the two is "il pugliese" this season. */
     bool raider_pugliese = false;
     bool target_pugliese = false;
     /* The road between the two, which is also what can be carried off. */
@@ -440,7 +440,7 @@ struct Profile {
     std::string house;
     /* Hit by a 💩 not long ago: he is "lo smerdato". */
     bool smeared = false;
-    /* Started over by a ☢️ this season: he is "il pugliese". */
+    /* Named "il pugliese" for this season. */
     bool pugliese = false;
     /* How many 🐔 lay for him, in his house. */
     std::int64_t hens = 0;

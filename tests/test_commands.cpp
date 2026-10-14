@@ -1075,8 +1075,7 @@ TEST_CASE("the ☢️ costs a million and starts the game over from the place") 
     landed.reset = true;
     landed.seconds = 5;
     CHECK(raid_event_reply(landed) == "Alice ha sganciato la bomba nucleare su casa di @Bob: riparte da zero, senza "
-                                      "palle e con il solo 🎈 di partenza, e fino alla prossima stagione è il pugliese. "
-                                      "Torni in Alice tra 5 secondi.");
+                                      "palle e con il solo 🎈 di partenza. Torni in Alice tra 5 secondi.");
     /* From then on his name carries it, wherever it is shown. */
     landed.target_pugliese = true;
     landed.kind = RaidEvent::Kind::gone;
