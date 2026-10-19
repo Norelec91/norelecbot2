@@ -162,6 +162,9 @@ struct ConquisterState {
     /* The players just back from a ride, mapped to the instant they have their breath back: until then they
        cannot set off again. */
     Counters rests{};
+    /* The players who set off too soon and only dreamt of it, mapped to the player they think they went for:
+       they find out when somebody else really gets there. */
+    Authors phantoms{};
 
     bool operator==(const ConquisterState &) const = default;
 };

@@ -412,8 +412,6 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
                            context.user_id == 0 ? "!" : "/");
     case RaidStatus::frozen:
         return frozen_reply(username, result.seconds);
-    case RaidStatus::resting:
-        return std::format("{} devi riprendere fiato: riprova tra un po'.", username);
     case RaidStatus::started:
         break;
     }
@@ -1655,6 +1653,9 @@ std::optional<std::string> raid_event_story(const RaidEvent &event, const AppCon
     const std::string named =
         with_furniture(std::format("{}{}", mention, event.target), event.target_emoji_before.value_or(event.target_emoji),
                        event.target_smeared, event.target_pugliese);
+    if (event.kind == RaidEvent::Kind::fooled) {
+        return std::format("{} eri così stanco che non ti sei accorto che in realtà non hai combinato nulla!", raider);
+    }
     if (event.kind == RaidEvent::Kind::gone) {
         return std::format("{} {} ha vissuto la sua vita e se n'è andato: il posto è di nuovo libero.",
                            named, event.gift_emoji);

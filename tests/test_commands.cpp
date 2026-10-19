@@ -565,6 +565,15 @@ TEST_CASE("an ambiguous old holder is not claimed by an IRC namesake") {
           "Bob non conosco nessun giocatore di nome Alice.");
 }
 
+TEST_CASE("whoever only dreamt of a ride is told when somebody else got there") {
+    RaidEvent event;
+    event.kind = RaidEvent::Kind::fooled;
+    event.raider = "bob";
+    event.target = "alice";
+    CHECK(raid_event_reply(event) ==
+          "bob eri così stanco che non ti sei accorto che in realtà non hai combinato nulla!");
+}
+
 TEST_CASE("the raids tell what happened") {
     RaidEvent event;
     event.kind = RaidEvent::Kind::stolen;

@@ -1332,6 +1332,7 @@ void start_over(ConquisterState &state) {
     state.smeared.clear();
     state.frozen.clear();
     state.rests.clear();
+    state.phantoms.clear();
     state.pregnancies.clear();
     state.children.clear();
     state.knocks.clear();
@@ -1367,6 +1368,7 @@ void start_over(ConquisterState &state, const std::string &player, std::int64_t 
     state.cooldowns.erase(player);
     state.smeared.erase(player);
     state.rests.erase(player);
+    state.phantoms.erase(player);
 }
 
 }
@@ -1806,11 +1808,11 @@ RaidResult raid_start(
             return outcome;
         }
         /* Just back, he needs his breath: trying too soon starts it over, so leaving the instant it ends takes
-           knowing when that is, which nobody is told. */
-        if (counter(state.rests, username) > now) {
+           knowing when that is, which nobody is told. Too tired to notice, he is told he left as he would
+           have been, and nothing moves. */
+        const bool winded = counter(state.rests, username) > now;
+        if (winded) {
             catch_breath(session, state, username, now, rules);
-            outcome.status = RaidStatus::resting;
-            return outcome;
         }
         /* Whoever holds the place stays in it: leaving would be leaving it behind. */
         if (holds_place) {
@@ -1829,7 +1831,9 @@ RaidResult raid_start(
                 outcome.score = score;
                 return outcome;
             }
-            state.scores[username] = score - gift;
+            if (!winded) {
+                state.scores[username] = score - gift;
+            }
             outcome.score = score - gift;
         }
         /* An emoji taken along travels on him, in a slot of its own: one from the house needs a free one.
@@ -1858,7 +1862,9 @@ RaidResult raid_start(
                 outcome.status = RaidStatus::no_room;
                 return outcome;
             }
-            static_cast<void>(take_emoji(state, username, gift_emoji));
+            if (!winded) {
+                static_cast<void>(take_emoji(state, username, gift_emoji));
+            }
         }
         outcome.target = display_name(state, *known);
         const position::Point home = position::coordinates_of(player_id(session, state, username));
@@ -1869,6 +1875,11 @@ RaidResult raid_start(
         if (rockets > 0 && rules.rocket_percent > 0) {
             outcome.seconds = std::max(position::shortest_travel,
                                        outcome.seconds * 100 / (100 + rockets * rules.rocket_percent));
+        }
+        if (winded) {
+            state.phantoms[username] = *known;
+            outcome.phantom = true;
+            return outcome;
         }
         state.raids.push_back(Raid{
             .raider = username,
@@ -1885,11 +1896,8 @@ RaidResult raid_start(
     });
 
     if (result.status == RaidStatus::started) {
-        log_info("raid started user={} target={} travel={} gift={} emoji={}", username, result.target,
-                 result.seconds, gift, gift_emoji);
-    }
-    if (result.status == RaidStatus::resting) {
-        log_info("raid refused for breath user={}", username);
+        log_info("raid {} user={} target={} travel={} gift={} emoji={}", result.phantom ? "dreamt" : "started",
+                 username, result.target, result.seconds, gift, gift_emoji);
     }
     if (result.status == RaidStatus::left_place) {
         log_info("left the place user={} earned={}", username, result.earned);
@@ -2210,6 +2218,34 @@ std::int64_t salt(ConquisterState &state, const Raid &raid, std::int64_t now, co
     return paid;
 }
 
+/* Somebody got to the target for real: whoever only dreamt of going there finds out now. Getting there
+   himself, the dream simply came true. */
+std::vector<RaidEvent> wake_up(ConquisterState &state, const Raid &raid, std::int64_t now) {
+    std::vector<std::string> dreamers;
+    for (const auto &[player, target] : state.phantoms) {
+        if (target == raid.target) {
+            dreamers.push_back(player);
+        }
+    }
+    std::vector<RaidEvent> woken;
+    for (const std::string &player : dreamers) {
+        state.phantoms.erase(player);
+        if (player == raid.raider) {
+            continue;
+        }
+        RaidEvent event;
+        event.kind = RaidEvent::Kind::fooled;
+        event.raider = display_name(state, player);
+        event.target = display_name(state, raid.target);
+        event.raider_emoji = worn(state, player);
+        event.raider_smeared = is_smeared(state, player, now);
+        event.raider_pugliese = is_pugliese(state, player);
+        event.raider_on_telegram = counter(state.telegram_ids, player) != 0;
+        woken.push_back(std::move(event));
+    }
+    return woken;
+}
+
 }
 
 std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRules &rules) {
@@ -2363,7 +2399,12 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                     event.target_emoji = now_on;
                     event.target_emoji_before = target_then;
                 }
+                const bool got_there = event.kind == RaidEvent::Kind::delivered ||
+                    (!event.balloon_held && !event.intercepted);
                 settled.push_back(std::move(event));
+                if (got_there) {
+                    std::ranges::move(wake_up(state, raid, now), std::back_inserter(settled));
+                }
             }
             if (raid.arrived && now >= raid.back) {
                 const std::int64_t carried = counter(state.scores, raid.raider);
@@ -2442,6 +2483,9 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
             break;
         case RaidEvent::Kind::gone:
             log_info("child gone owner={} child={}", event.target, event.gift_emoji);
+            break;
+        case RaidEvent::Kind::fooled:
+            log_info("raid dream over user={} target={}", event.raider, event.target);
             break;
         }
     }

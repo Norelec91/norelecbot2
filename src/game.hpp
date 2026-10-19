@@ -207,9 +207,7 @@ enum class RaidStatus {
     /* The emoji is a 🎈 and the only one he has: the one everybody is handed is his own, not to pass on. */
     own_balloon,
     /* A 🧊 hit him not long ago: he cannot set off until he thaws. */
-    frozen,
-    /* He is just back from a ride and has not got his breath back: how long is not told. */
-    resting
+    frozen
 };
 
 enum class RaidTargetKind { any, telegram, irc };
@@ -290,13 +288,17 @@ struct RaidResult {
     int zodiac_percent = 100;
     /* What is left after the palle taken along were picked up, or what there was when they were too few. */
     std::int64_t score = 0;
+    /* started: he had not got his breath back, so it only seems to him he left; nothing moved. */
+    bool phantom = false;
 };
 
 struct RaidEvent {
     /* gone: a child that lived all its ages leaves the target's name; gift_emoji is what it was last.
        born: a child conceived by a 💦 comes into the world. The raider is the father, the target the
        mother; with no raider its parents are two grown-up children of the target's own house; gift_emoji is the child, blown what it took the slot of when the name was full. */
-    enum class Kind { stolen, delivered, returned, born, gone };
+    /* fooled: the raider set off too soon, only dreamt of going for the target, and finds out now that
+       somebody else got there. */
+    enum class Kind { stolen, delivered, returned, born, gone, fooled };
 
     Kind kind = Kind::stolen;
     std::string raider;
