@@ -1811,6 +1811,14 @@ RaidResult raid_start(
                 outcome.status = RaidStatus::no_such_emoji;
                 return outcome;
             }
+            /* Everybody is handed a 🎈 for nothing: it can go only when another one stays behind, so a
+               second account brings no 🎈 to anybody. */
+            if (is_power(gift_emoji, power::balloon) &&
+                count_power(slots_of(state, username), power::balloon) +
+                count_power(gear_of(state, username), power::balloon) < 2) {
+                outcome.status = RaidStatus::own_balloon;
+                return outcome;
+            }
             if (!on_him && !free_slot(gear_of(state, username), carried_limit)) {
                 outcome.status = RaidStatus::hands_full;
                 return outcome;

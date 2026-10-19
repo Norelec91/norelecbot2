@@ -2045,7 +2045,7 @@ TEST_CASE("an emoji is carried to another player, or burnt at the place") {
     {
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":null,"scores":{"alice":10,"bob":10},"quotes_added":{},)"
-             << R"("furniture":{"alice":"🍕🧀"},"equipped":{"alice":"🎈"}})";
+             << R"("furniture":{"alice":"🍕🧀"},"equipped":{"alice":"🚀"}})";
     }
     Storage storage{paths.conquister, paths.quotes};
     const auto hung = [&storage](const std::string &player) {
@@ -2083,14 +2083,14 @@ TEST_CASE("an emoji is carried to another player, or burnt at the place") {
           RaidStatus::no_room);
     CHECK(house_of(storage, "alice") == "[]🧀");
     /* ...unless it goes on him, who is home with room for it. */
-    REQUIRE(raid_start(storage, 0, "alice", "bob", 12, quick_rides(), RaidTargetKind::any, 0, "🎈", true).status ==
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 12, quick_rides(), RaidTargetKind::any, 0, "🚀", true).status ==
             RaidStatus::started);
     CHECK(hung("alice").empty());
     const std::vector<RaidEvent> worn = raid_due(storage, 17, quick_rides());
     REQUIRE(worn.size() == 1);
     CHECK(worn[0].gift_with_him);
-    CHECK(worn[0].target_emoji == "🎈");
-    CHECK(hung("bob") == "🎈");
+    CHECK(worn[0].target_emoji == "🚀");
+    CHECK(hung("bob") == "🚀");
     REQUIRE(raid_due(storage, 22, quick_rides()).size() == 1);
 
     /* One that fills up on the way sends it back with her, on her. */
@@ -2142,6 +2142,25 @@ TEST_CASE("an emoji is carried to another player, or burnt at the place") {
     CHECK(furniture_burn(storage, "alice", "🍕").shown == "[]⚡⚡⚡⚡");
     CHECK(house_of(storage, "alice").empty());
     CHECK(furniture_burn(storage, "alice", "🎺").status == FurnitureBurnStatus::not_owned);
+}
+
+TEST_CASE("his only balloon is his own: it goes to nobody") {
+    const TestPaths paths{"own-balloon-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":10,"bob":10,"carol":10},"quotes_added":{},)"
+             << R"("furniture":{"carol":"🎈"},"equipped":{"alice":"🎈","bob":"🎈","carol":"🎈"}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+
+    /* The one she was handed stays with her, given or delivered. */
+    CHECK(raid_start(storage, 0, "alice", "bob", 0, quick_rides(), RaidTargetKind::any, 0, "🎈").status ==
+          RaidStatus::own_balloon);
+    CHECK(raid_start(storage, 0, "alice", "bob", 0, quick_rides(), RaidTargetKind::any, 0, "🎈", true).status ==
+          RaidStatus::own_balloon);
+    /* With one on him and one in the house, one of them can go. */
+    REQUIRE(raid_start(storage, 0, "carol", "bob", 0, quick_rides(), RaidTargetKind::any, 0, "🎈").status ==
+            RaidStatus::started);
 }
 
 TEST_CASE("turning back mid journey only costs the road already walked") {

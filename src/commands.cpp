@@ -401,6 +401,9 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
         return std::format("{} non hai {}, né con te né in casa.", username, gift_emoji);
     case RaidStatus::no_room:
         return std::format("{} {} non ha posti liberi per {}.", username, target, gift_emoji);
+    case RaidStatus::own_balloon:
+        return std::format("{} non puoi dare via il tuo unico {}: puoi darne uno solo se te ne resta un altro.",
+                           username, gift_emoji);
     case RaidStatus::hands_full:
         return std::format("{} hai già {} emoji con te: per portare {} serve un posto libero. Rimetti qualcosa in casa "
                            "con {}store <emoji>.", username, carried_limit, gift_emoji,
@@ -1120,7 +1123,8 @@ std::string power_help(const Power &power, const AppConfig &config) {
     }
     if (is(power::balloon)) {
         return std::format("il palloncino: con te difende te, casa tua quando ci sei e {} quando lo tieni; in casa "
-                           "difende la casa anche quando sei fuori; bucato torna nuovo; uno nuovo costa {}",
+                           "difende la casa anche quando sei fuori; bucato torna nuovo; l'unico che hai non si regala; "
+                           "uno nuovo costa {}",
                            conquister_place, palle(config.balloon_cost));
     }
     if (is(power::ninja)) {

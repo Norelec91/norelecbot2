@@ -84,7 +84,7 @@ inline constexpr Power fire{"🔥", PowerKind::carried, "when a 🧊 hits him",
 inline constexpr Power hourglass{"⏳", PowerKind::carried, "when a 🎈 holds off his attempt at the place",
                                  "each takes a share off the penalty he is left with"};
 /* The one that works in either place: on him it guards him wherever he is, kept in the house it guards
-   the house even while he is out. */
+   the house even while he is out. His only one is his own, never handed to anybody. */
 inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries to get past it",
                                "holds off whoever comes for his place or his house until it pops, then is as good as new",
                                true};
@@ -204,6 +204,8 @@ enum class RaidStatus {
     no_such_emoji,
     no_room,
     hands_full,
+    /* The emoji is a 🎈 and the only one he has: the one everybody is handed is his own, not to pass on. */
+    own_balloon,
     /* A 🧊 hit him not long ago: he cannot set off until he thaws. */
     frozen
 };

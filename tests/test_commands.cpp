@@ -1225,7 +1225,8 @@ TEST_CASE("/emoji tells every emoji with a power, where it is and what can hit i
     CHECK(help.contains("\n🥺 chi ti razzia ruba il 10% in meno per ognuna\n"));
     CHECK(help.contains("\n⚡ +10% di palle in @TheConquister37 per ognuno\n"));
     CHECK(help.contains("🎈 il palloncino: con te difende te, casa tua quando ci sei e @TheConquister37 quando lo "
-                        "tieni; in casa difende la casa anche quando sei fuori; bucato torna nuovo; uno nuovo costa "
+                        "tieni; in casa difende la casa anche quando sei fuori; bucato torna nuovo; l'unico che hai "
+                        "non si regala; uno nuovo costa "
                         "1000 palle. Invincibile: né bombe né furti\n"));
     CHECK(help.contains("\n💩 🇷🇺 🇮🇱 chi la prende è \"lo smerdato\" per 1 giorno\n"));
     CHECK(help.starts_with("Emoji con un potere\n\nHai due posti per le emoji: con te (5 posti), accanto al nome, e la "
