@@ -68,6 +68,15 @@ struct Raid {
     std::string gift_emoji;
     /* The emoji is a present: hung on the target as it is, even one that is meant to be thrown. */
     bool intact = false;
+    /* A fork in the road, until fork_until: nothing moves until he picks one of the two roads, by index in
+       roads, and the lucky one has palle on it; asked at fork_asked. */
+    std::int64_t fork_until = 0;
+    std::int64_t fork_asked = 0;
+    std::int64_t fork_left = 0;
+    std::int64_t fork_right = 0;
+    std::int64_t fork_lucky = 0;
+    /* He never picked one: lost, he is home with nothing. Only while it is settled, never saved. */
+    bool lost = false;
 
     bool operator==(const Raid &) const = default;
 };
@@ -184,6 +193,14 @@ struct ConquisterState {
     /* Since when each player has been playing without a pause, and when he last did something. */
     Counters awake_since{};
     Counters last_act{};
+    /* The fruit the guard at the door of @TheConquister37 showed each player, and until when he waits for its name. */
+    Authors guard_fruits{};
+    Counters guard_until{};
+    /* When the wanderer comes by next, and the bag he dropped: how much, until when, and in front of whom. */
+    std::int64_t wanderer_next = 0;
+    std::int64_t bag = 0;
+    std::int64_t bag_until = 0;
+    std::string bag_near{};
 
     bool operator==(const ConquisterState &) const = default;
 };

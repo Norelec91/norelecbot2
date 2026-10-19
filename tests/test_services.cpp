@@ -2388,6 +2388,162 @@ TEST_CASE("playing on for hours without a pause, a player dreams some of his rid
     CHECK(rested.found > 0);
 }
 
+namespace {
+
+/* The name a road or a fruit is told by, out of "emoji name". */
+std::string word_of(const std::string &told) {
+    return told.substr(told.find(' ') + 1);
+}
+
+std::string fruit_name(const std::string &emoji) {
+    const auto fruit = std::ranges::find(fruits, std::string_view{emoji}, &Riddle::emoji);
+    REQUIRE(fruit != fruits.end());
+    return std::string{riddle_name(*fruit)};
+}
+
+/* Rides every ten minutes from 0 until the player has been at it for two hours. */
+std::int64_t play_for_two_hours(Storage &storage, const RaidRules &rules) {
+    RaidRules plain = rules;
+    plain.fork_percent = 0;
+    std::int64_t now = 0;
+    for (; now < 2 * 60 * 60; now += 600) {
+        REQUIRE(raid_start(storage, 0, "alice", "bob", now, plain).status == RaidStatus::started);
+        static_cast<void>(raid_due(storage, now + 300, plain));
+    }
+    return now;
+}
+
+}
+
+TEST_CASE("playing on for hours a ride may come to a fork: nothing moves until a road is picked") {
+    const TestPaths paths{"fork-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":0,"bob":5000},"quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    RaidRules rules = quick_rides();
+    rules.check_seconds = 2 * 60 * 60;
+    rules.fork_percent = 100;
+    const std::int64_t now = play_for_two_hours(storage, rules);
+    const RaidResult left = raid_start(storage, 0, "alice", "bob", now, rules);
+    REQUIRE(left.status == RaidStatus::started);
+    REQUIRE_FALSE(left.fork_left.empty());
+    REQUIRE_FALSE(left.fork_right.empty());
+    CHECK(left.fork_left != left.fork_right);
+    /* Waiting at the fork, he never gets there. */
+    CHECK(raid_due(storage, now + 100, rules).empty());
+    CHECK(raid_road(storage, 0, "alice", "nowhere", now + 100).status == AnswerStatus::wrong);
+    CHECK(raid_road(storage, 0, "bob", word_of(left.fork_left), now + 100).status == AnswerStatus::nothing);
+    const AnswerResult took = raid_road(storage, 0, "alice", word_of(left.fork_right), now + 100);
+    REQUIRE(took.status == AnswerStatus::right);
+    CHECK(took.chosen == left.fork_right);
+    CHECK(took.seconds == left.seconds);
+    CHECK(conquister_user(storage, "alice")->score >= took.found);
+    /* The ride goes on from where it stopped. */
+    CHECK(raid_due(storage, now + 100 + left.seconds - 1, rules).empty());
+    const std::vector<RaidEvent> there = raid_due(storage, now + 100 + left.seconds, rules);
+    REQUIRE_FALSE(there.empty());
+    CHECK(there.front().kind == RaidEvent::Kind::stolen);
+}
+
+TEST_CASE("never picking a road at the fork, the raider gets lost and is home with nothing") {
+    const TestPaths paths{"fork-lost-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":0,"bob":5000},"quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    RaidRules rules = quick_rides();
+    rules.check_seconds = 2 * 60 * 60;
+    rules.fork_percent = 100;
+    const std::int64_t now = play_for_two_hours(storage, rules);
+    const std::int64_t before = conquister_user(storage, "bob")->score;
+    REQUIRE_FALSE(raid_start(storage, 0, "alice", "bob", now, rules).fork_left.empty());
+    CHECK(raid_due(storage, now + answer_seconds - 1, rules).empty());
+    const std::vector<RaidEvent> home = raid_due(storage, now + answer_seconds, rules);
+    REQUIRE(home.size() == 1);
+    CHECK(home[0].kind == RaidEvent::Kind::returned);
+    CHECK(home[0].lost);
+    CHECK(home[0].loot == 0);
+    CHECK(conquister_user(storage, "bob")->score == before);
+    CHECK(raid_road(storage, 0, "alice", "ponte", now + answer_seconds + 1).status == AnswerStatus::nothing);
+}
+
+TEST_CASE("playing on for hours, the guard at the door wants the name of a fruit; giving it wakes him up") {
+    const TestPaths paths{"guard-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":0,"bob":5000},"quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    RaidRules rides = quick_rides();
+    rides.check_seconds = 2 * 60 * 60;
+    ClaimRules rules;
+    rules.cooldown_seconds = 300;
+    rules.check_seconds = 2 * 60 * 60;
+    const std::int64_t now = play_for_two_hours(storage, rides);
+    const ClaimResult asked = conquister_claim(storage, 0, "alice", now, rules);
+    REQUIRE(asked.status == ClaimStatus::guarded);
+    REQUIRE_FALSE(asked.guard_fruit.empty());
+    /* Asking again gets the same fruit. */
+    CHECK(conquister_claim(storage, 0, "alice", now + 10, rules).guard_fruit == asked.guard_fruit);
+    CHECK(guard_answer(storage, 0, "alice", fruit_name(asked.guard_fruit), now + 20, rules).status ==
+          AnswerStatus::right);
+    CHECK(conquister_claim(storage, 0, "alice", now + 30, rules).status == ClaimStatus::taken);
+}
+
+TEST_CASE("a wrong fruit, or none in time, shuts the door on him for a penalty") {
+    const TestPaths paths{"guard-shut-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":0,"bob":5000},"quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    RaidRules rides = quick_rides();
+    rides.check_seconds = 2 * 60 * 60;
+    ClaimRules rules;
+    rules.cooldown_seconds = 300;
+    rules.check_seconds = 2 * 60 * 60;
+    std::int64_t now = play_for_two_hours(storage, rides);
+    REQUIRE(conquister_claim(storage, 0, "alice", now, rules).status == ClaimStatus::guarded);
+    const AnswerResult wrong = guard_answer(storage, 0, "alice", "patata", now + 5, rules);
+    CHECK(wrong.status == AnswerStatus::wrong);
+    CHECK(wrong.penalty_seconds >= 150);
+    CHECK(guard_answer(storage, 0, "alice", "pera", now + 6, rules).status == AnswerStatus::nothing);
+    now += 5 + wrong.penalty_seconds;
+    REQUIRE(conquister_claim(storage, 0, "alice", now, rules).status == ClaimStatus::guarded);
+    const ClaimResult shut = conquister_claim(storage, 0, "alice", now + answer_seconds, rules);
+    CHECK(shut.status == ClaimStatus::shut);
+    CHECK(shut.penalty_seconds >= 150);
+}
+
+TEST_CASE("the wanderer drops a bag in front of somebody around, and the first who asks picks it up") {
+    const TestPaths paths{"wanderer-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":0,"bob":0},"quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    RaidRules rules = quick_rides();
+    rules.wanderer_seconds = 3600;
+    /* The first time he only says when he will come. */
+    CHECK_FALSE(wanderer_due(storage, 0, rules).has_value());
+    CHECK(bag_collect(storage, 0, "bob", 10) == 0);
+    /* Nobody around: he comes back later. */
+    CHECK_FALSE(wanderer_due(storage, 2 * 3600, rules).has_value());
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 3 * 3600, rules).status == RaidStatus::started);
+    const std::optional<Wanderer> wanderer = wanderer_due(storage, 3 * 3600, rules);
+    REQUIRE(wanderer.has_value());
+    CHECK(wanderer->near == "alice");
+    CHECK(wanderer->bag >= bag_least);
+    CHECK(wanderer->bag <= bag_most);
+    CHECK_FALSE(wanderer_due(storage, 3 * 3600 + 1, rules).has_value());
+    CHECK(bag_collect(storage, 0, "bob", 3 * 3600 + 30) == wanderer->bag);
+    CHECK(conquister_user(storage, "bob")->score == wanderer->bag);
+    CHECK(bag_collect(storage, 0, "alice", 3 * 3600 + 31) == 0);
+}
+
 TEST_CASE("turning back mid journey only costs the road already walked") {
     const TestPaths paths{"turnback-test"};
     {

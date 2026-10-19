@@ -110,6 +110,12 @@ std::vector<Raid> parse_raids(const Json &state) {
             .gift = entry.contains("gift") ? integer(entry.at("gift")) : 0,
             .gift_emoji = entry.contains("gift_emoji") ? entry.at("gift_emoji").get<std::string>() : std::string{},
             .intact = entry.contains("intact") && entry.at("intact").get<bool>(),
+            .fork_until = entry.contains("fork_until") ? integer(entry.at("fork_until")) : 0,
+            .fork_asked = entry.contains("fork_asked") ? integer(entry.at("fork_asked")) : 0,
+            .fork_left = entry.contains("fork_left") ? integer(entry.at("fork_left")) : 0,
+            .fork_right = entry.contains("fork_right") ? integer(entry.at("fork_right")) : 0,
+            .fork_lucky = entry.contains("fork_lucky") ? integer(entry.at("fork_lucky")) : 0,
+            .lost = false,
         });
     }
     return raids;
@@ -243,6 +249,12 @@ ConquisterState parse_state(const Json &json) {
         parse_counters(json, "last_back"),
         parse_counters(json, "awake_since"),
         parse_counters(json, "last_act"),
+        parse_authors(json, "guard_fruits"),
+        parse_counters(json, "guard_until"),
+        json.contains("wanderer_next") ? integer(json.at("wanderer_next")) : 0,
+        json.contains("bag") ? integer(json.at("bag")) : 0,
+        json.contains("bag_until") ? integer(json.at("bag_until")) : 0,
+        json.contains("bag_near") ? json.at("bag_near").get<std::string>() : std::string{},
     };
     return state;
 }
@@ -250,7 +262,7 @@ ConquisterState parse_state(const Json &json) {
 Json state_to_json(const ConquisterState &state) {
     Json raids = Json::array();
     std::ranges::transform(state.raids, std::back_inserter(raids), [](const Raid &raid) {
-        return Json{
+        Json saved{
             {"raider", raid.raider},
             {"target", raid.target},
             {"arrive", raid.arrive},
@@ -261,6 +273,15 @@ Json state_to_json(const ConquisterState &state) {
             {"gift_emoji", raid.gift_emoji},
             {"intact", raid.intact},
         };
+        /* A fork is written only while he stands at one. */
+        if (raid.fork_until > 0) {
+            saved["fork_until"] = raid.fork_until;
+            saved["fork_asked"] = raid.fork_asked;
+            saved["fork_left"] = raid.fork_left;
+            saved["fork_right"] = raid.fork_right;
+            saved["fork_lucky"] = raid.fork_lucky;
+        }
+        return saved;
     });
     Json pregnancies = Json::array();
     std::ranges::transform(state.pregnancies, std::back_inserter(pregnancies), [](const Pregnancy &pregnancy) {
@@ -334,6 +355,12 @@ Json state_to_json(const ConquisterState &state) {
         {"last_back", state.last_back},
         {"awake_since", state.awake_since},
         {"last_act", state.last_act},
+        {"guard_fruits", state.guard_fruits},
+        {"guard_until", state.guard_until},
+        {"wanderer_next", state.wanderer_next},
+        {"bag", state.bag},
+        {"bag_until", state.bag_until},
+        {"bag_near", state.bag_near},
     };
 }
 

@@ -341,6 +341,9 @@ RaidRules raid_rules(const CommandContext &context) {
         .rest_max_seconds = context.config.rest_max_seconds,
         .find_percent = context.config.find_percent,
         .tired_seconds = context.config.tired_seconds,
+        .check_seconds = context.config.check_seconds,
+        .fork_percent = context.config.fork_percent,
+        .wanderer_seconds = context.config.wanderer_seconds,
     };
 }
 
@@ -419,9 +422,14 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
     case RaidStatus::started:
         break;
     }
-    /* Set off rested, he may have found something on the way. */
-    const std::string found = result.found > 0 ? std::format("\nLungo la via trovi {}!", palle(result.found))
-                                                : std::string{};
+    /* Set off rested, he may have found something on the way; or he comes to a fork. */
+    std::string found = result.found > 0 ? std::format("\nLungo la via trovi {}!", palle(result.found))
+                                          : std::string{};
+    if (!result.fork_left.empty()) {
+        found += std::format("\nA metà strada la via si divide: {} o {}? Scrivi {}strada <nome> entro {}: finché "
+                             "non scegli resti fermo, e se non scegli ti perdi.", result.fork_left, result.fork_right,
+                             command_prefix(context), format_wait(answer_seconds));
+    }
     if (!gift_emoji.empty()) {
         return std::format(
             "{} parti per {} con {} da {}: arrivi tra {}. Casa tua resta scoperta.{}",
@@ -798,6 +806,18 @@ std::string handle_gift(const CommandContext &context, const ParsedAmount &reque
     return handle_raid(context, request.target, request.amount);
 }
 
+ClaimRules claim_rules(const CommandContext &context) {
+    return ClaimRules{
+        .cooldown_seconds = context.config.cooldown_seconds,
+        .signs = context.config.zodiac_signs,
+        .lightning = context.config.lightning_percent,
+        .ninja = context.config.ninja_percent,
+        .hourglass = context.config.hourglass_percent,
+        .closed_seconds = context.config.place_closed_seconds,
+        .check_seconds = context.config.check_seconds,
+    };
+}
+
 std::string handle_claim(const CommandContext &context, std::string_view) {
     if (context.username.empty()) {
         return missing_username_reply();
@@ -805,20 +825,7 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
     const std::string username{context.username};
     const std::int64_t now = seconds_now();
     const ClaimResult result =
-        conquister_claim(
-            context.storage,
-            context.user_id,
-            std::string{context.player_key},
-            now,
-            ClaimRules{
-                .cooldown_seconds = context.config.cooldown_seconds,
-                .signs = context.config.zodiac_signs,
-                .lightning = context.config.lightning_percent,
-                .ninja = context.config.ninja_percent,
-                .hourglass = context.config.hourglass_percent,
-                .closed_seconds = context.config.place_closed_seconds,
-            }
-        );
+        conquister_claim(context.storage, context.user_id, std::string{context.player_key}, now, claim_rules(context));
     /* A name that came from IRC must not be written as a mention: on Telegram it would tag a stranger. */
     const std::string_view mention = result.previous_user_id != 0 ? "@" : "";
     if (result.status == ClaimStatus::frozen) {
@@ -840,6 +847,15 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
     if (result.status == ClaimStatus::closed) {
         return std::format("{} {} è chiuso: qualcuno ha appena provato a entrare. Riprova tra poco.", username,
                            conquister_place);
+    }
+    if (result.status == ClaimStatus::guarded) {
+        return std::format("{} alla porta di {} il guardiano ti ferma e chiede: come si chiama questo frutto? {} "
+                           "Rispondi con {}parola <nome> entro {}.", username, conquister_place, result.guard_fruit,
+                           command_prefix(context), format_wait(answer_seconds));
+    }
+    if (result.status == ClaimStatus::shut) {
+        return std::format("{} non hai risposto in tempo al guardiano: la porta di {} resta chiusa per te per {}.",
+                           username, conquister_place, format_wait(result.penalty_seconds));
     }
     if (result.status == ClaimStatus::already_held) {
         return std::format("{} sei già in {}!", username, conquister_place);
@@ -1604,6 +1620,63 @@ std::string handle_delete_quote(const CommandContext &context, std::string_view 
     return removed ? std::format("Citazione eliminata: {}", *removed) : "Citazione non trovata.";
 }
 
+std::string handle_road(const CommandContext &context, std::string_view argument) {
+    if (context.username.empty()) {
+        return missing_username_reply();
+    }
+    const AnswerResult result =
+        raid_road(context.storage, context.user_id, std::string{context.player_key}, argument, seconds_now());
+    switch (result.status) {
+    case AnswerStatus::nothing:
+        return std::format("{} non sei a nessun bivio.", context.username);
+    case AnswerStatus::wrong:
+        return std::format("{} al bivio puoi prendere solo {} o {}: scrivi {}strada <nome>.", context.username,
+                           result.left, result.right, command_prefix(context));
+    case AnswerStatus::late:
+        return std::format("{} troppo tardi: ti sei già perso.", context.username);
+    case AnswerStatus::right:
+        break;
+    }
+    if (result.found > 0) {
+        return std::format("{} prendi {} e lungo la via trovi {}! Arrivi tra {}.", context.username, result.chosen,
+                           palle(result.found), format_wait(result.seconds));
+    }
+    return std::format("{} prendi {}: arrivi tra {}.", context.username, result.chosen, format_wait(result.seconds));
+}
+
+std::string handle_password(const CommandContext &context, std::string_view argument) {
+    if (context.username.empty()) {
+        return missing_username_reply();
+    }
+    const AnswerResult result = guard_answer(context.storage, context.user_id, std::string{context.player_key},
+                                             argument, seconds_now(), claim_rules(context));
+    switch (result.status) {
+    case AnswerStatus::nothing:
+        return std::format("{} nessun guardiano ti ha chiesto niente.", context.username);
+    case AnswerStatus::wrong:
+        return std::format("{} il guardiano scuote la testa e ti chiude la porta di {}: riprova tra {}.",
+                           context.username, conquister_place, format_wait(result.penalty_seconds));
+    case AnswerStatus::late:
+        return std::format("{} troppo tardi: il guardiano ti ha chiuso la porta di {}, riprova tra {}.",
+                           context.username, conquister_place, format_wait(result.penalty_seconds));
+    case AnswerStatus::right:
+        break;
+    }
+    return std::format("{} il guardiano ti fa passare.\n{}", context.username, handle_claim(context, {}));
+}
+
+std::string handle_collect(const CommandContext &context, std::string_view) {
+    if (context.username.empty()) {
+        return missing_username_reply();
+    }
+    const std::int64_t bag = bag_collect(context.storage, context.user_id, std::string{context.player_key},
+                                         seconds_now());
+    if (bag == 0) {
+        return std::format("{} qui non c'è niente da raccogliere.", context.username);
+    }
+    return std::format("🎒 {} raccoglie il sacchetto del viandante: {}!", context.username, palle(bag));
+}
+
 std::string handle_link(const CommandContext &context, std::string_view argument) {
     if (context.username.empty()) {
         return missing_username_reply();
@@ -1654,6 +1727,9 @@ constexpr std::array commands{
     CommandDefinition{"/move", handle_move_usage},
     CommandDefinition{"/take", handle_take},
     CommandDefinition{"/store", handle_store},
+    CommandDefinition{"/strada", handle_road},
+    CommandDefinition{"/parola", handle_password},
+    CommandDefinition{"/raccogli", handle_collect},
 };
 
 const CommandDefinition *find_command(std::string_view name) {
@@ -1663,6 +1739,11 @@ const CommandDefinition *find_command(std::string_view name) {
     return found != commands.end() ? &*found : nullptr;
 }
 
+}
+
+std::string wanderer_reply(const Wanderer &wanderer) {
+    return std::format("🧙 Un viandante lascia cadere un sacchetto di palle davanti a {}{}! Il primo che scrive "
+                       "/raccogli (!raccogli su IRC) se lo prende.", wanderer.near_on_telegram ? "@" : "", wanderer.near);
 }
 
 bool command_too_soon(std::string_view player, std::int64_t now, int gap) {
@@ -1723,6 +1804,13 @@ std::optional<std::string> raid_event_story(const RaidEvent &event, const AppCon
         return news;
     }
     if (event.kind == RaidEvent::Kind::returned) {
+        if (event.lost) {
+            const std::string kept = !event.gift_emoji.empty() ? std::format(" con {} ancora in tasca", event.gift_emoji)
+                : event.gift > 0 ? std::format(" con {} ancora in tasca", palle(event.gift))
+                                 : std::string{" a mani vuote"};
+            return std::format("{} non hai scelto nessuna strada al bivio: ti sei perso e sei tornato in {}{}.",
+                               raider, home, kept);
+        }
         if (!event.gift_emoji.empty()) {
             return std::format("{} torni in {} con {} ancora in tasca.", raider, home, event.gift_emoji);
         }

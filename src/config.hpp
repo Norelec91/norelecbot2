@@ -72,6 +72,12 @@ struct AppConfig {
     static constexpr int default_find_percent = 25;
     /* How long a player can play without a pause before he starts dreaming some of his rides. */
     static constexpr int default_tired_seconds = 5 * 60 * 60;
+    /* How long a player can play without a pause before he may meet a fork in the road or the guard at the
+       door of @TheConquister37, and the chance, in percent, that a ride of his comes to a fork. */
+    static constexpr int default_check_seconds = 2 * 60 * 60;
+    static constexpr int default_fork_percent = 17;
+    /* How long, on average, between two visits of the wanderer who drops a bag of palle. */
+    static constexpr int default_wanderer_seconds = 12 * 60 * 60;
     /* How much of the time a 🧊 freezes him each 🔥 a player has with him melts away, in percent. */
     static constexpr int default_fire_percent = 10;
     /* How much of the penalty for a failed attempt each ⏳ a player has with him takes off, in percent. */
@@ -125,6 +131,9 @@ struct AppConfig {
     int command_gap_seconds = default_command_gap_seconds;
     int find_percent = default_find_percent;
     int tired_seconds = default_tired_seconds;
+    int check_seconds = default_check_seconds;
+    int fork_percent = default_fork_percent;
+    int wanderer_seconds = default_wanderer_seconds;
     int fire_percent = default_fire_percent;
     int hourglass_percent = default_hourglass_percent;
     /* Whether a player seen for the first time is handed a 🎈. */

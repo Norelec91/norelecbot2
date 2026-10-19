@@ -604,6 +604,21 @@ std::int64_t keep_awake(ConquisterState &state, const std::string &player, std::
     return now - counter(state.awake_since, player);
 }
 
+/* Answering what the game asked, he wakes up: rested as after a pause. */
+void refresh(ConquisterState &state, const std::string &player, std::int64_t now) {
+    state.awake_since[player] = now;
+    state.last_act[player] = now;
+}
+
+/* A road as it is told: the emoji and its name. */
+std::string told(const Riddle &riddle) {
+    return std::format("{} {}", riddle.emoji, riddle_name(riddle));
+}
+
+const Riddle &road_at(std::int64_t index) {
+    return roads[static_cast<std::size_t>(std::clamp<std::int64_t>(index, 0, static_cast<std::int64_t>(roads.size()) - 1))];
+}
+
 /* The share of his rides a player awake this long only dreams. */
 std::int64_t dream_percent(std::int64_t awake, const RaidRules &rules) {
     if (rules.tired_seconds <= 0 || awake < rules.tired_seconds) {
@@ -612,6 +627,23 @@ std::int64_t dream_percent(std::int64_t awake, const RaidRules &rules) {
     return std::min(tired_most_percent, tired_step_percent * (1 + (awake - rules.tired_seconds) / tired_step_seconds));
 }
 
+}
+
+std::string_view riddle_name(const Riddle &riddle) {
+    return riddle.names.substr(0, riddle.names.find('|'));
+}
+
+bool names_riddle(const Riddle &riddle, std::string_view word) {
+    const std::string_view said = text::trim(word);
+    std::string_view names = riddle.names;
+    while (!names.empty()) {
+        const std::size_t bar = names.find('|');
+        if (text::equals_ignore_case(names.substr(0, bar), said)) {
+            return true;
+        }
+        names = bar == std::string_view::npos ? std::string_view{} : names.substr(bar + 1);
+    }
+    return false;
 }
 
 ClaimResult conquister_claim(
@@ -624,7 +656,7 @@ ClaimResult conquister_claim(
     const ClaimResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         remember_platform(state, username, user_id);
-        static_cast<void>(keep_awake(state, username, now));
+        const std::int64_t awake = keep_awake(state, username, now);
         ClaimResult outcome;
         /* A place is held by standing in it, not from the road. */
         if (const Raid *travelling = raid_of(state, username); travelling != nullptr) {
@@ -663,6 +695,29 @@ ClaimResult conquister_claim(
         }
         if (state.closed_until > now) {
             outcome.status = ClaimStatus::closed;
+            return outcome;
+        }
+        /* Playing on for hours, he finds a guard at the door who wants the name of a fruit first; not giving
+           it in time, he finds the door shut on him for a while. */
+        if (const auto asked = find_entry(state.guard_until, username); asked != state.guard_until.end()) {
+            if (asked->second > now) {
+                outcome.status = ClaimStatus::guarded;
+                outcome.guard_fruit = state.guard_fruits[username];
+                return outcome;
+            }
+            state.guard_until.erase(username);
+            state.guard_fruits.erase(username);
+            outcome.penalty_seconds = drawn_penalty(session, rules.cooldown_seconds);
+            state.cooldowns[username] = now + outcome.penalty_seconds;
+            outcome.status = ClaimStatus::shut;
+            return outcome;
+        }
+        if (rules.check_seconds > 0 && awake >= rules.check_seconds) {
+            const Riddle &fruit = fruits[session.random_index(fruits.size())];
+            state.guard_fruits[username] = std::string{fruit.emoji};
+            state.guard_until[username] = now + answer_seconds;
+            outcome.status = ClaimStatus::guarded;
+            outcome.guard_fruit = fruit.emoji;
             return outcome;
         }
         if (state.current && !state.current->username.empty()) {
@@ -777,6 +832,12 @@ ClaimResult conquister_claim(
         break;
     case ClaimStatus::closed:
         log_info("claim refused user={} closed=1", username);
+        break;
+    case ClaimStatus::guarded:
+        log_info("claim guarded user={} fruit={}", username, result.guard_fruit);
+        break;
+    case ClaimStatus::shut:
+        log_info("claim shut user={} penalty={}", username, result.penalty_seconds);
         break;
     case ClaimStatus::already_held:
         break;
@@ -1465,6 +1526,7 @@ void start_over(ConquisterState &state, const std::string &player, std::int64_t 
             raid.loot = 0;
             raid.gift = 0;
             raid.gift_emoji.clear();
+            raid.fork_until = 0;
         }
     }
     hang(state, player, {});
@@ -1885,6 +1947,7 @@ RaidResult raid_start(
                    length, so the departure was as far before the arrival as the arrival is
                    before the return. */
                 travelling->arrived = true;
+                travelling->fork_until = 0;
                 const std::int64_t leg = travelling->back - travelling->arrive;
                 const std::int64_t left = now < travelling->arrive
                     ? std::max<std::int64_t>(now - (travelling->arrive - leg), 0)
@@ -2013,12 +2076,27 @@ RaidResult raid_start(
             .gift_emoji = std::string{gift_emoji},
             .intact = intact,
         });
+        /* Playing on for hours, now and then he comes to a fork, and nothing moves until he picks a road. */
+        if (rules.check_seconds > 0 && rules.fork_percent > 0 && awake >= rules.check_seconds &&
+            static_cast<std::int64_t>(session.random_index(100)) < rules.fork_percent) {
+            Raid &ride = state.raids.back();
+            const std::size_t left = session.random_index(roads.size());
+            const std::size_t right = (left + 1 + session.random_index(roads.size() - 1)) % roads.size();
+            ride.fork_until = now + answer_seconds;
+            ride.fork_asked = now;
+            ride.fork_left = static_cast<std::int64_t>(left);
+            ride.fork_right = static_cast<std::int64_t>(right);
+            ride.fork_lucky = static_cast<std::int64_t>(session.random_index(2) == 0 ? left : right);
+            outcome.fork_left = told(roads[left]);
+            outcome.fork_right = told(roads[right]);
+        }
         return outcome;
     });
 
     if (result.status == RaidStatus::started) {
-        log_info("raid {} user={} target={} travel={} gift={} emoji={} found={}", result.phantom ? "dreamt" : "started",
-                 username, result.target, result.seconds, gift, gift_emoji, result.found);
+        log_info("raid {} user={} target={} travel={} gift={} emoji={} found={} fork={}",
+                 result.phantom ? "dreamt" : "started", username, result.target, result.seconds, gift, gift_emoji,
+                 result.found, result.fork_left.empty() ? 0 : 1);
     }
     if (result.status == RaidStatus::left_place) {
         log_info("left the place user={} earned={}", username, result.earned);
@@ -2377,6 +2455,18 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
         std::vector<RaidEvent> settled = grow(session, state, now, rules);
         std::ranges::move(births(session, state, now, rules), std::back_inserter(settled));
         for (Raid &raid : state.raids) {
+            /* At a fork nothing moves until he picks a road; never picking one, he gets lost and is home
+               with nothing but what he took along. */
+            if (raid.fork_until > 0) {
+                if (now < raid.fork_until) {
+                    continue;
+                }
+                raid.fork_until = 0;
+                raid.arrived = true;
+                raid.back = now;
+                raid.loot = 0;
+                raid.lost = true;
+            }
             if (!raid.arrived && now >= raid.arrive) {
                 raid.arrived = true;
                 RaidEvent event;
@@ -2557,6 +2647,7 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 settled.push_back(RaidEvent{
                     .kind = RaidEvent::Kind::returned,
                     .variant = session.random_index(4),
+                    .lost = raid.lost,
                     .raider = display_name(state, raid.raider),
                     .target = display_name(state, raid.target),
                     .loot = raid.loot,
@@ -2609,8 +2700,8 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
             }
             break;
         case RaidEvent::Kind::returned:
-            log_info("raid returned user={} target={} loot={} gift={} emoji={}", event.raider,
-                     event.target, event.loot, event.gift, event.gift_emoji);
+            log_info("raid returned user={} target={} loot={} gift={} emoji={} lost={}", event.raider,
+                     event.target, event.loot, event.gift, event.gift_emoji, event.lost ? 1 : 0);
             break;
         case RaidEvent::Kind::born:
             log_info("child born mother={} father={} child={} replaced={}", event.target, event.raider,
@@ -2716,6 +2807,156 @@ std::optional<std::string> quote_delete(Storage &storage, std::string_view selec
         }
         return removed;
     });
+}
+
+
+AnswerResult raid_road(Storage &storage, std::int64_t user_id, const std::string &username, std::string_view word,
+                       std::int64_t now) {
+    const AnswerResult result = storage.transaction([&](StorageSession &session) {
+        ConquisterState &state = session.state();
+        remember_platform(state, username, user_id);
+        AnswerResult outcome;
+        Raid *ride = raid_of(state, username);
+        if (ride == nullptr || ride->fork_until == 0) {
+            return outcome;
+        }
+        const Riddle &left = road_at(ride->fork_left);
+        const Riddle &right = road_at(ride->fork_right);
+        outcome.left = told(left);
+        outcome.right = told(right);
+        if (ride->fork_until <= now) {
+            outcome.status = AnswerStatus::late;
+            return outcome;
+        }
+        const bool took_left = names_riddle(left, word);
+        if (!took_left && !names_riddle(right, word)) {
+            outcome.status = AnswerStatus::wrong;
+            return outcome;
+        }
+        /* The ride goes on from where it stopped. */
+        const std::int64_t waited = now - ride->fork_asked;
+        ride->arrive += waited;
+        ride->back += waited;
+        ride->fork_until = 0;
+        refresh(state, username, now);
+        outcome.status = AnswerStatus::right;
+        outcome.chosen = took_left ? outcome.left : outcome.right;
+        outcome.seconds = std::max<std::int64_t>(ride->arrive - now, 0);
+        if ((took_left ? ride->fork_left : ride->fork_right) == ride->fork_lucky) {
+            outcome.found = find_least +
+                static_cast<std::int64_t>(session.random_index(static_cast<std::size_t>(find_most - find_least + 1)));
+            state.scores[username] = counter(state.scores, username) + outcome.found;
+        }
+        return outcome;
+    });
+    if (result.status != AnswerStatus::nothing) {
+        log_info("fork answered user={} word={} status={} found={}", username, word, static_cast<int>(result.status),
+                 result.found);
+    }
+    return result;
+}
+
+AnswerResult guard_answer(Storage &storage, std::int64_t user_id, const std::string &username, std::string_view word,
+                          std::int64_t now, const ClaimRules &rules) {
+    const AnswerResult result = storage.transaction([&](StorageSession &session) {
+        ConquisterState &state = session.state();
+        remember_platform(state, username, user_id);
+        AnswerResult outcome;
+        const auto asked = find_entry(state.guard_until, username);
+        if (asked == state.guard_until.end()) {
+            return outcome;
+        }
+        const bool late = asked->second <= now;
+        const std::string fruit = state.guard_fruits[username];
+        state.guard_until.erase(username);
+        state.guard_fruits.erase(username);
+        const auto riddle = std::ranges::find(fruits, std::string_view{fruit}, &Riddle::emoji);
+        if (!late && riddle != fruits.end() && names_riddle(*riddle, word)) {
+            refresh(state, username, now);
+            outcome.status = AnswerStatus::right;
+            return outcome;
+        }
+        outcome.penalty_seconds = drawn_penalty(session, rules.cooldown_seconds);
+        state.cooldowns[username] = now + outcome.penalty_seconds;
+        outcome.status = late ? AnswerStatus::late : AnswerStatus::wrong;
+        return outcome;
+    });
+    if (result.status != AnswerStatus::nothing) {
+        log_info("guard answered user={} word={} status={} penalty={}", username, word,
+                 static_cast<int>(result.status), result.penalty_seconds);
+    }
+    return result;
+}
+
+std::optional<Wanderer> wanderer_due(Storage &storage, std::int64_t now, const RaidRules &rules) {
+    if (rules.wanderer_seconds <= 0) {
+        return std::nullopt;
+    }
+    const std::optional<Wanderer> result = storage.transaction([&](StorageSession &session) -> std::optional<Wanderer> {
+        ConquisterState &state = session.state();
+        /* Between half and one and a half times the average. */
+        const auto later = [&] {
+            return now + rules.wanderer_seconds / 2 +
+                static_cast<std::int64_t>(session.random_index(static_cast<std::size_t>(rules.wanderer_seconds + 1)));
+        };
+        if (state.bag > 0 && state.bag_until <= now) {
+            state.bag = 0;
+            state.bag_until = 0;
+            state.bag_near.clear();
+        }
+        if (state.wanderer_next == 0) {
+            state.wanderer_next = later();
+            return std::nullopt;
+        }
+        if (now < state.wanderer_next || state.bag > 0) {
+            return std::nullopt;
+        }
+        std::vector<std::string> around;
+        for (const auto &[player, last] : state.last_act) {
+            if (now - last < wanderer_audience_seconds) {
+                around.push_back(player);
+            }
+        }
+        if (around.empty()) {
+            state.wanderer_next = now + wanderer_audience_seconds / 2;
+            return std::nullopt;
+        }
+        const std::string near = around[session.random_index(around.size())];
+        state.bag = bag_least + static_cast<std::int64_t>(session.random_index(static_cast<std::size_t>(bag_most - bag_least + 1)));
+        state.bag_until = now + bag_seconds;
+        state.bag_near = near;
+        state.wanderer_next = later();
+        return Wanderer{
+            .near = display_name(state, near),
+            .near_on_telegram = counter(state.telegram_ids, near) != 0,
+            .bag = state.bag,
+        };
+    });
+    if (result) {
+        log_info("wanderer dropped a bag near={} palle={}", result->near, result->bag);
+    }
+    return result;
+}
+
+std::int64_t bag_collect(Storage &storage, std::int64_t user_id, const std::string &username, std::int64_t now) {
+    const std::int64_t picked = storage.transaction([&](StorageSession &session) -> std::int64_t {
+        ConquisterState &state = session.state();
+        remember_platform(state, username, user_id);
+        if (state.bag <= 0 || state.bag_until <= now) {
+            return 0;
+        }
+        const std::int64_t bag = state.bag;
+        state.scores[username] = counter(state.scores, username) + bag;
+        state.bag = 0;
+        state.bag_until = 0;
+        state.bag_near.clear();
+        refresh(state, username, now);
+        return bag;
+    });
+    if (picked > 0) {
+        log_info("bag collected user={} palle={}", username, picked);
+    }
+    return picked;
 }
 
 }

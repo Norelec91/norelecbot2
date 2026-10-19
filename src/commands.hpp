@@ -36,6 +36,9 @@ struct CommandContext {
    bonus an emoji that ends up on somebody brings him. */
 [[nodiscard]] std::optional<std::string> raid_event_reply(const RaidEvent &event, const AppConfig &config = {});
 
+/* What the bot says when the wanderer drops a bag in front of somebody. */
+[[nodiscard]] std::string wanderer_reply(const Wanderer &wanderer);
+
 /* Whether this player sent a command less than gap seconds since the last one that counted: the bot then
    does not answer, so that a burst gets no further than one command. Kept in memory only. */
 [[nodiscard]] bool command_too_soon(std::string_view player, std::int64_t now, int gap);
