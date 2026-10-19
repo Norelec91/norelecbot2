@@ -2351,6 +2351,43 @@ TEST_CASE("setting off rested, a player may find palle on the way; never in a hu
     CHECK(hurried.found == 0);
 }
 
+TEST_CASE("playing on for hours without a pause, a player dreams some of his rides; a pause wakes him rested") {
+    const TestPaths paths{"tired-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":0,"bob":0},"quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    RaidRules rules = quick_rides();
+    rules.tired_seconds = 5 * 60 * 60;
+    rules.find_percent = 100;
+    /* A ride every ten minutes, the whole night long. */
+    std::int64_t now = 0;
+    const auto ride = [&]() {
+        const RaidResult left = raid_start(storage, 0, "alice", "bob", now, rules);
+        REQUIRE(left.status == RaidStatus::started);
+        static_cast<void>(raid_due(storage, now + 300, rules));
+        now += 600;
+        return left;
+    };
+    for (; now < rules.tired_seconds;) {
+        CHECK_FALSE(ride().phantom);
+    }
+    int dreamt = 0;
+    for (int rides = 0; rides < 40; ++rides) {
+        const RaidResult tired = ride();
+        CHECK(tired.found == 0);
+        dreamt += tired.phantom ? 1 : 0;
+    }
+    CHECK(dreamt > 0);
+    CHECK(dreamt < 40);
+    /* A quarter of an hour without doing anything is a sleep: he wakes rested, and may find palle again. */
+    now += pause_seconds;
+    const RaidResult rested = ride();
+    CHECK_FALSE(rested.phantom);
+    CHECK(rested.found > 0);
+}
+
 TEST_CASE("turning back mid journey only costs the road already walked") {
     const TestPaths paths{"turnback-test"};
     {

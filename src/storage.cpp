@@ -241,6 +241,8 @@ ConquisterState parse_state(const Json &json) {
         parse_counters(json, "longest_hold"),
         parse_counters(json, "raid_counts"),
         parse_counters(json, "last_back"),
+        parse_counters(json, "awake_since"),
+        parse_counters(json, "last_act"),
     };
     return state;
 }
@@ -330,6 +332,8 @@ Json state_to_json(const ConquisterState &state) {
         {"longest_hold", state.longest_hold},
         {"raid_counts", state.raid_counts},
         {"last_back", state.last_back},
+        {"awake_since", state.awake_since},
+        {"last_act", state.last_act},
     };
 }
 

@@ -111,6 +111,13 @@ inline constexpr std::int64_t find_rest_seconds = 10 * 60;
 inline constexpr std::int64_t find_least = 100;
 inline constexpr std::int64_t find_most = 500;
 
+/* Playing on without a pause this long, a player gets tired; a pause as long sends him to sleep and he
+   wakes rested. Tired, every two hours more he dreams a fifth more of his rides, up to three fifths. */
+inline constexpr std::int64_t pause_seconds = 15 * 60;
+inline constexpr std::int64_t tired_step_seconds = 2 * 60 * 60;
+inline constexpr std::int64_t tired_step_percent = 20;
+inline constexpr std::int64_t tired_most_percent = 60;
+
 /* How long a 🧂 remembers a raider: one who reaches the same house again within it pays the salt. */
 inline constexpr std::int64_t salt_seconds = 5 * 60;
 
@@ -293,6 +300,8 @@ struct RaidRules {
     std::int64_t rest_max_seconds = 0;
     /* The chance, in percent, that setting off rested he finds palle on the way. */
     std::int64_t find_percent = 0;
+    /* How long a player can play without a pause before some of his rides are only dreamt; never when 0. */
+    std::int64_t tired_seconds = 0;
 };
 
 struct RaidResult {

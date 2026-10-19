@@ -340,6 +340,7 @@ RaidRules raid_rules(const CommandContext &context) {
         .rest_min_seconds = context.config.rest_min_seconds,
         .rest_max_seconds = context.config.rest_max_seconds,
         .find_percent = context.config.find_percent,
+        .tired_seconds = context.config.tired_seconds,
     };
 }
 

@@ -181,6 +181,9 @@ struct ConquisterState {
     Counters raid_counts{};
     /* When each player last came home from a ride: setting off long after it, he may find something. */
     Counters last_back{};
+    /* Since when each player has been playing without a pause, and when he last did something. */
+    Counters awake_since{};
+    Counters last_act{};
 
     bool operator==(const ConquisterState &) const = default;
 };

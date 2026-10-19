@@ -593,6 +593,25 @@ std::int64_t drawn_penalty(StorageSession &session, std::int64_t longest) {
     return half + static_cast<std::int64_t>(session.random_index(static_cast<std::size_t>(longest - half + 1)));
 }
 
+/* Every move he makes keeps him awake; one after a pause finds him rested. How long he has been awake. */
+std::int64_t keep_awake(ConquisterState &state, const std::string &player, std::int64_t now) {
+    const auto last = find_entry(state.last_act, player);
+    if (last == state.last_act.end() || now - last->second >= pause_seconds ||
+        find_entry(state.awake_since, player) == state.awake_since.end()) {
+        state.awake_since[player] = now;
+    }
+    state.last_act[player] = now;
+    return now - counter(state.awake_since, player);
+}
+
+/* The share of his rides a player awake this long only dreams. */
+std::int64_t dream_percent(std::int64_t awake, const RaidRules &rules) {
+    if (rules.tired_seconds <= 0 || awake < rules.tired_seconds) {
+        return 0;
+    }
+    return std::min(tired_most_percent, tired_step_percent * (1 + (awake - rules.tired_seconds) / tired_step_seconds));
+}
+
 }
 
 ClaimResult conquister_claim(
@@ -605,6 +624,7 @@ ClaimResult conquister_claim(
     const ClaimResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         remember_platform(state, username, user_id);
+        static_cast<void>(keep_awake(state, username, now));
         ClaimResult outcome;
         /* A place is held by standing in it, not from the road. */
         if (const Raid *travelling = raid_of(state, username); travelling != nullptr) {
@@ -1843,6 +1863,7 @@ RaidResult raid_start(
     const RaidResult result = storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         remember_platform(state, username, user_id);
+        const std::int64_t awake = keep_awake(state, username, now);
         RaidResult outcome;
         const bool self_on_requested_platform = target_kind == RaidTargetKind::any ||
             (target_kind == RaidTargetKind::telegram ? user_id != 0 : user_id == 0);
@@ -1902,6 +1923,10 @@ RaidResult raid_start(
         if (winded) {
             catch_breath(session, state, username, now, rules);
         }
+        /* Playing on for hours without a pause, he dreams more and more of his rides the same way. */
+        const std::int64_t dreams = dream_percent(awake, rules);
+        const bool dreaming = winded ||
+            (dreams > 0 && static_cast<std::int64_t>(session.random_index(100)) < dreams);
         /* Whoever holds the place stays in it: leaving would be leaving it behind. */
         if (holds_place) {
             outcome.status = RaidStatus::holding_place;
@@ -1919,7 +1944,7 @@ RaidResult raid_start(
                 outcome.score = score;
                 return outcome;
             }
-            if (!winded) {
+            if (!dreaming) {
                 state.scores[username] = score - gift;
             }
             outcome.score = score - gift;
@@ -1950,7 +1975,7 @@ RaidResult raid_start(
                 outcome.status = RaidStatus::no_room;
                 return outcome;
             }
-            if (!winded) {
+            if (!dreaming) {
                 static_cast<void>(take_emoji(state, username, gift_emoji));
             }
         }
@@ -1964,14 +1989,14 @@ RaidResult raid_start(
             outcome.seconds = std::max(position::shortest_travel,
                                        outcome.seconds * 100 / (100 + rockets * rules.rocket_percent));
         }
-        if (winded) {
+        if (dreaming) {
             state.phantoms[username] = *known;
             outcome.phantom = true;
             return outcome;
         }
-        /* Setting off rested, now and then he finds something on the way: never in a hurry. */
+        /* Setting off rested, now and then he finds something on the way: never in a hurry, nor tired. */
         const auto back = find_entry(state.last_back, username);
-        if (rules.find_percent > 0 && (back == state.last_back.end() || now - back->second >= find_rest_seconds) &&
+        if (rules.find_percent > 0 && dreams == 0 && (back == state.last_back.end() || now - back->second >= find_rest_seconds) &&
             static_cast<std::int64_t>(session.random_index(100)) < rules.find_percent) {
             outcome.found = find_least +
                 static_cast<std::int64_t>(session.random_index(static_cast<std::size_t>(find_most - find_least + 1)));
