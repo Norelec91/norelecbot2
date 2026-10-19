@@ -235,6 +235,12 @@ ConquisterState parse_state(const Json &json) {
         parse_authors(json, "phantoms"),
         json.contains("closed_until") ? integer(json.at("closed_until")) : 0,
         parse_counters(json, "claim_dreams"),
+        parse_counters(json, "joined"),
+        parse_counters(json, "raids_won"),
+        parse_counters(json, "best_loot"),
+        parse_counters(json, "longest_hold"),
+        parse_counters(json, "raid_counts"),
+        parse_counters(json, "last_back"),
     };
     return state;
 }
@@ -318,6 +324,12 @@ Json state_to_json(const ConquisterState &state) {
         {"phantoms", state.phantoms},
         {"closed_until", state.closed_until},
         {"claim_dreams", state.claim_dreams},
+        {"joined", state.joined},
+        {"raids_won", state.raids_won},
+        {"best_loot", state.best_loot},
+        {"longest_hold", state.longest_hold},
+        {"raid_counts", state.raid_counts},
+        {"last_back", state.last_back},
     };
 }
 

@@ -187,6 +187,9 @@ Settlement hold_value(const ConquisterState &state, const Holder &hold, std::int
 
 Settlement settle_hold(ConquisterState &state, const Holder &hold, std::int64_t now, zodiac::Overrides signs) {
     Settlement settled = hold_value(state, hold, now, signs);
+    if (const std::int64_t lasted = now - hold.since; lasted > counter(state.longest_hold, hold.username)) {
+        state.longest_hold[hold.username] = lasted;
+    }
     /* What was put aside when a ⚡ was lost is paid with the rest. */
     settled.earned += hold.banked;
     std::int64_t &score = state.scores[hold.username];
@@ -439,7 +442,7 @@ void balloons_hand_out(Storage &storage, std::size_t furniture_limit) {
 }
 
 std::string player_seen(Storage &storage, std::int64_t user_id, const std::string &username,
-                        std::string_view account_name, std::size_t furniture_limit) {
+                        std::string_view account_name, std::size_t furniture_limit, std::int64_t now) {
     return storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         const std::string account = platform_key(user_id, username, account_name);
@@ -464,6 +467,9 @@ std::string player_seen(Storage &storage, std::int64_t user_id, const std::strin
         }
         remember_platform(state, key, user_id);
         welcome(state, key, furniture_limit);
+        if (now > 0 && counter(state.joined, key) == 0) {
+            state.joined[key] = now;
+        }
         return key;
     });
 }
@@ -793,6 +799,17 @@ Profile profile_from(ConquisterState &state, const std::string &key, std::int64_
     profile.frozen_for = frozen_for(state, key, now);
     profile.on_telegram = counter(state.telegram_ids, key) != 0;
     profile.players = state.scores.size();
+    profile.joined = counter(state.joined, key);
+    profile.raids_won = counter(state.raids_won, key);
+    profile.best_loot = counter(state.best_loot, key);
+    profile.longest_hold = counter(state.longest_hold, key);
+    const std::string mine = key + '\t';
+    for (const auto &[pair, times] : state.raid_counts) {
+        if (pair.starts_with(mine) && times > profile.foe_raids) {
+            profile.foe = display_name(state, pair.substr(mine.size()));
+            profile.foe_raids = times;
+        }
+    }
     if (const Counters::value_type *score = find_ignore_case(state.scores, key); score != nullptr) {
         profile.score = score->second;
         profile.rank = static_cast<std::size_t>(std::ranges::count_if(state.scores,
@@ -1952,6 +1969,14 @@ RaidResult raid_start(
             outcome.phantom = true;
             return outcome;
         }
+        /* Setting off rested, now and then he finds something on the way: never in a hurry. */
+        const auto back = find_entry(state.last_back, username);
+        if (rules.find_percent > 0 && (back == state.last_back.end() || now - back->second >= find_rest_seconds) &&
+            static_cast<std::int64_t>(session.random_index(100)) < rules.find_percent) {
+            outcome.found = find_least +
+                static_cast<std::int64_t>(session.random_index(static_cast<std::size_t>(find_most - find_least + 1)));
+            state.scores[username] = counter(state.scores, username) + outcome.found;
+        }
         state.raids.push_back(Raid{
             .raider = username,
             .target = *known,
@@ -1967,8 +1992,8 @@ RaidResult raid_start(
     });
 
     if (result.status == RaidStatus::started) {
-        log_info("raid {} user={} target={} travel={} gift={} emoji={}", result.phantom ? "dreamt" : "started",
-                 username, result.target, result.seconds, gift, gift_emoji);
+        log_info("raid {} user={} target={} travel={} gift={} emoji={} found={}", result.phantom ? "dreamt" : "started",
+                 username, result.target, result.seconds, gift, gift_emoji, result.found);
     }
     if (result.status == RaidStatus::left_place) {
         log_info("left the place user={} earned={}", username, result.earned);
@@ -2455,6 +2480,18 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                         state.scores[raid.target] = theirs - event.loot;
                     }
                     raid.loot = event.loot;
+                    /* It goes in his story: how many got through, the most one took, whom he robs. */
+                    const std::int64_t won = counter(state.raids_won, raid.raider) + 1;
+                    state.raids_won[raid.raider] = won;
+                    if (std::ranges::find(raid_milestones, won) != raid_milestones.end()) {
+                        event.milestone = won;
+                    }
+                    if (const std::int64_t best = counter(state.best_loot, raid.raider); event.loot > best) {
+                        state.best_loot[raid.raider] = event.loot;
+                        event.record = best > 0;
+                    }
+                    const std::string pair = raid.raider + '\t' + raid.target;
+                    state.raid_counts[pair] = counter(state.raid_counts, pair) + 1;
                     event.boarded = board(session, state, raid, rules);
                     if (!event.boarded.empty()) {
                         event.raider_emoji = worn(state, raid.raider);
@@ -2491,6 +2528,7 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                                                    std::numeric_limits<std::size_t>::max()));
                 }
                 catch_breath(session, state, raid.raider, now, rules);
+                state.last_back[raid.raider] = now;
                 settled.push_back(RaidEvent{
                     .kind = RaidEvent::Kind::returned,
                     .variant = session.random_index(4),

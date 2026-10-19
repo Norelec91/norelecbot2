@@ -171,6 +171,16 @@ struct ConquisterState {
     /* The players who tried @TheConquister37 again too soon and only dreamt of getting in, mapped to when:
        they find out when somebody else really does. */
     Counters claim_dreams{};
+    /* Each player's story, which no new season wipes: when he was first seen, how many raids of his got
+       through, the most one of them took, his longest hold, and how many times he robbed each player, keyed
+       by the two keys with a tab between them. */
+    Counters joined{};
+    Counters raids_won{};
+    Counters best_loot{};
+    Counters longest_hold{};
+    Counters raid_counts{};
+    /* When each player last came home from a ride: setting off long after it, he may find something. */
+    Counters last_back{};
 
     bool operator==(const ConquisterState &) const = default;
 };

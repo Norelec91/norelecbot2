@@ -196,6 +196,9 @@ constexpr std::array settings{
     Setting{"NORELECBOT_COMMAND_GAP_SECONDS", [](AppConfig &config, std::string_view value) {
         return set_number(config.command_gap_seconds, value, AppConfig::default_command_gap_seconds, 0);
     }},
+    Setting{"NORELECBOT_FIND_PERCENT", [](AppConfig &config, std::string_view value) {
+        return set_number(config.find_percent, value, AppConfig::default_find_percent, 0, 100);
+    }},
     Setting{"NORELECBOT_FIRE_PERCENT", [](AppConfig &config, std::string_view value) {
         return set_number(config.fire_percent, value, AppConfig::default_fire_percent, 0, 100);
     }},

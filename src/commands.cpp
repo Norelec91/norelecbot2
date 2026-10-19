@@ -339,6 +339,7 @@ RaidRules raid_rules(const CommandContext &context) {
         .fire_percent = context.config.fire_percent,
         .rest_min_seconds = context.config.rest_min_seconds,
         .rest_max_seconds = context.config.rest_max_seconds,
+        .find_percent = context.config.find_percent,
     };
 }
 
@@ -417,30 +418,36 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
     case RaidStatus::started:
         break;
     }
+    /* Set off rested, he may have found something on the way. */
+    const std::string found = result.found > 0 ? std::format("\nLungo la via trovi {}!", palle(result.found))
+                                                : std::string{};
     if (!gift_emoji.empty()) {
         return std::format(
-            "{} parti per {} con {} da {}: arrivi tra {}. Casa tua resta scoperta.",
+            "{} parti per {} con {} da {}: arrivi tra {}. Casa tua resta scoperta.{}",
             username,
             result.target,
             gift_emoji,
             intact ? "regalare" : "consegnare",
-            format_wait(result.seconds)
+            format_wait(result.seconds),
+            found
         );
     }
     if (gift > 0) {
         return std::format(
-            "{} parti per {} con {} da consegnare: arrivi tra {}. Casa tua resta scoperta.",
+            "{} parti per {} con {} da consegnare: arrivi tra {}. Casa tua resta scoperta.{}",
             username,
             result.target,
             palle(gift),
-            format_wait(result.seconds)
+            format_wait(result.seconds),
+            found
         );
     }
     return std::format(
-        "{} parti per {}: arrivi tra {}. Casa tua resta scoperta.",
+        "{} parti per {}: arrivi tra {}. Casa tua resta scoperta.{}",
         username,
         result.target,
-        format_wait(result.seconds)
+        format_wait(result.seconds),
+        found
     );
 }
 
@@ -1357,6 +1364,21 @@ std::string handle_profile(const CommandContext &context, std::string_view argum
     if (profile.quotes_added > 0) {
         card += std::format("{} citazion{}\n", profile.quotes_added, profile.quotes_added == 1 ? "e" : "i");
     }
+    /* His story, which no season wipes. */
+    if (profile.joined > 0) {
+        const std::int64_t days = std::max<std::int64_t>(now - profile.joined, 0) / 86400;
+        card += days == 0 ? std::string{"📜 con noi da oggi\n"}
+                          : std::format("📜 con noi da {} giorn{}\n", days, days == 1 ? "o" : "i");
+    }
+    if (profile.raids_won > 0) {
+        card += std::format("⚔️ {} raid riusciti, il colpo più grosso {}\n", profile.raids_won, palle(profile.best_loot));
+    }
+    if (profile.longest_hold > 0) {
+        card += std::format("⏱️ record in {}: {}\n", conquister_place, format_wait(profile.longest_hold));
+    }
+    if (!profile.foe.empty()) {
+        card += std::format("🎯 bersaglio preferito: {} ({} colpi)\n", profile.foe, profile.foe_raids);
+    }
     card.pop_back();
     return card;
 }
@@ -1863,6 +1885,12 @@ std::optional<std::string> raid_event_story(const RaidEvent &event, const AppCon
         reply += std::format("\n{} ti ha impietosito: gli rubi {} invece di {} ({}% in meno).", target,
                              palle(event.loot), palle(event.spared + event.loot), event.pleaded_percent);
     }
+    if (event.record) {
+        reply += "\n🏆 È il tuo colpo più grosso di sempre!";
+    }
+    if (event.milestone > 0) {
+        reply += std::format("\n🎉 {} {} raid riusciti!", event.raider, event.milestone);
+    }
     return reply;
 }
 
@@ -1929,7 +1957,8 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
                                         context.account_name,
                                         /* No room at all is how nobody is handed one. */
                                         context.config.starter_balloon
-                                            ? static_cast<std::size_t>(context.config.furniture_limit) : 0);
+                                            ? static_cast<std::size_t>(context.config.furniture_limit) : 0,
+                                        seconds_now());
                 bound.player_key = bound_key;
             }
         };

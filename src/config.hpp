@@ -68,6 +68,8 @@ struct AppConfig {
     static constexpr int default_place_closed_seconds = 60;
     /* The fewest seconds between two commands of the same player: those in between are not answered. */
     static constexpr int default_command_gap_seconds = 3;
+    /* The chance, in percent, that a player setting off rested finds palle on the way. */
+    static constexpr int default_find_percent = 25;
     /* How much of the time a 🧊 freezes him each 🔥 a player has with him melts away, in percent. */
     static constexpr int default_fire_percent = 10;
     /* How much of the penalty for a failed attempt each ⏳ a player has with him takes off, in percent. */
@@ -119,6 +121,7 @@ struct AppConfig {
     int rest_max_seconds = default_rest_max_seconds;
     int place_closed_seconds = default_place_closed_seconds;
     int command_gap_seconds = default_command_gap_seconds;
+    int find_percent = default_find_percent;
     int fire_percent = default_fire_percent;
     int hourglass_percent = default_hourglass_percent;
     /* Whether a player seen for the first time is handed a 🎈. */

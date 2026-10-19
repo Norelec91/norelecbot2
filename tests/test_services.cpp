@@ -2294,6 +2294,63 @@ TEST_CASE("leaving again too soon after a ride only seems to work, until somebod
     CHECK(riding() == 1);
 }
 
+TEST_CASE("every player has a story: raids got through, the biggest, the longest hold, the favourite target") {
+    const TestPaths paths{"story-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":0,"bob":100000},"quotes_added":{},)"
+             << R"("raids_won":{"alice":99},"best_loot":{"alice":1}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 0, quick_rides()).status == RaidStatus::started);
+    const std::vector<RaidEvent> arrival = raid_due(storage, 1000, quick_rides());
+    const auto stolen = std::ranges::find_if(arrival, [](const RaidEvent &event) {
+        return event.kind == RaidEvent::Kind::stolen;
+    });
+    REQUIRE(stolen != arrival.end());
+    REQUIRE(stolen->loot > 1);
+    /* The hundredth that got through, and the most one ever took. */
+    CHECK(stolen->milestone == 100);
+    CHECK(stolen->record);
+
+    /* A hold goes in it too, as long as it lasted. */
+    REQUIRE(conquister_claim(storage, 0, "alice", 2000).status == ClaimStatus::taken);
+    REQUIRE(conquister_claim(storage, 0, "bob", 2500).status == ClaimStatus::taken);
+
+    const Profile profile = player_profile_of(storage, "alice", 3000);
+    CHECK(profile.raids_won == 100);
+    CHECK(profile.best_loot == stolen->loot);
+    CHECK(profile.longest_hold == 500);
+    CHECK(profile.foe == "bob");
+    CHECK(profile.foe_raids == 1);
+    /* Seen first when she says something to the bot. */
+    CHECK(player_seen(storage, 0, "alice", {}, 10, 5000) == "alice");
+    CHECK(player_profile_of(storage, "alice", 5000).joined == 5000);
+    CHECK(player_seen(storage, 0, "alice", {}, 10, 9000) == "alice");
+    CHECK(player_profile_of(storage, "alice", 9000).joined == 5000);
+}
+
+TEST_CASE("setting off rested, a player may find palle on the way; never in a hurry") {
+    const TestPaths paths{"find-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":0,"bob":0},"quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    RaidRules rules = quick_rides();
+    rules.find_percent = 100;
+    const RaidResult rested = raid_start(storage, 0, "alice", "bob", 0, rules);
+    REQUIRE(rested.status == RaidStatus::started);
+    CHECK(rested.found >= find_least);
+    CHECK(rested.found <= find_most);
+    CHECK(conquister_user(storage, "alice")->score == rested.found);
+    static_cast<void>(raid_due(storage, 1000, rules));
+    /* Just back, nothing. */
+    const RaidResult hurried = raid_start(storage, 0, "alice", "bob", 1001, rules);
+    REQUIRE(hurried.status == RaidStatus::started);
+    CHECK(hurried.found == 0);
+}
+
 TEST_CASE("turning back mid journey only costs the road already walked") {
     const TestPaths paths{"turnback-test"};
     {

@@ -568,6 +568,19 @@ TEST_CASE("an ambiguous old holder is not claimed by an IRC namesake") {
           "Bob non conosco nessun giocatore di nome Alice.");
 }
 
+TEST_CASE("a record and a round number of raids are celebrated") {
+    RaidEvent event;
+    event.kind = RaidEvent::Kind::stolen;
+    event.raider = "bob";
+    event.target = "alice";
+    event.loot = 250;
+    event.seconds = 52;
+    event.record = true;
+    event.milestone = 100;
+    CHECK(raid_event_reply(event) == "bob hai rubato 250 palle a alice! Torni in bob tra 52 secondi."
+                                     "\n🏆 È il tuo colpo più grosso di sempre!\n🎉 bob 100 raid riusciti!");
+}
+
 TEST_CASE("coming home is told a different way each time") {
     RaidEvent event;
     event.kind = RaidEvent::Kind::returned;
@@ -698,7 +711,9 @@ TEST_CASE("the profile shows where a player stands") {
     CHECK(mine.contains("\na casa, in @Alice\n"));
     /* The balloon stays out of it, worn or not. */
     CHECK_FALSE(mine.contains("🎈"));
-    CHECK(mine.ends_with("\n3 citazioni"));
+    CHECK(mine.contains("\n3 citazioni\n"));
+    /* Then her story: seen for the first time just now. */
+    CHECK(mine.ends_with("\n📜 con noi da oggi"));
 
     /* The same card, seen by somebody else, with the name as it is written on that platform. */
     CHECK(command_dispatch(bob, "/profile @Alice") == mine);

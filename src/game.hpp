@@ -104,6 +104,13 @@ inline constexpr std::array powers{power::pleading, power::rocket, power::bolt, 
 inline constexpr std::int64_t drowsy_seconds = 2 * 60 * 60;
 inline constexpr std::int64_t sleepy_seconds = 6 * 60 * 60;
 
+/* The raids got through that the group celebrates. */
+inline constexpr std::array<std::int64_t, 7> raid_milestones{100, 250, 500, 1000, 2500, 5000, 10000};
+/* Setting off at least this long after coming home, a player may find between the two on the way. */
+inline constexpr std::int64_t find_rest_seconds = 10 * 60;
+inline constexpr std::int64_t find_least = 100;
+inline constexpr std::int64_t find_most = 500;
+
 /* How long a 🧂 remembers a raider: one who reaches the same house again within it pays the salt. */
 inline constexpr std::int64_t salt_seconds = 5 * 60;
 
@@ -284,6 +291,8 @@ struct RaidRules {
        again whenever he tries too soon; nothing when the longest is 0. */
     std::int64_t rest_min_seconds = 0;
     std::int64_t rest_max_seconds = 0;
+    /* The chance, in percent, that setting off rested he finds palle on the way. */
+    std::int64_t find_percent = 0;
 };
 
 struct RaidResult {
@@ -300,6 +309,8 @@ struct RaidResult {
     std::int64_t score = 0;
     /* started: he had not got his breath back, so it only seems to him he left; nothing moved. */
     bool phantom = false;
+    /* started: the palle he found on the way, setting off rested; already his. */
+    std::int64_t found = 0;
 };
 
 struct RaidEvent {
@@ -313,6 +324,10 @@ struct RaidEvent {
     Kind kind = Kind::stolen;
     /* returned: which of the ways of telling it, drawn so that no reply reads the same every time. */
     std::size_t variant = 0;
+    /* stolen: the raids of his that got through, when this one makes a round number; and whether it took more
+       than any before it. */
+    std::int64_t milestone = 0;
+    bool record = false;
     std::string raider;
     std::string target;
     std::int64_t loot = 0;
@@ -485,6 +500,14 @@ struct Profile {
     std::string heading;
     bool returning = false;
     std::int64_t home_in = 0;
+    /* His story: since when he plays (0 when unknown), his raids that got through, the most one took, his
+       longest hold, and the player he robbed most, with how many times. */
+    std::int64_t joined = 0;
+    std::int64_t raids_won = 0;
+    std::int64_t best_loot = 0;
+    std::int64_t longest_hold = 0;
+    std::string foe;
+    std::int64_t foe_raids = 0;
 };
 
 /* A player named as on that platform; nothing for a name nobody plays under. */
@@ -506,7 +529,9 @@ struct Profile {
 [[nodiscard]] std::string player_seen(Storage &storage, std::int64_t user_id, const std::string &username,
                                       std::string_view account_name = {},
                                       /* A player seen for the first time is handed his 🎈, if it fits. */
-                                      std::size_t furniture_limit = 10);
+                                      std::size_t furniture_limit = 10,
+                                      /* Noted as when he was first seen; 0 notes nothing. */
+                                      std::int64_t now = 0);
 /* Everybody starts with a 🎈: hands one, once, to every known player who has none and a free slot. */
 void balloons_hand_out(Storage &storage, std::size_t furniture_limit);
 /* Sorts what saves from before had on a single name: the 🎈 and what works on him go on him, as many as
