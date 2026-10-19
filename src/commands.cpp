@@ -1151,7 +1151,8 @@ std::string power_help(const Power &power, const AppConfig &config) {
                            conquister_place);
     }
     if (is(power::ice)) {
-        return std::format("chi la prende resta congelato per {}: non può entrare in {} né partire",
+        return std::format("chi la prende resta congelato per {}: non può entrare in {} né partire, e il suo 🎈 "
+                           "non difende",
                            format_wait(config.frozen_seconds), conquister_place);
     }
     if (is(power::hourglass)) {
@@ -1729,7 +1730,8 @@ std::optional<std::string> raid_event_story(const RaidEvent &event, const AppCon
                 return std::format("{} il 🔥 di {}{} scioglie subito la tua 🧊: non resta congelato. Torni in {} tra {}.",
                                    raider, mention, event.target, home, format_wait(event.seconds));
             }
-            return std::format("{} congeli {}{}{}: per {} non può entrare in {} né partire. Torni in {} tra {}.", raider,
+            return std::format("{} congeli {}{}{}: per {} non può entrare in {} né partire, e il suo 🎈 non difende. "
+                               "Torni in {} tra {}.", raider,
                                mention, event.target, event.melted ? ", ma il suo 🔥 accorcia il gelo" : "",
                                format_wait(event.froze), conquister_place, home, format_wait(event.seconds));
         }

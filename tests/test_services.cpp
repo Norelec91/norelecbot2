@@ -1882,6 +1882,32 @@ TEST_CASE("a grown-up girl and a grown-up boy of the same house may have a child
     CHECK(house_of(storage, "carol") == "👩");
 }
 
+TEST_CASE("frozen, a player's 🎈 is frozen with him: it guards neither his house nor the place") {
+    const TestPaths paths{"frozen-balloon-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":0,"username":"carol","since":0},)"
+             << R"("scores":{"alice":100,"bob":0,"carol":0,"dave":0},"quotes_added":{},)"
+             << R"("furniture":{"alice":"🎈"},"equipped":{"alice":"🎈","carol":"🎈"},)"
+             << R"("frozen":{"alice":1000,"carol":1000}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    const RaidRules rules = quick_rides();
+
+    /* Neither the one on her nor the one kept in the house holds the raider off. */
+    REQUIRE(raid_start(storage, 0, "bob", "alice", 0, rules).status == RaidStatus::started);
+    const std::vector<RaidEvent> arrival = raid_due(storage, 5, rules);
+    REQUIRE(arrival.size() == 1);
+    CHECK_FALSE(arrival[0].balloon_held);
+    CHECK_FALSE(arrival[0].balloon_popped);
+    CHECK(arrival[0].loot > 0);
+
+    /* The holder's is not even touched: whoever comes walks in. */
+    const ClaimResult claim = conquister_claim(storage, 0, "dave", 10);
+    CHECK(claim.status == ClaimStatus::taken);
+    CHECK_FALSE(claim.balloon_popped);
+}
+
 TEST_CASE("a 🧊 freezes whoever it hits: no place and no setting off until he thaws") {
     const TestPaths paths{"ice-test"};
     {

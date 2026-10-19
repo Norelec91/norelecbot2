@@ -58,8 +58,8 @@ struct AppConfig {
     static constexpr int default_dino_percent = 10;
     /* The share of his own palle each 🧂 at a house makes the same raider, coming again soon, hand over. */
     static constexpr int default_salt_percent = 10;
-    /* How long a player hit by a 🧊 stays frozen: five minutes. */
-    static constexpr int default_frozen_seconds = 300;
+    /* How long a player hit by a 🧊 stays frozen, his 🎈 with him: half an hour. */
+    static constexpr int default_frozen_seconds = 30 * 60;
     /* How long a player back from a ride has to get his breath back before setting off again: a time drawn
        between these two, never told, so that nothing can be timed to leave the instant he is home. */
     static constexpr int default_rest_min_seconds = 20;

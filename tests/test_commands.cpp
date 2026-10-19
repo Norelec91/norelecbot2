@@ -861,8 +861,8 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     RaidEvent iced = given;
     iced.gift_emoji = "🧊";
     iced.froze = 300;
-    CHECK(raid_event_reply(iced) == "Alice congeli @Bob: per 5 minuti non può entrare in @TheConquister37 né partire. "
-                                    "Torni in Alice tra 5 secondi.");
+    CHECK(raid_event_reply(iced) == "Alice congeli @Bob: per 5 minuti non può entrare in @TheConquister37 né partire, "
+                                    "e il suo 🎈 non difende. Torni in Alice tra 5 secondi.");
     iced.froze = 0;
     iced.melted = true;
     CHECK(raid_event_reply(iced) == "Alice il 🔥 di @Bob scioglie subito la tua 🧊: non resta congelato. Torni in Alice "

@@ -47,6 +47,8 @@ std::string worn(const ConquisterState &state, const std::string &player);
 /* Hit by a 💩 and not clean yet. */
 bool is_smeared(const ConquisterState &state, const std::string &player, std::int64_t now);
 bool is_pugliese(const ConquisterState &state, const std::string &player);
+/* Seconds until a player hit by a 🧊 thaws; 0 when he is not frozen. */
+std::int64_t frozen_for(const ConquisterState &state, const std::string &player, std::int64_t now);
 /* Hands a player the 🎈 everybody starts with, once, if he has none and a free slot. */
 void welcome(ConquisterState &state, const std::string &player, std::size_t limit);
 bool has_balloon(const ConquisterState &state, const std::string &player);
@@ -55,8 +57,8 @@ bool hang_balloon(ConquisterState &state, const std::string &player, std::size_t
 std::int64_t house_copies(const ConquisterState &state, const std::string &player, const Power &power);
 std::int64_t carried_copies(const ConquisterState &state, const std::string &player, const Power &power);
 /* Whether a 🎈 of his guards that place: the house has the one kept there and the one on him when he is in,
-   @TheConquister37 the one on him. */
-bool balloon_there(const ConquisterState &state, const std::string &player, Whereabouts site);
+   @TheConquister37 the one on him. Frozen by a 🧊, his 🎈 is frozen with him and guards nothing. */
+bool balloon_there(const ConquisterState &state, const std::string &player, Whereabouts site, std::int64_t now);
 /* For every 🦞 on the claimer, the emoji the kicked holder has on him in that same slot. */
 std::map<std::size_t, std::string> lobsters_copying(const ConquisterState &state, const std::string &claimer,
                                                     const std::string &kicked);
@@ -115,7 +117,10 @@ namespace {
 
 enum class BalloonRoll : std::uint8_t { none, held, popped };
 
-bool balloon_there(const ConquisterState &state, const std::string &player, Whereabouts site) {
+bool balloon_there(const ConquisterState &state, const std::string &player, Whereabouts site, std::int64_t now) {
+    if (frozen_for(state, player, now) > 0) {
+        return false;
+    }
     if (site == Whereabouts::home && house_copies(state, player, power::balloon) > 0) {
         return true;
     }
@@ -125,8 +130,8 @@ bool balloon_there(const ConquisterState &state, const std::string &player, Wher
 /* The 🎈 is an emoji like the others: no 🎈 there, no defence. The file keeps how many attempts his has
    survived; one that pops lets the attempt through and is as good as new at once, still where it was. */
 BalloonRoll balloon_attempt(StorageSession &session, ConquisterState &state, const std::string &player,
-                            Whereabouts site) {
-    if (!balloon_there(state, player, site)) {
+                            Whereabouts site, std::int64_t now) {
+    if (!balloon_there(state, player, site, now)) {
         return BalloonRoll::none;
     }
     const std::int64_t attempt = counter(state.balloons, player) + 1;
@@ -603,10 +608,10 @@ ClaimResult conquister_claim(
             /* The 🥷 he has on him may take him past the holder's 🎈, which is not even touched. */
             const std::int64_t stealth = std::min<std::int64_t>(
                 100, carried_copies(state, username, power::ninja) * std::max<std::int64_t>(rules.ninja, 0));
-            outcome.sneaked = stealth > 0 && balloon_there(state, holder, Whereabouts::conquister) &&
+            outcome.sneaked = stealth > 0 && balloon_there(state, holder, Whereabouts::conquister, now) &&
                 static_cast<std::int64_t>(session.random_index(100)) < stealth;
             const BalloonRoll balloon = outcome.sneaked
-                ? BalloonRoll::none : balloon_attempt(session, state, holder, Whereabouts::conquister);
+                ? BalloonRoll::none : balloon_attempt(session, state, holder, Whereabouts::conquister, now);
             if (balloon == BalloonRoll::held) {
                 /* Every ⏳ he has with him takes its share off the wait: enough of them and there is none. */
                 const std::int64_t spared = std::min<std::int64_t>(
@@ -2094,8 +2099,8 @@ std::vector<RaidEvent> grow(StorageSession &session, ConquisterState &state, std
 /* The 🥷 a raider has on him may take him past what guards the house, the 🎈 that is there and the 🐶,
    without touching either. Only where there is something to slip past. */
 bool sneaks(StorageSession &session, const ConquisterState &state, const Raid &raid, const RaidRules &rules,
-            RaidEvent &event) {
-    const bool guarded = balloon_there(state, raid.target, Whereabouts::home) ||
+            RaidEvent &event, std::int64_t now) {
+    const bool guarded = balloon_there(state, raid.target, Whereabouts::home, now) ||
         house_copies(state, raid.target, power::dog) > 0;
     const std::int64_t ninjas = carried_copies(state, raid.raider, power::ninja);
     const std::int64_t chance = std::min<std::int64_t>(100, ninjas * std::max<std::int64_t>(rules.ninja_percent, 0));
@@ -2114,8 +2119,8 @@ bool sneaks(StorageSession &session, const ConquisterState &state, const Raid &r
 
 /* A raid meets the 🎈 that is at the house first: the one kept there, or the one on him when he is in. */
 bool defended_at_home(StorageSession &session, ConquisterState &state, const std::string &target,
-                      RaidEvent &event) {
-    switch (balloon_attempt(session, state, target, Whereabouts::home)) {
+                      RaidEvent &event, std::int64_t now) {
+    switch (balloon_attempt(session, state, target, Whereabouts::home, now)) {
     case BalloonRoll::held:
         event.balloon_held = true;
         event.next_chance = balloon_pop_chance(state, target);
@@ -2348,8 +2353,8 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                             event.no_room = true;
                         }
                     }
-                } else if (!sneaks(session, state, raid, rules, event) &&
-                           defended_at_home(session, state, raid.target, event)) {
+                } else if (!sneaks(session, state, raid, rules, event, now) &&
+                           defended_at_home(session, state, raid.target, event, now)) {
                     raid.loot = 0;
                 } else if (const std::int64_t chance = event.sneaked ? 0 : std::min<std::int64_t>(
                                100, house_copies(state, raid.target, power::dog) * std::max<std::int64_t>(rules.dog_percent, 0));
