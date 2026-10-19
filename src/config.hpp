@@ -60,6 +60,10 @@ struct AppConfig {
     static constexpr int default_salt_percent = 10;
     /* How long a player hit by a 🧊 stays frozen: five minutes. */
     static constexpr int default_frozen_seconds = 300;
+    /* How long a player back from a ride has to get his breath back before setting off again: a time drawn
+       between these two, never told, so that nothing can be timed to leave the instant he is home. */
+    static constexpr int default_rest_min_seconds = 20;
+    static constexpr int default_rest_max_seconds = 60;
     /* How much of the time a 🧊 freezes him each 🔥 a player has with him melts away, in percent. */
     static constexpr int default_fire_percent = 10;
     /* How much of the penalty for a failed attempt each ⏳ a player has with him takes off, in percent. */
@@ -107,6 +111,8 @@ struct AppConfig {
     int dino_percent = default_dino_percent;
     int salt_percent = default_salt_percent;
     int frozen_seconds = default_frozen_seconds;
+    int rest_min_seconds = default_rest_min_seconds;
+    int rest_max_seconds = default_rest_max_seconds;
     int fire_percent = default_fire_percent;
     int hourglass_percent = default_hourglass_percent;
     /* Whether a player seen for the first time is handed a 🎈. */

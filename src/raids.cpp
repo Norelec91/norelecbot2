@@ -88,6 +88,8 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
         .salt_percent = config.salt_percent,
         .frozen_seconds = config.frozen_seconds,
         .fire_percent = config.fire_percent,
+        .rest_min_seconds = config.rest_min_seconds,
+        .rest_max_seconds = config.rest_max_seconds,
     };
     /* The news waits for the second round: by then IRC has had a tick to connect. */
     int rounds = 0;

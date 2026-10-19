@@ -207,7 +207,9 @@ enum class RaidStatus {
     /* The emoji is a 🎈 and the only one he has: the one everybody is handed is his own, not to pass on. */
     own_balloon,
     /* A 🧊 hit him not long ago: he cannot set off until he thaws. */
-    frozen
+    frozen,
+    /* He is just back from a ride and has not got his breath back: how long is not told. */
+    resting
 };
 
 enum class RaidTargetKind { any, telegram, irc };
@@ -270,6 +272,10 @@ struct RaidRules {
     std::int64_t frozen_seconds = 300;
     /* How much of the time a 🧊 freezes him each 🔥 he has with him melts away, in percent: they add up. */
     std::int64_t fire_percent = 0;
+    /* The breath a player back from a ride needs before setting off again, drawn between the two, and drawn
+       again whenever he tries too soon; nothing when the longest is 0. */
+    std::int64_t rest_min_seconds = 0;
+    std::int64_t rest_max_seconds = 0;
 };
 
 struct RaidResult {

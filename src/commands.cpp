@@ -335,6 +335,8 @@ RaidRules raid_rules(const CommandContext &context) {
         .salt_percent = context.config.salt_percent,
         .frozen_seconds = context.config.frozen_seconds,
         .fire_percent = context.config.fire_percent,
+        .rest_min_seconds = context.config.rest_min_seconds,
+        .rest_max_seconds = context.config.rest_max_seconds,
     };
 }
 
@@ -410,6 +412,8 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
                            context.user_id == 0 ? "!" : "/");
     case RaidStatus::frozen:
         return frozen_reply(username, result.seconds);
+    case RaidStatus::resting:
+        return std::format("{} devi riprendere fiato: riprova tra un po'.", username);
     case RaidStatus::started:
         break;
     }

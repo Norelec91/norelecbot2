@@ -2163,6 +2163,38 @@ TEST_CASE("his only balloon is his own: it goes to nobody") {
             RaidStatus::started);
 }
 
+TEST_CASE("back from a ride, a player needs a breath of untold length before leaving again") {
+    const TestPaths paths{"breath-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":0,"bob":0},"quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    RaidRules rules = quick_rides();
+    rules.rest_min_seconds = 20;
+    rules.rest_max_seconds = 60;
+    const auto ride_home = [&](std::int64_t now) {
+        REQUIRE(raid_start(storage, 0, "alice", "bob", now, rules).status == RaidStatus::started);
+        static_cast<void>(raid_due(storage, now + 1000, rules));
+        return now + 1000;
+    };
+
+    /* Never at once, always within the longest. */
+    std::int64_t home = ride_home(0);
+    CHECK(raid_start(storage, 0, "alice", "bob", home, rules).status == RaidStatus::resting);
+    /* Trying too soon starts it over: what was enough no longer is. */
+    CHECK(raid_start(storage, 0, "alice", "bob", home + 19, rules).status == RaidStatus::resting);
+    CHECK(raid_start(storage, 0, "alice", "bob", home + 38, rules).status == RaidStatus::resting);
+    CHECK(raid_start(storage, 0, "alice", "bob", home + 38 + 61, rules).status == RaidStatus::started);
+
+    /* Left alone, the breath is over within the longest. */
+    static_cast<void>(raid_due(storage, home + 3000, rules));
+    home += 3000;
+    CHECK(raid_start(storage, 0, "alice", "bob", home + 61, rules).status == RaidStatus::started);
+    /* Nobody else is kept waiting. */
+    CHECK(raid_start(storage, 0, "bob", "alice", home + 61, rules).status == RaidStatus::started);
+}
+
 TEST_CASE("turning back mid journey only costs the road already walked") {
     const TestPaths paths{"turnback-test"};
     {

@@ -159,6 +159,9 @@ struct ConquisterState {
     /* The players named "il pugliese" by hand, mapped to when: each keeps it until the season ends, which is
        when a ☢️ starts the whole game over. */
     Counters pugliesi{};
+    /* The players just back from a ride, mapped to the instant they have their breath back: until then they
+       cannot set off again. */
+    Counters rests{};
 
     bool operator==(const ConquisterState &) const = default;
 };

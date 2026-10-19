@@ -977,6 +977,17 @@ bool is_pugliese(const ConquisterState &state, const std::string &player) {
 }
 
 /* A 💩 that lands makes him "lo smerdato" from now, however long he already was. */
+/* Back from a ride, or trying to leave again too soon: a breath of a length nobody is told. */
+void catch_breath(StorageSession &session, ConquisterState &state, const std::string &player, std::int64_t now,
+                  const RaidRules &rules) {
+    if (rules.rest_max_seconds <= 0) {
+        return;
+    }
+    const std::int64_t shortest = std::clamp<std::int64_t>(rules.rest_min_seconds, 0, rules.rest_max_seconds);
+    state.rests[player] = now + shortest +
+        static_cast<std::int64_t>(session.random_index(static_cast<std::size_t>(rules.rest_max_seconds - shortest + 1)));
+}
+
 void smear(ConquisterState &state, const std::string &player, std::int64_t now, std::int64_t seconds) {
     if (seconds > 0) {
         state.smeared[player] = now + seconds;
@@ -1002,6 +1013,15 @@ void wash(ConquisterState &state, std::int64_t now) {
     }
     for (const std::string &player : thawed) {
         state.frozen.erase(player);
+    }
+    std::vector<std::string> rested;
+    for (const auto &[player, until] : state.rests) {
+        if (until <= now) {
+            rested.push_back(player);
+        }
+    }
+    for (const std::string &player : rested) {
+        state.rests.erase(player);
     }
 }
 
@@ -1311,6 +1331,7 @@ void start_over(ConquisterState &state) {
     state.cooldowns.clear();
     state.smeared.clear();
     state.frozen.clear();
+    state.rests.clear();
     state.pregnancies.clear();
     state.children.clear();
     state.knocks.clear();
@@ -1345,6 +1366,7 @@ void start_over(ConquisterState &state, const std::string &player, std::int64_t 
     state.balloons.erase(player);
     state.cooldowns.erase(player);
     state.smeared.erase(player);
+    state.rests.erase(player);
 }
 
 }
@@ -1783,6 +1805,13 @@ RaidResult raid_start(
             outcome.seconds = wait;
             return outcome;
         }
+        /* Just back, he needs his breath: trying too soon starts it over, so leaving the instant it ends takes
+           knowing when that is, which nobody is told. */
+        if (counter(state.rests, username) > now) {
+            catch_breath(session, state, username, now, rules);
+            outcome.status = RaidStatus::resting;
+            return outcome;
+        }
         /* Whoever holds the place stays in it: leaving would be leaving it behind. */
         if (holds_place) {
             outcome.status = RaidStatus::holding_place;
@@ -1858,6 +1887,9 @@ RaidResult raid_start(
     if (result.status == RaidStatus::started) {
         log_info("raid started user={} target={} travel={} gift={} emoji={}", username, result.target,
                  result.seconds, gift, gift_emoji);
+    }
+    if (result.status == RaidStatus::resting) {
+        log_info("raid refused for breath user={}", username);
     }
     if (result.status == RaidStatus::left_place) {
         log_info("left the place user={} earned={}", username, result.earned);
@@ -2346,6 +2378,7 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                     static_cast<void>(put_in_house(state, raid.raider, raid.gift_emoji,
                                                    std::numeric_limits<std::size_t>::max()));
                 }
+                catch_breath(session, state, raid.raider, now, rules);
                 settled.push_back(RaidEvent{
                     .kind = RaidEvent::Kind::returned,
                     .raider = display_name(state, raid.raider),

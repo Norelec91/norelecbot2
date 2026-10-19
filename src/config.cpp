@@ -184,6 +184,12 @@ constexpr std::array settings{
     Setting{"NORELECBOT_FROZEN_SECONDS", [](AppConfig &config, std::string_view value) {
         return set_number(config.frozen_seconds, value, AppConfig::default_frozen_seconds, 0);
     }},
+    Setting{"NORELECBOT_REST_MIN_SECONDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.rest_min_seconds, value, AppConfig::default_rest_min_seconds, 0);
+    }},
+    Setting{"NORELECBOT_REST_MAX_SECONDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.rest_max_seconds, value, AppConfig::default_rest_max_seconds, 0);
+    }},
     Setting{"NORELECBOT_FIRE_PERCENT", [](AppConfig &config, std::string_view value) {
         return set_number(config.fire_percent, value, AppConfig::default_fire_percent, 0, 100);
     }},
