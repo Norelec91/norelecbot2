@@ -571,7 +571,7 @@ TEST_CASE("whoever only dreamt of a ride is told when somebody else got there") 
     event.raider = "bob";
     event.target = "alice";
     CHECK(raid_event_reply(event) ==
-          "bob eri così stanco che non ti sei accorto che in realtà non hai combinato nulla!");
+          "bob eri così stanco che hai solo sognato di partire: non ti sei mai mosso da casa!");
 }
 
 TEST_CASE("the raids tell what happened") {

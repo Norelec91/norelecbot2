@@ -1654,7 +1654,7 @@ std::optional<std::string> raid_event_story(const RaidEvent &event, const AppCon
         with_furniture(std::format("{}{}", mention, event.target), event.target_emoji_before.value_or(event.target_emoji),
                        event.target_smeared, event.target_pugliese);
     if (event.kind == RaidEvent::Kind::fooled) {
-        return std::format("{} eri così stanco che non ti sei accorto che in realtà non hai combinato nulla!", raider);
+        return std::format("{} eri così stanco che hai solo sognato di partire: non ti sei mai mosso da casa!", raider);
     }
     if (event.kind == RaidEvent::Kind::gone) {
         return std::format("{} {} ha vissuto la sua vita e se n'è andato: il posto è di nuovo libero.",
