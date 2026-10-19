@@ -96,7 +96,16 @@ void process_message(Storage &storage, const AppConfig &config, const Json &mess
         .owner = std::ranges::find(config.owner_ids, sender_id) != config.owner_ids.end(),
         .admin = std::ranges::find(config.admin_ids, sender_id) != config.admin_ids.end(),
     };
-    const std::optional<std::string> reply = command_dispatch(context, text->get_ref<const std::string &>());
+    const std::string &said = text->get_ref<const std::string &>();
+    if (command_is_for_bot(said) &&
+        command_too_soon(std::format("tg:{}", sender_id),
+                         std::chrono::duration_cast<std::chrono::seconds>(
+                             std::chrono::system_clock::now().time_since_epoch()).count(),
+                         config.command_gap_seconds)) {
+        log_info("command dropped user=tg:{} too soon", sender_id);
+        return;
+    }
+    const std::optional<std::string> reply = command_dispatch(context, said);
     if (!reply) {
         return;
     }

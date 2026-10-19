@@ -161,7 +161,16 @@ Settlement hold_value(const ConquisterState &state, const Holder &hold, std::int
     const std::string &holder = hold.username;
     Settlement settled;
     const std::int64_t from = std::max(hold.since, hold.counted_from);
-    settled.earned = now > from ? now - from : 0;
+    /* What the hold made from its start to a moment, in quarters of a palla: the longer he has been in, the
+       less each second is worth. */
+    const auto quarters = [&hold](std::int64_t until) {
+        const std::int64_t in = std::max<std::int64_t>(until - hold.since, 0);
+        const std::int64_t awake = std::min(in, drowsy_seconds);
+        const std::int64_t drowsy = std::clamp<std::int64_t>(in - drowsy_seconds, 0, sleepy_seconds - drowsy_seconds);
+        const std::int64_t sleepy = std::max<std::int64_t>(in - sleepy_seconds, 0);
+        return awake * 4 + drowsy * 2 + sleepy;
+    };
+    settled.earned = now > from ? (quarters(now) - quarters(from)) / 4 : 0;
     if (hold.lightning_percent > 100) {
         settled.lightning = hold.lightning_percent;
         if (settled.earned > std::numeric_limits<std::int64_t>::max() / settled.lightning) {
@@ -566,6 +575,20 @@ bool names_player(Storage &storage, const std::string &player, std::string_view 
     });
 }
 
+namespace {
+
+/* A penalty is never the same twice: between half of it and all of it, so that nothing can be timed to try
+   again the instant it is over. */
+std::int64_t drawn_penalty(StorageSession &session, std::int64_t longest) {
+    if (longest <= 0) {
+        return 0;
+    }
+    const std::int64_t half = longest / 2;
+    return half + static_cast<std::int64_t>(session.random_index(static_cast<std::size_t>(longest - half + 1)));
+}
+
+}
+
 ClaimResult conquister_claim(
     Storage &storage,
     std::int64_t user_id,
@@ -585,8 +608,20 @@ ClaimResult conquister_claim(
         }
         if (const auto penalty = find_entry(state.cooldowns, username); penalty != state.cooldowns.end()) {
             if (penalty->second > now) {
-                outcome.status = ClaimStatus::cooldown;
-                outcome.penalty_seconds = penalty->second - now;
+                /* Trying again before the penalty is over, he is too tired to notice: he is told he got in,
+                   nothing changes, the penalty starts over and he finds out when somebody else gets in. */
+                penalty->second = now + drawn_penalty(session, rules.cooldown_seconds);
+                state.claim_dreams[username] = now;
+                outcome.status = ClaimStatus::taken;
+                outcome.phantom = true;
+                outcome.carried_before = shown_gear(state, username);
+                if (state.current && !state.current->username.empty() && state.current->username != username) {
+                    const std::string holder = state.current->username;
+                    outcome.previous_username = display_name(state, holder);
+                    outcome.previous_key = holder;
+                    outcome.previous_user_id = counter(state.telegram_ids, holder);
+                    outcome.balloon_popped = balloon_there(state, holder, Whereabouts::conquister, now);
+                }
                 return outcome;
             }
             state.cooldowns.erase(username);
@@ -598,6 +633,10 @@ ClaimResult conquister_claim(
         if (const std::int64_t wait = frozen_for(state, username, now); wait > 0) {
             outcome.status = ClaimStatus::frozen;
             outcome.penalty_seconds = wait;
+            return outcome;
+        }
+        if (state.closed_until > now) {
+            outcome.status = ClaimStatus::closed;
             return outcome;
         }
         if (state.current && !state.current->username.empty()) {
@@ -616,9 +655,16 @@ ClaimResult conquister_claim(
                 /* Every ⏳ he has with him takes its share off the wait: enough of them and there is none. */
                 const std::int64_t spared = std::min<std::int64_t>(
                     100, carried_copies(state, username, power::hourglass) * std::max<std::int64_t>(rules.hourglass, 0));
-                if (const std::int64_t wait = rules.cooldown_seconds * (100 - spared) / 100; wait > 0) {
+                if (const std::int64_t wait = drawn_penalty(session, rules.cooldown_seconds * (100 - spared) / 100);
+                    wait > 0) {
                     state.cooldowns[username] = now + wait;
                     outcome.penalty_seconds = wait;
+                }
+                /* Nobody may try for a while, so that two names cannot take turns at wearing it down. */
+                if (rules.closed_seconds > 0) {
+                    const std::int64_t quarter = rules.closed_seconds / 4;
+                    state.closed_until = now + rules.closed_seconds - quarter +
+                        static_cast<std::int64_t>(session.random_index(static_cast<std::size_t>(2 * quarter + 1)));
                 }
                 outcome.status = ClaimStatus::defended;
                 outcome.previous_username = display_name(state, holder);
@@ -657,11 +703,25 @@ ClaimResult conquister_claim(
         outcome.entered_lightning = bolts > 0 && rules.lightning > 0 ? 100 + bolts * rules.lightning : 0;
         state.current->lightning_percent = outcome.entered_lightning;
         state.current->bolts = outcome.entered_lightning > 0 ? bolts : 0;
+        /* Somebody really got in: whoever only dreamt of it finds out; his own dream simply came true. */
+        for (const auto &[dreamer, since] : state.claim_dreams) {
+            if (dreamer != username) {
+                outcome.woken.push_back(display_name(state, dreamer));
+            }
+        }
+        state.claim_dreams.clear();
         return outcome;
     });
 
     switch (result.status) {
     case ClaimStatus::taken:
+        if (result.phantom) {
+            log_info("claim dreamt user={} holder={}", username, result.previous_username);
+            break;
+        }
+        for (const std::string &dreamer : result.woken) {
+            log_info("claim dream over user={}", dreamer);
+        }
         log_info(
             "claim taken user={} previous={} earned={} balloon_popped={} lightning_percent={}",
             username,
@@ -688,6 +748,9 @@ ClaimResult conquister_claim(
         break;
     case ClaimStatus::frozen:
         log_info("claim refused user={} frozen={}", username, result.penalty_seconds);
+        break;
+    case ClaimStatus::closed:
+        log_info("claim refused user={} closed=1", username);
         break;
     case ClaimStatus::already_held:
         break;
@@ -1338,6 +1401,8 @@ void start_over(ConquisterState &state) {
     state.frozen.clear();
     state.rests.clear();
     state.phantoms.clear();
+    state.closed_until = 0;
+    state.claim_dreams.clear();
     state.pregnancies.clear();
     state.children.clear();
     state.knocks.clear();
@@ -1374,6 +1439,7 @@ void start_over(ConquisterState &state, const std::string &player, std::int64_t 
     state.smeared.erase(player);
     state.rests.erase(player);
     state.phantoms.erase(player);
+    state.claim_dreams.erase(player);
 }
 
 }
@@ -2427,6 +2493,7 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 catch_breath(session, state, raid.raider, now, rules);
                 settled.push_back(RaidEvent{
                     .kind = RaidEvent::Kind::returned,
+                    .variant = session.random_index(4),
                     .raider = display_name(state, raid.raider),
                     .target = display_name(state, raid.target),
                     .loot = raid.loot,

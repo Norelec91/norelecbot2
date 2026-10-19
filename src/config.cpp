@@ -190,6 +190,12 @@ constexpr std::array settings{
     Setting{"NORELECBOT_REST_MAX_SECONDS", [](AppConfig &config, std::string_view value) {
         return set_number(config.rest_max_seconds, value, AppConfig::default_rest_max_seconds, 0);
     }},
+    Setting{"NORELECBOT_PLACE_CLOSED_SECONDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.place_closed_seconds, value, AppConfig::default_place_closed_seconds, 0);
+    }},
+    Setting{"NORELECBOT_COMMAND_GAP_SECONDS", [](AppConfig &config, std::string_view value) {
+        return set_number(config.command_gap_seconds, value, AppConfig::default_command_gap_seconds, 0);
+    }},
     Setting{"NORELECBOT_FIRE_PERCENT", [](AppConfig &config, std::string_view value) {
         return set_number(config.fire_percent, value, AppConfig::default_fire_percent, 0, 100);
     }},

@@ -330,10 +330,11 @@ TEST_CASE("the balloon replies are the ones the players read") {
         return command_dispatch(context, text).value_or("<nessuna risposta>");
     };
 
+    /* Still in her penalty, she is told she got in, and is told nothing of what alice made. */
     const std::string waiting = reply("We @TheConquister37");
-    CHECK(waiting.starts_with("erin hai ancora "));
-    CHECK(waiting.contains(" minut"));
-    CHECK(waiting.ends_with(" di penalità."));
+    CHECK(waiting.starts_with("erin hai bucato il palloncino di @alice (🎈)!\n"));
+    CHECK(waiting.contains("erin sei in @TheConquister37!"));
+    CHECK_FALSE(waiting.contains("hai cacciato"));
 
     context.user_id = 2;
     context.username = "bob";
@@ -343,6 +344,8 @@ TEST_CASE("the balloon replies are the ones the players read") {
     CHECK(popped.find("(🎈)") == popped.rfind("(🎈)"));
     CHECK(popped.contains("bob hai cacciato @alice da @TheConquister37.\n"));
     CHECK(popped.contains("bob sei in @TheConquister37!"));
+    CHECK(popped.contains("\nerin eri così stanco che hai solo sognato di entrare in @TheConquister37: non ti sei mai "
+                          "mosso da casa!"));
 }
 
 TEST_CASE("a message can be recognised as a command without running it") {
@@ -563,6 +566,33 @@ TEST_CASE("an ambiguous old holder is not claimed by an IRC namesake") {
     const CommandContext context{.storage = storage, .config = config, .user_id = 8, .username = "Bob"};
     CHECK(command_dispatch(context, "/raid Alice") ==
           "Bob non conosco nessun giocatore di nome Alice.");
+}
+
+TEST_CASE("coming home is told a different way each time") {
+    RaidEvent event;
+    event.kind = RaidEvent::Kind::returned;
+    event.raider = "bob";
+    event.target = "alice";
+    CHECK(raid_event_reply(event) == "bob sei tornato in bob.");
+    event.variant = 1;
+    CHECK(raid_event_reply(event) == "bob rientri in bob a mani vuote.");
+    event.variant = 2;
+    CHECK(raid_event_reply(event) == "bob eccoti di nuovo in bob.");
+    event.variant = 3;
+    CHECK(raid_event_reply(event) == "bob bob ti riaccoglie.");
+    event.loot = 5;
+    CHECK(raid_event_reply(event) == "bob bob ti riaccoglie: hai con te 5 palle.");
+    event.variant = 2;
+    CHECK(raid_event_reply(event) == "bob eccoti di nuovo in bob, con 5 palle in più.");
+}
+
+TEST_CASE("a player's commands closer than the gap are not answered") {
+    CHECK_FALSE(command_too_soon("tg:1", 100, 3));
+    CHECK(command_too_soon("tg:1", 101, 3));
+    CHECK(command_too_soon("tg:1", 102, 3));
+    CHECK_FALSE(command_too_soon("tg:1", 103, 3));
+    CHECK_FALSE(command_too_soon("tg:2", 103, 3));
+    CHECK_FALSE(command_too_soon("tg:2", 103, 0));
 }
 
 TEST_CASE("whoever only dreamt of a ride is told when somebody else got there") {
@@ -1145,6 +1175,7 @@ TEST_CASE("a popped 🎈 stays on the name, and a player is handed only one") {
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
     config.cooldown_seconds = 0;
+    config.place_closed_seconds = 0;
     const auto furniture_of_alice = [](Storage &storage) {
         const Authors all = furniture_all(storage);
         return all.count("tg:1") == 0 ? std::string{} : all.at("tg:1");

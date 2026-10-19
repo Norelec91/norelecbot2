@@ -64,6 +64,10 @@ struct AppConfig {
        between these two, never told, so that nothing can be timed to leave the instant he is home. */
     static constexpr int default_rest_min_seconds = 20;
     static constexpr int default_rest_max_seconds = 60;
+    /* How long a 🎈 that held somebody off keeps everybody out of the place, give or take a quarter. */
+    static constexpr int default_place_closed_seconds = 60;
+    /* The fewest seconds between two commands of the same player: those in between are not answered. */
+    static constexpr int default_command_gap_seconds = 3;
     /* How much of the time a 🧊 freezes him each 🔥 a player has with him melts away, in percent. */
     static constexpr int default_fire_percent = 10;
     /* How much of the penalty for a failed attempt each ⏳ a player has with him takes off, in percent. */
@@ -113,6 +117,8 @@ struct AppConfig {
     int frozen_seconds = default_frozen_seconds;
     int rest_min_seconds = default_rest_min_seconds;
     int rest_max_seconds = default_rest_max_seconds;
+    int place_closed_seconds = default_place_closed_seconds;
+    int command_gap_seconds = default_command_gap_seconds;
     int fire_percent = default_fire_percent;
     int hourglass_percent = default_hourglass_percent;
     /* Whether a player seen for the first time is handed a 🎈. */

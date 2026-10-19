@@ -99,6 +99,11 @@ inline constexpr std::array powers{power::pleading, power::rocket, power::bolt, 
                                    power::ice,      power::fire,    power::hourglass,
                                    power::dino,     power::salt};
 
+/* The longer a holder stays in @TheConquister37, the sleepier he gets: a palla a second for the first two
+   hours, half of it until the sixth, a quarter after. */
+inline constexpr std::int64_t drowsy_seconds = 2 * 60 * 60;
+inline constexpr std::int64_t sleepy_seconds = 6 * 60 * 60;
+
 /* How long a 🧂 remembers a raider: one who reaches the same house again within it pays the salt. */
 inline constexpr std::int64_t salt_seconds = 5 * 60;
 
@@ -107,8 +112,9 @@ inline constexpr std::int64_t salt_seconds = 5 * 60;
 /* The power an emoji has, or nothing for one that only hangs there. */
 [[nodiscard]] const Power *power_of(std::string_view emoji);
 
-/* frozen: a 🧊 hit him not long ago. */
-enum class ClaimStatus { taken, already_held, defended, cooldown, travelling, frozen };
+/* frozen: a 🧊 hit him not long ago. closed: a 🎈 held somebody off a moment ago, and the place lets
+   nobody try for a while. */
+enum class ClaimStatus { taken, already_held, defended, cooldown, travelling, frozen, closed };
 
 struct ClaimResult {
     ClaimStatus status = ClaimStatus::taken;
@@ -137,6 +143,10 @@ struct ClaimResult {
     std::int64_t lightning = 0;
     /* taken: what the house of the day was worth to the kicked holder, 100 when it was indifferent. */
     int zodiac_percent = 100;
+    /* taken: he tried again before his penalty was over, so he only dreamt of getting in; nothing changed. */
+    bool phantom = false;
+    /* taken for real: whoever only dreamt of getting in meanwhile, who finds out now. */
+    std::vector<std::string> woken;
 };
 
 /* A line meant for home, written from @TheConquister37, takes him home first: what the hold he gave
@@ -301,6 +311,8 @@ struct RaidEvent {
     enum class Kind { stolen, delivered, returned, born, gone, fooled };
 
     Kind kind = Kind::stolen;
+    /* returned: which of the ways of telling it, drawn so that no reply reads the same every time. */
+    std::size_t variant = 0;
     std::string raider;
     std::string target;
     std::int64_t loot = 0;
@@ -428,6 +440,8 @@ struct ClaimRules {
     std::int64_t ninja = 0;
     /* How much of the penalty each ⏳ on the claimer's name takes off, in percent: they add up. */
     std::int64_t hourglass = 0;
+    /* How long a 🎈 that held somebody off keeps everybody out, give or take a quarter; 0 never. */
+    std::int64_t closed_seconds = 0;
 };
 
 [[nodiscard]] ClaimResult conquister_claim(

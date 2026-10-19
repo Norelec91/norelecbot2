@@ -165,6 +165,12 @@ struct ConquisterState {
     /* The players who set off too soon and only dreamt of it, mapped to the player they think they went for:
        they find out when somebody else really gets there. */
     Authors phantoms{};
+    /* Until when nobody may try @TheConquister37: a 🎈 that just held somebody off keeps everybody out a
+       while, so that two names cannot take turns at wearing it down. */
+    std::int64_t closed_until = 0;
+    /* The players who tried @TheConquister37 again too soon and only dreamt of getting in, mapped to when:
+       they find out when somebody else really does. */
+    Counters claim_dreams{};
 
     bool operator==(const ConquisterState &) const = default;
 };

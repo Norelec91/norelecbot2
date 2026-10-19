@@ -170,6 +170,47 @@ TEST_CASE("a balloon defends the holder until it pops") {
     CHECK(again.status == ClaimStatus::taken);
 }
 
+TEST_CASE("the longer the hold, the sleepier the holder: full pay for two hours, half until six, a quarter after") {
+    const TestPaths paths{"drowsy-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":{"user_id":1,"username":"alice","since":0},"scores":{},"quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    const ClaimResult kicked = conquister_claim(storage, 2, "bob", 8 * 60 * 60);
+    REQUIRE(kicked.status == ClaimStatus::taken);
+    CHECK(kicked.earned == 2 * 60 * 60 + 4 * 60 * 60 / 2 + 2 * 60 * 60 / 4);
+    /* The first two hours are paid in full. */
+    const ClaimResult short_hold = conquister_claim(storage, 3, "carol", 8 * 60 * 60 + 3600);
+    REQUIRE(short_hold.status == ClaimStatus::taken);
+    CHECK(short_hold.earned == 3600);
+}
+
+TEST_CASE("a 🎈 that held somebody off closes the place to everybody a while") {
+    const TestPaths paths{"closed-test"};
+    Storage storage{paths.conquister, paths.quotes};
+    const ClaimRules rules{.cooldown_seconds = 300, .signs = {}, .closed_seconds = 60};
+    std::optional<ClaimResult> held;
+    for (int attempt = 0; attempt < 40 && !held; ++attempt) {
+        storage.transaction([](StorageSession &session) {
+            ConquisterState &state = session.state();
+            state.current = Holder{.user_id = 0, .username = "alice", .since = 0};
+            state.equipped["alice"] = "🎈";
+            state.balloons.clear();
+            state.cooldowns.clear();
+            state.closed_until = 0;
+            return 0;
+        });
+        if (ClaimResult result = conquister_claim(storage, 0, "bob", 100, rules); result.status == ClaimStatus::defended) {
+            held = result;
+        }
+    }
+    REQUIRE(held);
+    /* Somebody else is kept out too, for between three quarters of it and a quarter more. */
+    CHECK(conquister_claim(storage, 0, "carol", 144, rules).status == ClaimStatus::closed);
+    CHECK(conquister_claim(storage, 0, "carol", 176, rules).status != ClaimStatus::closed);
+}
+
 TEST_CASE("a penalty blocks the next attempts") {
     const TestPaths paths{"cooldown-test"};
     {
@@ -180,12 +221,19 @@ TEST_CASE("a penalty blocks the next attempts") {
     }
     Storage storage{paths.conquister, paths.quotes};
 
+    /* Too soon, he only dreams of getting in: he is told he did, and alice is still there. */
     const ClaimResult blocked = conquister_claim(storage, 2, "bob", 700, ClaimRules{.cooldown_seconds = 300, .signs = {}});
-    CHECK(blocked.status == ClaimStatus::cooldown);
-    CHECK(blocked.penalty_seconds == 300);
+    CHECK(blocked.status == ClaimStatus::taken);
+    CHECK(blocked.phantom);
+    CHECK(blocked.previous_username == "alice");
+    CHECK(blocked.earned == 0);
+    CHECK(conquister_user(storage, "alice")->in_conquister);
 
+    /* Whoever really gets in wakes him up. */
     const ClaimResult others = conquister_claim(storage, 3, "carol", 700, ClaimRules{.cooldown_seconds = 300, .signs = {}});
     CHECK(others.status == ClaimStatus::taken);
+    CHECK_FALSE(others.phantom);
+    CHECK(others.woken == std::vector<std::string>{"bob"});
     CHECK(raid_start(storage, 3, "carol", "carol", 900, RaidRules{}).status == RaidStatus::left_place);
 
     const ClaimResult expired = conquister_claim(storage, 2, "bob", 1000, ClaimRules{.cooldown_seconds = 300, .signs = {}});
@@ -201,10 +249,12 @@ TEST_CASE("a failed balloon attempt hands out the penalty") {
 
     const ClaimResult attack = conquister_claim(storage, 2, "bob", 3000, ClaimRules{.cooldown_seconds = 300, .signs = {}});
     if (attack.status == ClaimStatus::defended) {
-        CHECK(attack.penalty_seconds == 300);
+        /* Never the same twice: between half of it and all of it. */
+        CHECK(attack.penalty_seconds >= 150);
+        CHECK(attack.penalty_seconds <= 300);
         const ClaimResult again = conquister_claim(storage, 2, "bob", 3100, ClaimRules{.cooldown_seconds = 300, .signs = {}});
-        CHECK(again.status == ClaimStatus::cooldown);
-        CHECK(again.penalty_seconds == 200);
+        CHECK(again.status == ClaimStatus::taken);
+        CHECK(again.phantom);
     } else {
         CHECK(attack.status == ClaimStatus::taken);
         CHECK(attack.balloon_popped);
@@ -2008,8 +2058,9 @@ TEST_CASE("every ⏳ with the claimer takes a share off the penalty of a failed 
     /* Three of them: three fifths off the five minutes. */
     const std::optional<ClaimResult> bob = failed("bob", 100);
     REQUIRE(bob);
-    CHECK(bob->penalty_seconds == 120);
-    CHECK(conquister_claim(storage, 0, "bob", 200, rules).status == ClaimStatus::cooldown);
+    CHECK(bob->penalty_seconds >= 60);
+    CHECK(bob->penalty_seconds <= 120);
+    CHECK(conquister_claim(storage, 0, "bob", 150, rules).phantom);
     /* Five of them: no wait at all. */
     const std::optional<ClaimResult> carol = failed("carol", 100);
     REQUIRE(carol);

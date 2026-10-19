@@ -233,6 +233,8 @@ ConquisterState parse_state(const Json &json) {
         parse_counters(json, "pugliesi"),
         parse_counters(json, "rests"),
         parse_authors(json, "phantoms"),
+        json.contains("closed_until") ? integer(json.at("closed_until")) : 0,
+        parse_counters(json, "claim_dreams"),
     };
     return state;
 }
@@ -314,6 +316,8 @@ Json state_to_json(const ConquisterState &state) {
         {"pugliesi", state.pugliesi},
         {"rests", state.rests},
         {"phantoms", state.phantoms},
+        {"closed_until", state.closed_until},
+        {"claim_dreams", state.claim_dreams},
     };
 }
 

@@ -11,6 +11,8 @@
 #include <exception>
 #include <format>
 #include <limits>
+#include <map>
+#include <mutex>
 #include <utility>
 #include <vector>
 
@@ -307,7 +309,7 @@ std::optional<std::string> optional_random_quote(Storage &storage) {
 /* What a failed attempt cost the one who made it. */
 std::string failed_attempt_toll(const ClaimResult &result) {
     if (result.penalty_seconds > 0) {
-        return std::format(" e prendi {} di penalità", format_wait(result.penalty_seconds));
+        return " e prendi una penalità";
     }
     return {};
 }
@@ -806,6 +808,7 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
                 .lightning = context.config.lightning_percent,
                 .ninja = context.config.ninja_percent,
                 .hourglass = context.config.hourglass_percent,
+                .closed_seconds = context.config.place_closed_seconds,
             }
         );
     /* A name that came from IRC must not be written as a mention: on Telegram it would tag a stranger. */
@@ -825,6 +828,10 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
     }
     if (result.status == ClaimStatus::cooldown) {
         return std::format("{} hai ancora {} di penalità.", username, format_wait(result.penalty_seconds));
+    }
+    if (result.status == ClaimStatus::closed) {
+        return std::format("{} {} è chiuso: qualcuno ha appena provato a entrare. Riprova tra poco.", username,
+                           conquister_place);
     }
     if (result.status == ClaimStatus::already_held) {
         return std::format("{} sei già in {}!", username, conquister_place);
@@ -860,7 +867,8 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
         reply = std::format("{} hai bucato il palloncino di {}!\n", claimer, kicked);
         named();
     }
-    if (!result.previous_username.empty()) {
+    /* A dream does not tell what the holder made: nobody pays him, and nobody else is lied to. */
+    if (!result.previous_username.empty() && !result.phantom) {
         reply += std::format(
             "{} hai cacciato {} da {}.\n{} hai guadagnato {}{}!\n",
             claimer,
@@ -883,6 +891,10 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
             became += emoji;
         }
         reply += std::format("\nLe tue aragoste diventano {} finché resti qui.", became);
+    }
+    for (const std::string &dreamer : result.woken) {
+        reply += std::format("\n{} eri così stanco che hai solo sognato di entrare in {}: non ti sei mai mosso da "
+                             "casa!", dreamer, conquister_place);
     }
     if (const std::optional<std::string> quote = optional_random_quote(context.storage)) {
         reply += std::format("\n\n{}", *quote);
@@ -1059,7 +1071,7 @@ std::string handle_help(const CommandContext &context, std::string_view) {
     };
     /* The one We line the help still shows: the others all have a command of their own. */
     line(std::format("We {} (o {}avventura)", conquister_place, slash),
-         std::format("entri in {}: 1 palla al secondo finché lo tieni", conquister_place));
+         std::format("entri in {}: 1 palla al secondo finché lo tieni, che cala dopo 2 ore", conquister_place));
     line(std::format("{}raid {}", slash, other), "parti per razziarlo");
     line(std::format("{}give {} 500", slash, other), "gli porti 500 palle");
     line(std::format("{}give {} 🍕", slash, other), "gli regali una 🍕; anche una 💣 arriva intatta e la potrà usare lui");
@@ -1630,6 +1642,21 @@ const CommandDefinition *find_command(std::string_view name) {
 
 }
 
+bool command_too_soon(std::string_view player, std::int64_t now, int gap) {
+    if (gap <= 0 || player.empty()) {
+        return false;
+    }
+    static std::mutex guard;
+    static std::map<std::string, std::int64_t, std::less<>> last;
+    const std::scoped_lock lock{guard};
+    const auto found = last.find(player);
+    if (found != last.end() && now - found->second < gap) {
+        return true;
+    }
+    last.insert_or_assign(std::string{player}, now);
+    return false;
+}
+
 bool command_is_for_bot(std::string_view text) {
     const std::string expanded = expand_adventure(text::trim(text));
     const std::string_view message = expanded;
@@ -1680,11 +1707,30 @@ std::optional<std::string> raid_event_story(const RaidEvent &event, const AppCon
             return std::format("{} torni in {} con {} ancora in tasca.", raider, home,
                                event.gift == 1 ? std::string{"la tua palla"} : std::format("le tue {} palle", event.gift));
         }
+        /* Told a different way each time, so that nothing can wait for one line to set off again. */
         if (event.loot > 0) {
-            return std::format("{} torni in {} con {}.", raider, home, palle(event.loot));
+            switch (event.variant % 4) {
+            case 1:
+                return std::format("{} rientri in {} portando {}.", raider, home, palle(event.loot));
+            case 2:
+                return std::format("{} eccoti di nuovo in {}, con {} in più.", raider, home, palle(event.loot));
+            case 3:
+                return std::format("{} {} ti riaccoglie: hai con te {}.", raider, home, palle(event.loot));
+            default:
+                return std::format("{} torni in {} con {}.", raider, home, palle(event.loot));
+            }
         }
         /* Empty-handed too: he needs to know he is home and can leave again. */
-        return std::format("{} sei tornato in {}.", raider, home);
+        switch (event.variant % 4) {
+        case 1:
+            return std::format("{} rientri in {} a mani vuote.", raider, home);
+        case 2:
+            return std::format("{} eccoti di nuovo in {}.", raider, home);
+        case 3:
+            return std::format("{} {} ti riaccoglie.", raider, home);
+        default:
+            return std::format("{} sei tornato in {}.", raider, home);
+        }
     }
     if (event.kind == RaidEvent::Kind::delivered && !event.gift_emoji.empty()) {
         if (event.no_room) {
