@@ -218,6 +218,36 @@ TEST_CASE("linking never silently merges two inventories") {
     CHECK(state.at("furniture").size() == 2);
 }
 
+TEST_CASE("an account with nothing but the welcome 🎈, a place on the map and no palle links, and leaves nothing behind") {
+    const TestPaths paths{"link-empty-command-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{},"quotes_added":{}})";
+    }
+    AppConfig config;
+    config.conquister_path = paths.conquister;
+    config.quotes_path = paths.quotes;
+    config.furniture_cost = 0;
+    Storage storage{paths.conquister, paths.quotes};
+    const CommandContext telegram{.storage = storage, .config = config, .user_id = 11, .username = "djjeck"};
+    const CommandContext irc{.storage = storage, .config = config, .user_id = 0, .username = "djjeck"};
+    CHECK(command_dispatch(telegram, "/buy 🍕")->contains("hai speso"));
+    CHECK(command_dispatch(irc, "/leaderboard").has_value());
+    /* He gave all his palle away: an entry at zero is left, and his planet is on the map. */
+    storage.transaction([](StorageSession &session) {
+        session.state().scores["irc:djjeck"] = 0;
+        session.state().ids["irc:djjeck"] = 12345;
+        return 0;
+    });
+    CHECK(command_dispatch(irc, "/link @djjeck")->contains("Richiesta registrata"));
+    CHECK(command_dispatch(telegram, "/link djjeck") == "Account collegati: ora condividono lo stesso giocatore.");
+    const Json state = Json::parse(std::ifstream{paths.conquister});
+    CHECK(state.at("accounts").at("tg:11") == state.at("accounts").at("irc:djjeck"));
+    CHECK_FALSE(state.at("scores").contains("irc:djjeck"));
+    CHECK_FALSE(state.at("equipped").contains("irc:djjeck"));
+    CHECK(state.at("furniture").at(state.at("accounts").at("tg:11").get<std::string>()).get<std::string>().contains("🍕"));
+}
+
 TEST_CASE("legacy Telegram assets follow their recorded ID, not a reused name") {
     const TestPaths paths{"legacy-identity-command-test"};
     {

@@ -26,6 +26,9 @@ std::string display_name(const ConquisterState &state, const std::string &key);
 std::string shown_gear(const ConquisterState &state, const std::string &player);
 /* Where a player is right now: the one question every rule about home and away asks. */
 Whereabouts whereabouts(const ConquisterState &state, const std::string &player);
+/* The emoji in a player's house and on him, slot by slot, empty where there is none. */
+std::vector<std::string> slots_of(const ConquisterState &state, const std::string &player);
+std::vector<std::string> gear_of(const ConquisterState &state, const std::string &player);
 /* What a thrown emoji did where it landed. */
 struct Landing {
     bool smeared = false;
@@ -496,14 +499,16 @@ LinkStatus player_link(Storage &storage, std::int64_t user_id, const std::string
                 return LinkStatus::already_linked;
             }
         }
+        /* What is worth keeping: palle, quotes, the place, a ride, or emoji beyond the 🎈 everybody is
+           handed for nothing. An entry at zero, a place on the map or a penalty are nothing to merge. */
         const auto has_assets = [&state](const std::string &key) {
-            const std::array items{&state.scores, &state.quotes_added, &state.balloons,
-                                   &state.cooldowns, &state.ids, &state.debugging};
-            return std::ranges::any_of(items, [&key](const Counters *entries) {
-                return entries->find(key) != entries->end();
-            }) || (state.current && state.current->username == key) ||
-                state.furniture.find(key) != state.furniture.end() ||
-                state.equipped.find(key) != state.equipped.end() ||
+            std::vector<std::string> owned = slots_of(state, key);
+            std::ranges::copy(gear_of(state, key), std::back_inserter(owned));
+            std::erase(owned, std::string{});
+            const bool only_the_welcome = owned.size() == 1 && is_power(owned.front(), power::balloon);
+            return counter(state.scores, key) > 0 || counter(state.quotes_added, key) > 0 ||
+                (state.current && state.current->username == key) ||
+                (!owned.empty() && !only_the_welcome) ||
                 std::ranges::any_of(state.raids, [&key](const Raid &raid) {
                     return raid.raider == key || raid.target == key;
                 }) ||
@@ -524,6 +529,14 @@ LinkStatus player_link(Storage &storage, std::int64_t user_id, const std::string
                 key = primary;
             }
         }
+        /* The one merged in had nothing worth keeping: what is left of him on file goes, so that he
+           does not linger as a second, empty player. */
+        for (Counters *entries : {&state.scores, &state.quotes_added, &state.balloons, &state.cooldowns, &state.ids,
+                                  &state.debugging, &state.welcomed, &state.smeared, &state.frozen}) {
+            entries->erase(secondary);
+        }
+        state.furniture.erase(secondary);
+        state.equipped.erase(secondary);
         for (auto &[name, key] : state.telegram_names) {
             if (key == secondary) {
                 key = primary;
