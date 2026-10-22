@@ -7,6 +7,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -471,6 +472,9 @@ struct Profile {
 /* limit 0 returns every entry. */
 [[nodiscard]] Leaderboard conquister_leaderboard(Storage &storage, std::size_t limit);
 /* Case-insensitive lookup; rank is 0 when the user has no score yet. */
+/* Every player's name as the chats know it, by the key the game files him under. */
+[[nodiscard]] std::map<std::string, std::string> player_names(Storage &storage);
+
 [[nodiscard]] std::optional<ConquisterUser> conquister_user(Storage &storage, std::string_view username,
                                                            RaidTargetKind platform = RaidTargetKind::any);
 /* Seconds until a traveller already on his way back is home; nothing when he is not coming back yet. */

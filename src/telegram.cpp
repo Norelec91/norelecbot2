@@ -3,7 +3,10 @@
 #include "logging.hpp"
 #include "storage.hpp"
 #include "commands.hpp"
+#include "game.hpp"
 #include "irc.hpp"
+#include "sentinel.hpp"
+#include "text.hpp"
 
 #include <httplib.h>
 
@@ -11,6 +14,7 @@
 #include <chrono>
 #include <cstdint>
 #include <format>
+#include <map>
 #include <optional>
 #include <string>
 #include <thread>
@@ -96,7 +100,22 @@ void process_message(Storage &storage, const AppConfig &config, const Json &mess
         .owner = std::ranges::find(config.owner_ids, sender_id) != config.owner_ids.end(),
         .admin = std::ranges::find(config.admin_ids, sender_id) != config.admin_ids.end(),
     };
-    const std::optional<std::string> reply = command_dispatch(context, text->get_ref<const std::string &>());
+    const std::string &said = text->get_ref<const std::string &>();
+    const std::int64_t now = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    if (config.conquister_chat_id != 0 && chat == config.conquister_chat_id) {
+        sentinel().heard(sentinel_identity(sender_id, {}), {}, command_is_for_bot(said), now);
+    }
+    /* What the sentinel saw, only to an owner and only in private. */
+    if (text::trim(said) == "/sospetti" && chat == sender_id && context.owner) {
+        const std::map<std::string, std::string> names = player_names(storage);
+        telegram_say(config, chat, sentinel().report(now, [&names](const std::string &key) {
+            const auto found = names.find(key);
+            return found != names.end() ? found->second : key;
+        }));
+        return;
+    }
+    const std::optional<std::string> reply = command_dispatch(context, said);
     if (!reply) {
         return;
     }

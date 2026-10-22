@@ -2,6 +2,7 @@
 
 #include "logging.hpp"
 #include "position.hpp"
+#include "sentinel.hpp"
 #include "text.hpp"
 #include "zodiac.hpp"
 
@@ -659,6 +660,7 @@ ClaimResult conquister_claim(
         state.current->bolts = outcome.entered_lightning > 0 ? bolts : 0;
         return outcome;
     });
+    sentinel().claim(username, now);
 
     switch (result.status) {
     case ClaimStatus::taken:
@@ -1838,6 +1840,9 @@ RaidResult raid_start(
             outcome.seconds = std::max(position::shortest_travel,
                                        outcome.seconds * 100 / (100 + rockets * rules.rocket_percent));
         }
+        /* A thrown emoji is a blow, not a present. */
+        sentinel().ride(username, *known,
+                        gift != 0 || (!gift_emoji.empty() && (intact || !is_thrown(gift_emoji))), now);
         state.raids.push_back(Raid{
             .raider = username,
             .target = *known,
@@ -2331,6 +2336,10 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                 settled.push_back(std::move(event));
             }
             if (raid.arrived && now >= raid.back) {
+                sentinel().back(raid.raider, now);
+                if (raid.loot > 0) {
+                    sentinel().robbed(raid.target, raid.raider, now);
+                }
                 const std::int64_t carried = counter(state.scores, raid.raider);
                 /* The loot, plus the palle nobody received because he turned back. */
                 const std::int64_t brought = raid.loot + raid.gift;
@@ -2500,6 +2509,18 @@ std::optional<std::string> quote_delete(Storage &storage, std::string_view selec
             state.quote_authors.erase(removed);
         }
         return removed;
+    });
+}
+
+
+std::map<std::string, std::string> player_names(Storage &storage) {
+    return storage.transaction([](StorageSession &session) {
+        const ConquisterState &state = session.state();
+        std::map<std::string, std::string> names;
+        for (const auto &[key, score] : state.scores) {
+            names.emplace(key, display_name(state, key));
+        }
+        return names;
     });
 }
 

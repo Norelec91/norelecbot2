@@ -36,6 +36,9 @@ struct CommandContext {
    bonus an emoji that ends up on somebody brings him. */
 [[nodiscard]] std::optional<std::string> raid_event_reply(const RaidEvent &event, const AppConfig &config = {});
 
+/* How the sentinel knows whoever wrote: "tg:<id>" on Telegram, "irc:<nick>" on IRC. */
+[[nodiscard]] std::string sentinel_identity(std::int64_t user_id, std::string_view nick);
+
 /* Whether the text is a claim or a known command, without running it. */
 [[nodiscard]] bool command_is_for_bot(std::string_view text);
 

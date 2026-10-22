@@ -4,6 +4,7 @@
 #include "game.hpp"
 #include "irc.hpp"
 #include "logging.hpp"
+#include "sentinel.hpp"
 #include "telegram.hpp"
 
 #include <chrono>
@@ -11,6 +12,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <optional>
 #include <string>
 #include <system_error>
@@ -62,6 +64,25 @@ void announce_news(const AppConfig &config) {
     }
 }
 
+/* Once a day, at its hour, the sentinel tells every owner in private what it saw. */
+void sentinel_round(Storage &storage, const AppConfig &config, std::int64_t now) {
+    if (config.owner_ids.empty() || config.bot_token.empty() || local_hour(now) != config.sentinel_hour ||
+        sentinel().reported_day() == local_day(now)) {
+        return;
+    }
+    sentinel().set_reported_day(local_day(now));
+    const std::map<std::string, std::string> names = player_names(storage);
+    const std::string report = sentinel().report(now, [&names](const std::string &key) {
+        const auto found = names.find(key);
+        return found != names.end() ? found->second : key;
+    });
+    for (const std::int64_t owner : config.owner_ids) {
+        telegram_say(config, owner, report);
+    }
+    sentinel().save(config.sentinel_path);
+    log_info("Sentinel report sent to {} owners", config.owner_ids.size());
+}
+
 }
 
 void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool> &stop) {
@@ -91,6 +112,7 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
     };
     /* The news waits for the second round: by then IRC has had a tick to connect. */
     int rounds = 0;
+    std::int64_t kept = seconds_now();
     while (!stop.load(std::memory_order_relaxed)) {
         if (++rounds == 2) {
             try {
@@ -108,10 +130,20 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
         } catch (const std::exception &error) {
             log_warning("A raid could not be settled: {}", error.what());
         }
+        try {
+            sentinel_round(storage, config, seconds_now());
+            if (seconds_now() - kept >= 600) {
+                kept = seconds_now();
+                sentinel().save(config.sentinel_path);
+            }
+        } catch (const std::exception &error) {
+            log_warning("The sentinel could not do its round: {}", error.what());
+        }
         for (int waited = 0; waited < tick.count() && !stop.load(std::memory_order_relaxed); ++waited) {
             std::this_thread::sleep_for(std::chrono::seconds{1});
         }
     }
+    sentinel().save(config.sentinel_path);
     log_info("Raid keeper stopped");
 }
 

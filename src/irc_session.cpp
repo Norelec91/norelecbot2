@@ -2,6 +2,7 @@
 
 #include "commands.hpp"
 #include "logging.hpp"
+#include "sentinel.hpp"
 
 #include <algorithm>
 #include <format>
@@ -168,7 +169,12 @@ std::vector<std::string> Session::handle(const Message &message, std::int64_t no
     }
 
     const std::string_view text = message.param(1);
-    if (!command_is_for_bot(with_slash(text))) {
+    const bool for_bot = command_is_for_bot(with_slash(text));
+    const std::string_view prefix = message.prefix;
+    sentinel().heard(sentinel_identity(0, sender),
+                     prefix.find('@') == std::string_view::npos ? std::string_view{} : prefix.substr(prefix.find('@') + 1),
+                     for_bot, now);
+    if (!for_bot) {
         return lines;
     }
     const std::string lowered = to_lower(sender);

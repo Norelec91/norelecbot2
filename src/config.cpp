@@ -237,6 +237,12 @@ constexpr std::array settings{
     Setting{"NORELECBOT_NEWS_FILE", [](AppConfig &config, std::string_view value) {
         return set_text(config.news_path, value, {});
     }},
+    Setting{"NORELECBOT_SENTINEL_FILE", [](AppConfig &config, std::string_view value) {
+        return set_text(config.sentinel_path, value, AppConfig::default_sentinel_path);
+    }},
+    Setting{"NORELECBOT_SENTINEL_HOUR", [](AppConfig &config, std::string_view value) {
+        return set_number(config.sentinel_hour, value, AppConfig::default_sentinel_hour, 0, 23);
+    }},
 };
 
 bool apply_setting(AppConfig &config, std::string_view name, std::string_view value) {
@@ -292,6 +298,11 @@ std::optional<AppConfig> load_config(const std::filesystem::path &dotenv_path) {
     if (!apply_environment(config)) {
         log_error("Invalid environment configuration");
         return std::nullopt;
+    }
+    /* Unless told otherwise, the sentinel keeps its file beside the game's. */
+    if (config.sentinel_path == AppConfig::default_sentinel_path) {
+        config.sentinel_path =
+            (std::filesystem::path{config.conquister_path}.parent_path() / AppConfig::default_sentinel_path).string();
     }
     return config;
 }

@@ -4,6 +4,7 @@
 #include "irc.hpp"
 #include "logging.hpp"
 #include "raids.hpp"
+#include "sentinel.hpp"
 #include "storage.hpp"
 #include "telegram.hpp"
 
@@ -31,6 +32,7 @@ int run() {
     }
     norelecbot::Storage storage{config->conquister_path, config->quotes_path};
     norelecbot::equipment_sort_out(storage);
+    norelecbot::sentinel().load(config->sentinel_path);
     if (config->starter_balloon) {
         norelecbot::balloons_hand_out(storage, static_cast<std::size_t>(config->furniture_limit));
     }

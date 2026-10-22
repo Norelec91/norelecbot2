@@ -69,6 +69,8 @@ struct AppConfig {
     static constexpr std::string_view default_irc_nick = "NorelecBot";
     static constexpr std::string_view default_api_host = "0.0.0.0";
     static constexpr std::string_view default_conquister_path = "conquister.json";
+    static constexpr std::string_view default_sentinel_path = "sentinel.json";
+    static constexpr int default_sentinel_hour = 9;
     static constexpr std::string_view default_quotes_path = "quotes.json";
 
     std::string bot_token;
@@ -120,6 +122,9 @@ struct AppConfig {
     std::string quotes_path{default_quotes_path};
     /* What changed in the game, told once to both chats when the bot starts, then deleted; empty = never. */
     std::string news_path;
+    /* Where the sentinel keeps what it saw, and the hour its report reaches the owners. */
+    std::string sentinel_path{default_sentinel_path};
+    int sentinel_hour = default_sentinel_hour;
     bool irc_enabled = false;
     std::string irc_server;
     int irc_port = default_irc_port;

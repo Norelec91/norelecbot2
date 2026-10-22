@@ -1,6 +1,7 @@
 #include "commands.hpp"
 
 #include "game.hpp"
+#include "sentinel.hpp"
 #include "text.hpp"
 #include "zodiac.hpp"
 
@@ -1624,6 +1625,17 @@ const CommandDefinition *find_command(std::string_view name) {
 
 }
 
+std::string sentinel_identity(std::int64_t user_id, std::string_view nick) {
+    if (user_id != 0) {
+        return std::format("tg:{}", user_id);
+    }
+    std::string lowered{"irc:"};
+    for (const char letter : nick) {
+        lowered.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(letter))));
+    }
+    return lowered;
+}
+
 bool command_is_for_bot(std::string_view text) {
     const std::string expanded = expand_adventure(text::trim(text));
     const std::string_view message = expanded;
@@ -1876,6 +1888,7 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
                                         context.config.starter_balloon
                                             ? static_cast<std::size_t>(context.config.furniture_limit) : 0);
                 bound.player_key = bound_key;
+                sentinel().link(sentinel_identity(context.user_id, context.username), bound_key);
             }
         };
         /* Whether a name written after "We" is the sender himself. */
