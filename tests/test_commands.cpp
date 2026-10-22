@@ -36,7 +36,6 @@ std::string house_of(Storage &storage, const std::string &player) {
 TEST_CASE("the bot answers the commands it knows and ignores the rest") {
     const TestPaths paths{"command-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -143,7 +142,6 @@ TEST_CASE("the bot answers the commands it knows and ignores the rest") {
 TEST_CASE("Telegram ID keeps its player after a rename and namesakes stay separate") {
     const TestPaths paths{"identity-command-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -176,7 +174,6 @@ TEST_CASE("Telegram ID keeps its player after a rename and namesakes stay separa
 TEST_CASE("two authenticated accounts link only after reciprocal confirmation") {
     const TestPaths paths{"link-command-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -204,7 +201,6 @@ TEST_CASE("two authenticated accounts link only after reciprocal confirmation") 
 TEST_CASE("linking never silently merges two inventories") {
     const TestPaths paths{"link-conflict-command-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -229,7 +225,6 @@ TEST_CASE("legacy Telegram assets follow their recorded ID, not a reused name") 
                 R"("telegram_ids":{"Alice":11}})";
     }
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -258,7 +253,6 @@ TEST_CASE("ambiguous cross-platform legacy assets remain unclaimed") {
                 R"("telegram_ids":{"Alice":11},"irc_names":{"Alice":1}})";
     }
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -282,7 +276,6 @@ TEST_CASE("unattributed legacy assets stay unclaimed") {
         file << R"({"current":null,"scores":{"Alice":1000}})";
     }
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -298,7 +291,6 @@ TEST_CASE("unattributed legacy assets stay unclaimed") {
 TEST_CASE("IRC nick aliases share the verified NickServ account") {
     const TestPaths paths{"irc-account-command-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -328,7 +320,6 @@ TEST_CASE("the balloon replies are the ones the players read") {
              << R"(},"telegram_ids":{"erin":5,"alice":1},"equipped":{"alice":"🎈"}})";
     }
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -339,11 +330,10 @@ TEST_CASE("the balloon replies are the ones the players read") {
         return command_dispatch(context, text).value_or("<nessuna risposta>");
     };
 
-    /* Still in her penalty, she is told she got in, and is told nothing of what alice made. */
     const std::string waiting = reply("We @TheConquister37");
-    CHECK(waiting.starts_with("erin hai bucato il palloncino di @alice (🎈)!\n"));
-    CHECK(waiting.contains("erin sei in @TheConquister37!"));
-    CHECK_FALSE(waiting.contains("hai cacciato"));
+    CHECK(waiting.starts_with("erin hai ancora "));
+    CHECK(waiting.contains(" minut"));
+    CHECK(waiting.ends_with(" di penalità."));
 
     context.user_id = 2;
     context.username = "bob";
@@ -353,8 +343,6 @@ TEST_CASE("the balloon replies are the ones the players read") {
     CHECK(popped.find("(🎈)") == popped.rfind("(🎈)"));
     CHECK(popped.contains("bob hai cacciato @alice da @TheConquister37.\n"));
     CHECK(popped.contains("bob sei in @TheConquister37!"));
-    CHECK(popped.contains("\nerin eri così stanco che hai solo sognato di entrare in @TheConquister37: non ti sei mai "
-                          "mosso da casa!"));
 }
 
 TEST_CASE("a message can be recognised as a command without running it") {
@@ -372,7 +360,6 @@ TEST_CASE("a message can be recognised as a command without running it") {
 TEST_CASE("a name that came from IRC is never written as a mention") {
     const TestPaths paths{"mention-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -412,7 +399,6 @@ TEST_CASE("a name that came from IRC is never written as a mention") {
 TEST_CASE("getting in tells what the 🦞 became") {
     const TestPaths paths{"lobster-command-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -450,7 +436,6 @@ TEST_CASE("the balloon replies follow the same rule") {
              << R"("balloons":{"alice":3},"cooldowns":{},"equipped":{"alice":"🎈"}})";
     }
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -470,7 +455,6 @@ TEST_CASE("We @someone sends the player out to rob them") {
              << R"("telegram_ids":{"alice":1}})";
     }
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -533,7 +517,6 @@ TEST_CASE("We @someone sends the player out to rob them") {
 TEST_CASE("the @ prefix selects Telegram names and bare names select IRC nicks") {
     const TestPaths paths{"irc-raid-target-command-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -573,7 +556,6 @@ TEST_CASE("an ambiguous old holder is not claimed by an IRC namesake") {
              << R"("scores":{"Alice":1000},"telegram_ids":{"Alice":7}})";
     }
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -581,81 +563,6 @@ TEST_CASE("an ambiguous old holder is not claimed by an IRC namesake") {
     const CommandContext context{.storage = storage, .config = config, .user_id = 8, .username = "Bob"};
     CHECK(command_dispatch(context, "/raid Alice") ==
           "Bob non conosco nessun giocatore di nome Alice.");
-}
-
-TEST_CASE("a record and a round number of raids are celebrated") {
-    RaidEvent event;
-    event.kind = RaidEvent::Kind::stolen;
-    event.raider = "bob";
-    event.target = "alice";
-    event.loot = 250;
-    event.seconds = 52;
-    event.record = true;
-    event.milestone = 100;
-    CHECK(raid_event_reply(event) == "bob hai rubato 250 palle a alice! Torni in bob tra 52 secondi."
-                                     "\n🏆 È il tuo colpo più grosso di sempre!\n🎉 bob 100 raid riusciti!");
-}
-
-TEST_CASE("lost at a fork, he is told he got lost; the wanderer is told to both chats") {
-    RaidEvent event;
-    event.kind = RaidEvent::Kind::returned;
-    event.raider = "bob";
-    event.lost = true;
-    CHECK(raid_event_reply(event) == "bob non hai scelto nessuna strada al bivio: ti sei perso e sei tornato in bob "
-                                     "a mani vuote.");
-    event.gift = 30;
-    CHECK(raid_event_reply(event) == "bob non hai scelto nessuna strada al bivio: ti sei perso e sei tornato in bob "
-                                     "con 30 palle ancora in tasca.");
-    CHECK(wanderer_reply(Wanderer{.near = "Lucy", .near_on_telegram = true, .bag = 900}) ==
-          "🧙 Un viandante lascia cadere un sacchetto di palle davanti a @Lucy! Il primo che scrive /raccogli "
-          "(!raccogli su IRC) se lo prende.");
-}
-
-TEST_CASE("answering nobody asked gets told so") {
-    const TestPaths paths{"answers-test"};
-    Storage storage{paths.conquister, paths.quotes};
-    const AppConfig config;
-    const CommandContext alice{.storage = storage, .config = config, .user_id = 1, .username = "Alice"};
-    CHECK(command_is_for_bot("/raccogli"));
-    CHECK(command_dispatch(alice, "/raccogli") == "Alice qui non c'è niente da raccogliere.");
-    CHECK(command_dispatch(alice, "/strada ponte") == "Alice non sei a nessun bivio.");
-    CHECK(command_dispatch(alice, "/parola pera") == "Alice nessun guardiano ti ha chiesto niente.");
-}
-
-TEST_CASE("coming home is told a different way each time") {
-    RaidEvent event;
-    event.kind = RaidEvent::Kind::returned;
-    event.raider = "bob";
-    event.target = "alice";
-    CHECK(raid_event_reply(event) == "bob sei tornato in bob.");
-    event.variant = 1;
-    CHECK(raid_event_reply(event) == "bob rientri in bob a mani vuote.");
-    event.variant = 2;
-    CHECK(raid_event_reply(event) == "bob eccoti di nuovo in bob.");
-    event.variant = 3;
-    CHECK(raid_event_reply(event) == "bob bob ti riaccoglie.");
-    event.loot = 5;
-    CHECK(raid_event_reply(event) == "bob bob ti riaccoglie: hai con te 5 palle.");
-    event.variant = 2;
-    CHECK(raid_event_reply(event) == "bob eccoti di nuovo in bob, con 5 palle in più.");
-}
-
-TEST_CASE("a player's commands closer than the gap are not answered") {
-    CHECK_FALSE(command_too_soon("tg:1", 100, 3));
-    CHECK(command_too_soon("tg:1", 101, 3));
-    CHECK(command_too_soon("tg:1", 102, 3));
-    CHECK_FALSE(command_too_soon("tg:1", 103, 3));
-    CHECK_FALSE(command_too_soon("tg:2", 103, 3));
-    CHECK_FALSE(command_too_soon("tg:2", 103, 0));
-}
-
-TEST_CASE("whoever only dreamt of a ride is told when somebody else got there") {
-    RaidEvent event;
-    event.kind = RaidEvent::Kind::fooled;
-    event.raider = "bob";
-    event.target = "alice";
-    CHECK(raid_event_reply(event) ==
-          "bob eri così stanco che hai solo sognato di partire: non ti sei mai mosso da casa!");
 }
 
 TEST_CASE("the raids tell what happened") {
@@ -722,7 +629,6 @@ TEST_CASE("the raids tell what happened") {
 TEST_CASE("the profile shows where a player stands") {
     const TestPaths paths{"profile-command-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -753,9 +659,7 @@ TEST_CASE("the profile shows where a player stands") {
     CHECK(mine.contains("\na casa, in @Alice\n"));
     /* The balloon stays out of it, worn or not. */
     CHECK_FALSE(mine.contains("🎈"));
-    CHECK(mine.contains("\n3 citazioni\n"));
-    /* Then her story: seen for the first time just now. */
-    CHECK(mine.ends_with("\n📜 con noi da oggi"));
+    CHECK(mine.ends_with("\n3 citazioni"));
 
     /* The same card, seen by somebody else, with the name as it is written on that platform. */
     CHECK(command_dispatch(bob, "/profile @Alice") == mine);
@@ -775,7 +679,6 @@ TEST_CASE("the profile shows where a player stands") {
 TEST_CASE("the help lists the commands, and of the We lines only the one for the place") {
     const TestPaths paths{"help-command-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -827,7 +730,6 @@ TEST_CASE("the help lists the commands, and of the We lines only the one for the
 TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
     const TestPaths paths{"emoji-command-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -1055,7 +957,6 @@ TEST_CASE("We with an emoji carries it to a player or burns it at the place") {
 TEST_CASE("a 💩 thrown at the place makes the holder \"lo smerdato\" for a day") {
     const TestPaths paths{"smeared-command-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -1118,7 +1019,6 @@ TEST_CASE("a 🇷🇺 or a 🇮🇱 is a 💩 in all but looks") {
 
     const TestPaths paths{"flag-poo-command-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -1142,7 +1042,6 @@ TEST_CASE("a 🇷🇺 or a 🇮🇱 is a 💩 in all but looks") {
 TEST_CASE("the ☢️ costs a million and starts the game over from the place") {
     const TestPaths paths{"nuke-command-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -1205,7 +1104,6 @@ TEST_CASE("the ☢️ costs a million and starts the game over from the place") 
 TEST_CASE("everybody starts with a 🎈, which is what defends him and can be bought again") {
     const TestPaths paths{"starter-balloon-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
     Storage storage{config.conquister_path, config.quotes_path};
@@ -1235,11 +1133,9 @@ TEST_CASE("everybody starts with a 🎈, which is what defends him and can be bo
 TEST_CASE("a popped 🎈 stays on the name, and a player is handed only one") {
     const TestPaths paths{"balloon-regen-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
     config.cooldown_seconds = 0;
-    config.place_closed_seconds = 0;
     const auto furniture_of_alice = [](Storage &storage) {
         const Authors all = furniture_all(storage);
         return all.count("tg:1") == 0 ? std::string{} : all.at("tg:1");
@@ -1277,7 +1173,6 @@ TEST_CASE("a 🥷 takes the claimer past the holder's 🎈") {
              << R"("equipped":{"alice":"🎈"}})";
     }
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -1298,7 +1193,6 @@ TEST_CASE("a 🥷 takes the claimer past the holder's 🎈") {
 TEST_CASE("the 🌀 is an emoji like any other: anybody hangs it, and /richiama is gone") {
     const TestPaths paths{"vortex-gone-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -1316,7 +1210,6 @@ TEST_CASE("the 🌀 is an emoji like any other: anybody hangs it, and /richiama 
 TEST_CASE("/emoji tells every emoji with a power, where it is and what can hit it") {
     const TestPaths paths{"emoji-help-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -1332,8 +1225,7 @@ TEST_CASE("/emoji tells every emoji with a power, where it is and what can hit i
     CHECK(help.contains("\n🥺 chi ti razzia ruba il 10% in meno per ognuna\n"));
     CHECK(help.contains("\n⚡ +10% di palle in @TheConquister37 per ognuno\n"));
     CHECK(help.contains("🎈 il palloncino: con te difende te, casa tua quando ci sei e @TheConquister37 quando lo "
-                        "tieni; in casa difende la casa anche quando sei fuori; bucato torna nuovo; l'unico che hai "
-                        "non si regala; uno nuovo costa "
+                        "tieni; in casa difende la casa anche quando sei fuori; bucato torna nuovo; uno nuovo costa "
                         "1000 palle. Invincibile: né bombe né furti\n"));
     CHECK(help.contains("\n💩 🇷🇺 🇮🇱 chi la prende è \"lo smerdato\" per 1 giorno\n"));
     CHECK(help.starts_with("Emoji con un potere\n\nHai due posti per le emoji: con te (5 posti), accanto al nome, e la "
@@ -1349,7 +1241,6 @@ TEST_CASE("/emoji tells every emoji with a power, where it is and what can hit i
 TEST_CASE("/emoji with emoji after it tells just those, one line each") {
     const TestPaths paths{"emoji-glossary-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -1376,7 +1267,6 @@ TEST_CASE("/emoji with emoji after it tells just those, one line each") {
 TEST_CASE("the old We lines only say which command does what they did") {
     const TestPaths paths{"old-we-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -1415,7 +1305,6 @@ TEST_CASE("the old We lines only say which command does what they did") {
 TEST_CASE("the quotes are open to the admins as well as to the owner") {
     const TestPaths paths{"admin-command-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -1446,7 +1335,6 @@ TEST_CASE("the quotes are open to the admins as well as to the owner") {
 TEST_CASE("We with a number for yourself does nothing") {
     const TestPaths paths{"self-transfer-command-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -1468,7 +1356,6 @@ TEST_CASE("We with a number for yourself does nothing") {
 TEST_CASE("/burn with a number destroys the palle, which are no longer brought to the place") {
     const TestPaths paths{"burn-command-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -1498,7 +1385,6 @@ TEST_CASE("/burn with a number destroys the palle, which are no longer brought t
 TEST_CASE("We with a number for somebody else sends the palle to them") {
     const TestPaths paths{"gift-command-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -1529,7 +1415,6 @@ TEST_CASE("We with a number for somebody else sends the palle to them") {
 TEST_CASE("a quote about what the owner has banned is turned away") {
     const TestPaths paths{"banned-quote-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -1563,7 +1448,6 @@ TEST_CASE("a bought emoji follows the name everywhere") {
                 R"("telegram_ids":{"alice":1}})";
     }
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -1626,7 +1510,6 @@ TEST_CASE("the owner turns the prices off for himself, not for everyone") {
                 R"("telegram_ids":{"alice":1,"norelec":2}})";
     }
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -1698,7 +1581,6 @@ TEST_CASE("everything costs its list price, however rich the group is") {
                 R"("quotes_added":{},"telegram_ids":{"d":1}})";
     }
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -1716,7 +1598,6 @@ TEST_CASE("everything costs its list price, however rich the group is") {
 TEST_CASE("/avventura is another way to write We @TheConquister37") {
     const TestPaths paths{"adventure-command-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -1735,7 +1616,6 @@ TEST_CASE("/avventura is another way to write We @TheConquister37") {
 TEST_CASE("/buy is another way to write We yourname emoji, on Telegram and on IRC") {
     const TestPaths paths{"buy-command-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -1762,7 +1642,6 @@ TEST_CASE("/buy is another way to write We yourname emoji, on Telegram and on IR
 TEST_CASE("/raid robs, /give makes a present of anything, /throw lands what is thrown") {
     const TestPaths paths{"verbs-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -1814,7 +1693,6 @@ TEST_CASE("/raid robs, /give makes a present of anything, /throw lands what is t
 TEST_CASE("/burn takes emoji and palle out of the game, and what is thrown hits nobody") {
     const TestPaths paths{"burn-command-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -1857,7 +1735,6 @@ TEST_CASE("/burn takes emoji and palle out of the game, and what is thrown hits 
 TEST_CASE("/back takes him home, /move swaps two slots and nothing else") {
     const TestPaths paths{"home-move-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -1887,7 +1764,6 @@ TEST_CASE("/back takes him home, /move swaps two slots and nothing else") {
 TEST_CASE("/take puts an emoji on him, /store back in the house, and both tell what it is worth") {
     const TestPaths paths{"take-store-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;
@@ -1948,7 +1824,6 @@ TEST_CASE("/take puts an emoji on him, /store back in the house, and both tell w
 TEST_CASE("/house shows the house slot by slot, with its numbers") {
     const TestPaths paths{"house-command-test"};
     AppConfig config;
-    config.find_percent = 0;
     config.starter_balloon = false;
     config.conquister_path = paths.conquister;
     config.quotes_path = paths.quotes;

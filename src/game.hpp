@@ -84,7 +84,7 @@ inline constexpr Power fire{"🔥", PowerKind::carried, "when a 🧊 hits him",
 inline constexpr Power hourglass{"⏳", PowerKind::carried, "when a 🎈 holds off his attempt at the place",
                                  "each takes a share off the penalty he is left with"};
 /* The one that works in either place: on him it guards him wherever he is, kept in the house it guards
-   the house even while he is out. His only one is his own, never handed to anybody. */
+   the house even while he is out. */
 inline constexpr Power balloon{"🎈", PowerKind::carried, "when somebody tries to get past it",
                                "holds off whoever comes for his place or his house until it pops, then is as good as new",
                                true};
@@ -99,52 +99,6 @@ inline constexpr std::array powers{power::pleading, power::rocket, power::bolt, 
                                    power::ice,      power::fire,    power::hourglass,
                                    power::dino,     power::salt};
 
-/* The longer a holder stays in @TheConquister37, the sleepier he gets: a palla a second for the first two
-   hours, half of it until the sixth, a quarter after. */
-inline constexpr std::int64_t drowsy_seconds = 2 * 60 * 60;
-inline constexpr std::int64_t sleepy_seconds = 6 * 60 * 60;
-
-/* The raids got through that the group celebrates. */
-inline constexpr std::array<std::int64_t, 7> raid_milestones{100, 250, 500, 1000, 2500, 5000, 10000};
-/* Setting off at least this long after coming home, a player may find between the two on the way. */
-inline constexpr std::int64_t find_rest_seconds = 10 * 60;
-inline constexpr std::int64_t find_least = 100;
-inline constexpr std::int64_t find_most = 500;
-
-/* Playing on without a pause this long, a player gets tired; a pause as long sends him to sleep and he
-   wakes rested. Tired, every two hours more he dreams a fifth more of his rides, up to three fifths. */
-inline constexpr std::int64_t pause_seconds = 15 * 60;
-inline constexpr std::int64_t tired_step_seconds = 2 * 60 * 60;
-inline constexpr std::int64_t tired_step_percent = 20;
-inline constexpr std::int64_t tired_most_percent = 60;
-
-/* What a player playing on for hours may be asked, which takes somebody reading to answer: the emoji shown
-   and the names it goes by, the first the one it is told by. */
-struct Riddle {
-    std::string_view emoji;
-    std::string_view names;
-};
-inline constexpr std::array<Riddle, 10> roads{{
-    {"🌉", "ponte"}, {"🌲", "bosco"}, {"🏞️", "fiume"}, {"⛰️", "collina"}, {"🕳️", "grotta"},
-    {"🗼", "torre"}, {"🌾", "campo"}, {"🏚️", "rovine"}, {"🏜️", "deserto"}, {"🛤️", "binari"},
-}};
-inline constexpr std::array<Riddle, 14> fruits{{
-    {"🍎", "mela"}, {"🍐", "pera"}, {"🍊", "arancia|arancio|mandarino"}, {"🍋", "limone"}, {"🍌", "banana"},
-    {"🍉", "anguria|cocomero"}, {"🍇", "uva"}, {"🍓", "fragola|fragole"}, {"🍒", "ciliegie|ciliegia|ciliege"},
-    {"🍑", "pesca"}, {"🍍", "ananas"}, {"🥝", "kiwi"}, {"🥥", "cocco|noce di cocco"}, {"🍈", "melone"},
-}};
-/* How long a fork or the guard waits for an answer, and a dropped bag for somebody to pick it up. */
-inline constexpr std::int64_t answer_seconds = 3 * 60;
-inline constexpr std::int64_t bag_seconds = 2 * 60;
-inline constexpr std::int64_t bag_least = 500;
-inline constexpr std::int64_t bag_most = 2000;
-/* The wanderer drops his bag in front of somebody who did something this recently. */
-inline constexpr std::int64_t wanderer_audience_seconds = 60 * 60;
-
-/* The name a riddle is told by, and whether a word is one of its names. */
-[[nodiscard]] std::string_view riddle_name(const Riddle &riddle);
-[[nodiscard]] bool names_riddle(const Riddle &riddle, std::string_view word);
-
 /* How long a 🧂 remembers a raider: one who reaches the same house again within it pays the salt. */
 inline constexpr std::int64_t salt_seconds = 5 * 60;
 
@@ -153,11 +107,8 @@ inline constexpr std::int64_t salt_seconds = 5 * 60;
 /* The power an emoji has, or nothing for one that only hangs there. */
 [[nodiscard]] const Power *power_of(std::string_view emoji);
 
-/* frozen: a 🧊 hit him not long ago. closed: a 🎈 held somebody off a moment ago, and the place lets
-   nobody try for a while. */
-/* guarded: the guard at the door asks him the name of a fruit first. shut: he did not give it in time, and
-   the door stays shut on him for a penalty. */
-enum class ClaimStatus { taken, already_held, defended, cooldown, travelling, frozen, closed, guarded, shut };
+/* frozen: a 🧊 hit him not long ago. */
+enum class ClaimStatus { taken, already_held, defended, cooldown, travelling, frozen };
 
 struct ClaimResult {
     ClaimStatus status = ClaimStatus::taken;
@@ -182,16 +133,10 @@ struct ClaimResult {
     std::int64_t penalty_seconds = 0;
     /* travelling: how long before the claimer is home again. */
     std::int64_t travel_seconds = 0;
-    /* guarded: the fruit the guard shows him. */
-    std::string guard_fruit;
     /* taken: what the kicked holder's ⚡ made the hold worth in percent, zero when there was none. */
     std::int64_t lightning = 0;
     /* taken: what the house of the day was worth to the kicked holder, 100 when it was indifferent. */
     int zodiac_percent = 100;
-    /* taken: he tried again before his penalty was over, so he only dreamt of getting in; nothing changed. */
-    bool phantom = false;
-    /* taken for real: whoever only dreamt of getting in meanwhile, who finds out now. */
-    std::vector<std::string> woken;
 };
 
 /* A line meant for home, written from @TheConquister37, takes him home first: what the hold he gave
@@ -259,8 +204,6 @@ enum class RaidStatus {
     no_such_emoji,
     no_room,
     hands_full,
-    /* The emoji is a 🎈 and the only one he has: the one everybody is handed is his own, not to pass on. */
-    own_balloon,
     /* A 🧊 hit him not long ago: he cannot set off until he thaws. */
     frozen
 };
@@ -325,20 +268,6 @@ struct RaidRules {
     std::int64_t frozen_seconds = 300;
     /* How much of the time a 🧊 freezes him each 🔥 he has with him melts away, in percent: they add up. */
     std::int64_t fire_percent = 0;
-    /* The breath a player back from a ride needs before setting off again, drawn between the two, and drawn
-       again whenever he tries too soon; nothing when the longest is 0. */
-    std::int64_t rest_min_seconds = 0;
-    std::int64_t rest_max_seconds = 0;
-    /* The chance, in percent, that setting off rested he finds palle on the way. */
-    std::int64_t find_percent = 0;
-    /* How long a player can play without a pause before some of his rides are only dreamt; never when 0. */
-    std::int64_t tired_seconds = 0;
-    /* How long a player can play without a pause before his rides may come to a fork, and the chance in
-       percent that one does; never when either is 0. */
-    std::int64_t check_seconds = 0;
-    std::int64_t fork_percent = 0;
-    /* How long on average between two visits of the wanderer; never when 0. */
-    std::int64_t wanderer_seconds = 0;
 };
 
 struct RaidResult {
@@ -353,32 +282,15 @@ struct RaidResult {
     int zodiac_percent = 100;
     /* What is left after the palle taken along were picked up, or what there was when they were too few. */
     std::int64_t score = 0;
-    /* started: he had not got his breath back, so it only seems to him he left; nothing moved. */
-    bool phantom = false;
-    /* started: the palle he found on the way, setting off rested; already his. */
-    std::int64_t found = 0;
-    /* started: the two roads of the fork he came to, told by emoji and name; empty when there is none. */
-    std::string fork_left;
-    std::string fork_right;
 };
 
 struct RaidEvent {
     /* gone: a child that lived all its ages leaves the target's name; gift_emoji is what it was last.
        born: a child conceived by a 💦 comes into the world. The raider is the father, the target the
        mother; with no raider its parents are two grown-up children of the target's own house; gift_emoji is the child, blown what it took the slot of when the name was full. */
-    /* fooled: the raider set off too soon, only dreamt of going for the target, and finds out now that
-       somebody else got there. */
-    enum class Kind { stolen, delivered, returned, born, gone, fooled };
+    enum class Kind { stolen, delivered, returned, born, gone };
 
     Kind kind = Kind::stolen;
-    /* returned: which of the ways of telling it, drawn so that no reply reads the same every time. */
-    std::size_t variant = 0;
-    /* returned: he never picked a road at the fork, got lost and is home with nothing. */
-    bool lost = false;
-    /* stolen: the raids of his that got through, when this one makes a round number; and whether it took more
-       than any before it. */
-    std::int64_t milestone = 0;
-    bool record = false;
     std::string raider;
     std::string target;
     std::int64_t loot = 0;
@@ -506,51 +418,7 @@ struct ClaimRules {
     std::int64_t ninja = 0;
     /* How much of the penalty each ⏳ on the claimer's name takes off, in percent: they add up. */
     std::int64_t hourglass = 0;
-    /* How long a 🎈 that held somebody off keeps everybody out, give or take a quarter; 0 never. */
-    std::int64_t closed_seconds = 0;
-    /* How long a player can play without a pause before the guard asks him something; never when 0. */
-    std::int64_t check_seconds = 0;
 };
-
-/* An answer to what the game asked: right lets him on, a wrong word or one too late does not. */
-enum class AnswerStatus { nothing, right, wrong, late };
-
-struct AnswerResult {
-    AnswerStatus status = AnswerStatus::nothing;
-    /* A fork: the two roads, the one he took, what he found on it and how long before he gets there. */
-    std::string left;
-    std::string right;
-    std::string chosen;
-    std::int64_t found = 0;
-    std::int64_t seconds = 0;
-    /* The guard: the penalty for a wrong or late name. */
-    std::int64_t penalty_seconds = 0;
-};
-
-/* The road a player at a fork takes: the ride goes on from where it stopped, he is awake again, and on
-   the lucky road he finds palle. A word naming neither road is wrong and leaves him there. */
-[[nodiscard]] AnswerResult raid_road(Storage &storage, std::int64_t user_id, const std::string &username,
-                                     std::string_view word, std::int64_t now);
-
-/* The name a player gives the guard at the door: the right one, in time, wakes him up and lets him try
-   to get in again; anything else shuts the door on him for a penalty. */
-[[nodiscard]] AnswerResult guard_answer(Storage &storage, std::int64_t user_id, const std::string &username,
-                                        std::string_view word, std::int64_t now, const ClaimRules &rules = {});
-
-/* A wanderer who dropped a bag of palle in front of a player who was around a moment ago. */
-struct Wanderer {
-    std::string near;
-    bool near_on_telegram = false;
-    std::int64_t bag = 0;
-};
-
-/* Whether the wanderer comes by now: every so often, never when nobody is around or a bag is still there.
-   A bag nobody picked up in time goes away with him. */
-[[nodiscard]] std::optional<Wanderer> wanderer_due(Storage &storage, std::int64_t now, const RaidRules &rules);
-
-/* The bag the first who asks picks up, whoever he is: what was in it, 0 when there was none. */
-[[nodiscard]] std::int64_t bag_collect(Storage &storage, std::int64_t user_id, const std::string &username,
-                                       std::int64_t now);
 
 [[nodiscard]] ClaimResult conquister_claim(
     Storage &storage,
@@ -593,14 +461,6 @@ struct Profile {
     std::string heading;
     bool returning = false;
     std::int64_t home_in = 0;
-    /* His story: since when he plays (0 when unknown), his raids that got through, the most one took, his
-       longest hold, and the player he robbed most, with how many times. */
-    std::int64_t joined = 0;
-    std::int64_t raids_won = 0;
-    std::int64_t best_loot = 0;
-    std::int64_t longest_hold = 0;
-    std::string foe;
-    std::int64_t foe_raids = 0;
 };
 
 /* A player named as on that platform; nothing for a name nobody plays under. */
@@ -622,9 +482,7 @@ struct Profile {
 [[nodiscard]] std::string player_seen(Storage &storage, std::int64_t user_id, const std::string &username,
                                       std::string_view account_name = {},
                                       /* A player seen for the first time is handed his 🎈, if it fits. */
-                                      std::size_t furniture_limit = 10,
-                                      /* Noted as when he was first seen; 0 notes nothing. */
-                                      std::int64_t now = 0);
+                                      std::size_t furniture_limit = 10);
 /* Everybody starts with a 🎈: hands one, once, to every known player who has none and a free slot. */
 void balloons_hand_out(Storage &storage, std::size_t furniture_limit);
 /* Sorts what saves from before had on a single name: the 🎈 and what works on him go on him, as many as

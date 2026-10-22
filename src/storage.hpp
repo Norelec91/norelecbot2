@@ -68,15 +68,6 @@ struct Raid {
     std::string gift_emoji;
     /* The emoji is a present: hung on the target as it is, even one that is meant to be thrown. */
     bool intact = false;
-    /* A fork in the road, until fork_until: nothing moves until he picks one of the two roads, by index in
-       roads, and the lucky one has palle on it; asked at fork_asked. */
-    std::int64_t fork_until = 0;
-    std::int64_t fork_asked = 0;
-    std::int64_t fork_left = 0;
-    std::int64_t fork_right = 0;
-    std::int64_t fork_lucky = 0;
-    /* He never picked one: lost, he is home with nothing. Only while it is settled, never saved. */
-    bool lost = false;
 
     bool operator==(const Raid &) const = default;
 };
@@ -168,39 +159,6 @@ struct ConquisterState {
     /* The players named "il pugliese" by hand, mapped to when: each keeps it until the season ends, which is
        when a ☢️ starts the whole game over. */
     Counters pugliesi{};
-    /* The players just back from a ride, mapped to the instant they have their breath back: until then they
-       cannot set off again. */
-    Counters rests{};
-    /* The players who set off too soon and only dreamt of it, mapped to the player they think they went for:
-       they find out when somebody else really gets there. */
-    Authors phantoms{};
-    /* Until when nobody may try @TheConquister37: a 🎈 that just held somebody off keeps everybody out a
-       while, so that two names cannot take turns at wearing it down. */
-    std::int64_t closed_until = 0;
-    /* The players who tried @TheConquister37 again too soon and only dreamt of getting in, mapped to when:
-       they find out when somebody else really does. */
-    Counters claim_dreams{};
-    /* Each player's story, which no new season wipes: when he was first seen, how many raids of his got
-       through, the most one of them took, his longest hold, and how many times he robbed each player, keyed
-       by the two keys with a tab between them. */
-    Counters joined{};
-    Counters raids_won{};
-    Counters best_loot{};
-    Counters longest_hold{};
-    Counters raid_counts{};
-    /* When each player last came home from a ride: setting off long after it, he may find something. */
-    Counters last_back{};
-    /* Since when each player has been playing without a pause, and when he last did something. */
-    Counters awake_since{};
-    Counters last_act{};
-    /* The fruit the guard at the door of @TheConquister37 showed each player, and until when he waits for its name. */
-    Authors guard_fruits{};
-    Counters guard_until{};
-    /* When the wanderer comes by next, and the bag he dropped: how much, until when, and in front of whom. */
-    std::int64_t wanderer_next = 0;
-    std::int64_t bag = 0;
-    std::int64_t bag_until = 0;
-    std::string bag_near{};
 
     bool operator==(const ConquisterState &) const = default;
 };

@@ -88,13 +88,6 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
         .salt_percent = config.salt_percent,
         .frozen_seconds = config.frozen_seconds,
         .fire_percent = config.fire_percent,
-        .rest_min_seconds = config.rest_min_seconds,
-        .rest_max_seconds = config.rest_max_seconds,
-        .find_percent = config.find_percent,
-        .tired_seconds = config.tired_seconds,
-        .check_seconds = config.check_seconds,
-        .fork_percent = config.fork_percent,
-        .wanderer_seconds = config.wanderer_seconds,
     };
     /* The news waits for the second round: by then IRC has had a tick to connect. */
     int rounds = 0;
@@ -114,13 +107,6 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
             }
         } catch (const std::exception &error) {
             log_warning("A raid could not be settled: {}", error.what());
-        }
-        try {
-            if (const std::optional<Wanderer> wanderer = wanderer_due(storage, seconds_now(), rules)) {
-                announce(config, wanderer_reply(*wanderer));
-            }
-        } catch (const std::exception &error) {
-            log_warning("The wanderer could not come by: {}", error.what());
         }
         for (int waited = 0; waited < tick.count() && !stop.load(std::memory_order_relaxed); ++waited) {
             std::this_thread::sleep_for(std::chrono::seconds{1});

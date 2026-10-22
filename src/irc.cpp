@@ -29,7 +29,6 @@
 #include <chrono>
 #include <cstring>
 #include <deque>
-#include <format>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -368,12 +367,6 @@ void irc_run(Storage &storage, const AppConfig &config, const std::atomic<bool> 
                     return text::equals_ignore_case(admin, nick);
                 }),
             };
-            if (command_is_for_bot(text) &&
-                command_too_soon(std::format("irc:{}", account.empty() ? nick : account), seconds_now(),
-                                 config.command_gap_seconds)) {
-                log_info("command dropped user=irc:{} too soon", nick);
-                return std::optional<std::string>{};
-            }
             const std::optional<std::string> reply = command_dispatch(command, text);
             /* Answered in the group by the bot itself, so it reads there as Telegram writes: whole
                lines and working mentions, instead of the bridge's single relayed line. */

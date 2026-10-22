@@ -170,47 +170,6 @@ TEST_CASE("a balloon defends the holder until it pops") {
     CHECK(again.status == ClaimStatus::taken);
 }
 
-TEST_CASE("the longer the hold, the sleepier the holder: full pay for two hours, half until six, a quarter after") {
-    const TestPaths paths{"drowsy-test"};
-    {
-        std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":{"user_id":1,"username":"alice","since":0},"scores":{},"quotes_added":{}})";
-    }
-    Storage storage{paths.conquister, paths.quotes};
-    const ClaimResult kicked = conquister_claim(storage, 2, "bob", 8 * 60 * 60);
-    REQUIRE(kicked.status == ClaimStatus::taken);
-    CHECK(kicked.earned == 2 * 60 * 60 + 4 * 60 * 60 / 2 + 2 * 60 * 60 / 4);
-    /* The first two hours are paid in full. */
-    const ClaimResult short_hold = conquister_claim(storage, 3, "carol", 8 * 60 * 60 + 3600);
-    REQUIRE(short_hold.status == ClaimStatus::taken);
-    CHECK(short_hold.earned == 3600);
-}
-
-TEST_CASE("a 🎈 that held somebody off closes the place to everybody a while") {
-    const TestPaths paths{"closed-test"};
-    Storage storage{paths.conquister, paths.quotes};
-    const ClaimRules rules{.cooldown_seconds = 300, .signs = {}, .closed_seconds = 60};
-    std::optional<ClaimResult> held;
-    for (int attempt = 0; attempt < 40 && !held; ++attempt) {
-        storage.transaction([](StorageSession &session) {
-            ConquisterState &state = session.state();
-            state.current = Holder{.user_id = 0, .username = "alice", .since = 0};
-            state.equipped["alice"] = "🎈";
-            state.balloons.clear();
-            state.cooldowns.clear();
-            state.closed_until = 0;
-            return 0;
-        });
-        if (ClaimResult result = conquister_claim(storage, 0, "bob", 100, rules); result.status == ClaimStatus::defended) {
-            held = result;
-        }
-    }
-    REQUIRE(held);
-    /* Somebody else is kept out too, for between three quarters of it and a quarter more. */
-    CHECK(conquister_claim(storage, 0, "carol", 144, rules).status == ClaimStatus::closed);
-    CHECK(conquister_claim(storage, 0, "carol", 176, rules).status != ClaimStatus::closed);
-}
-
 TEST_CASE("a penalty blocks the next attempts") {
     const TestPaths paths{"cooldown-test"};
     {
@@ -221,19 +180,12 @@ TEST_CASE("a penalty blocks the next attempts") {
     }
     Storage storage{paths.conquister, paths.quotes};
 
-    /* Too soon, he only dreams of getting in: he is told he did, and alice is still there. */
     const ClaimResult blocked = conquister_claim(storage, 2, "bob", 700, ClaimRules{.cooldown_seconds = 300, .signs = {}});
-    CHECK(blocked.status == ClaimStatus::taken);
-    CHECK(blocked.phantom);
-    CHECK(blocked.previous_username == "alice");
-    CHECK(blocked.earned == 0);
-    CHECK(conquister_user(storage, "alice")->in_conquister);
+    CHECK(blocked.status == ClaimStatus::cooldown);
+    CHECK(blocked.penalty_seconds == 300);
 
-    /* Whoever really gets in wakes him up. */
     const ClaimResult others = conquister_claim(storage, 3, "carol", 700, ClaimRules{.cooldown_seconds = 300, .signs = {}});
     CHECK(others.status == ClaimStatus::taken);
-    CHECK_FALSE(others.phantom);
-    CHECK(others.woken == std::vector<std::string>{"bob"});
     CHECK(raid_start(storage, 3, "carol", "carol", 900, RaidRules{}).status == RaidStatus::left_place);
 
     const ClaimResult expired = conquister_claim(storage, 2, "bob", 1000, ClaimRules{.cooldown_seconds = 300, .signs = {}});
@@ -249,12 +201,10 @@ TEST_CASE("a failed balloon attempt hands out the penalty") {
 
     const ClaimResult attack = conquister_claim(storage, 2, "bob", 3000, ClaimRules{.cooldown_seconds = 300, .signs = {}});
     if (attack.status == ClaimStatus::defended) {
-        /* Never the same twice: between half of it and all of it. */
-        CHECK(attack.penalty_seconds >= 150);
-        CHECK(attack.penalty_seconds <= 300);
+        CHECK(attack.penalty_seconds == 300);
         const ClaimResult again = conquister_claim(storage, 2, "bob", 3100, ClaimRules{.cooldown_seconds = 300, .signs = {}});
-        CHECK(again.status == ClaimStatus::taken);
-        CHECK(again.phantom);
+        CHECK(again.status == ClaimStatus::cooldown);
+        CHECK(again.penalty_seconds == 200);
     } else {
         CHECK(attack.status == ClaimStatus::taken);
         CHECK(attack.balloon_popped);
@@ -2058,9 +2008,8 @@ TEST_CASE("every ⏳ with the claimer takes a share off the penalty of a failed 
     /* Three of them: three fifths off the five minutes. */
     const std::optional<ClaimResult> bob = failed("bob", 100);
     REQUIRE(bob);
-    CHECK(bob->penalty_seconds >= 60);
-    CHECK(bob->penalty_seconds <= 120);
-    CHECK(conquister_claim(storage, 0, "bob", 150, rules).phantom);
+    CHECK(bob->penalty_seconds == 120);
+    CHECK(conquister_claim(storage, 0, "bob", 200, rules).status == ClaimStatus::cooldown);
     /* Five of them: no wait at all. */
     const std::optional<ClaimResult> carol = failed("carol", 100);
     REQUIRE(carol);
@@ -2122,7 +2071,7 @@ TEST_CASE("an emoji is carried to another player, or burnt at the place") {
     {
         std::ofstream file{paths.conquister, std::ios::binary};
         file << R"({"current":null,"scores":{"alice":10,"bob":10},"quotes_added":{},)"
-             << R"("furniture":{"alice":"🍕🧀"},"equipped":{"alice":"🚀"}})";
+             << R"("furniture":{"alice":"🍕🧀"},"equipped":{"alice":"🎈"}})";
     }
     Storage storage{paths.conquister, paths.quotes};
     const auto hung = [&storage](const std::string &player) {
@@ -2160,14 +2109,14 @@ TEST_CASE("an emoji is carried to another player, or burnt at the place") {
           RaidStatus::no_room);
     CHECK(house_of(storage, "alice") == "[]🧀");
     /* ...unless it goes on him, who is home with room for it. */
-    REQUIRE(raid_start(storage, 0, "alice", "bob", 12, quick_rides(), RaidTargetKind::any, 0, "🚀", true).status ==
+    REQUIRE(raid_start(storage, 0, "alice", "bob", 12, quick_rides(), RaidTargetKind::any, 0, "🎈", true).status ==
             RaidStatus::started);
     CHECK(hung("alice").empty());
     const std::vector<RaidEvent> worn = raid_due(storage, 17, quick_rides());
     REQUIRE(worn.size() == 1);
     CHECK(worn[0].gift_with_him);
-    CHECK(worn[0].target_emoji == "🚀");
-    CHECK(hung("bob") == "🚀");
+    CHECK(worn[0].target_emoji == "🎈");
+    CHECK(hung("bob") == "🎈");
     REQUIRE(raid_due(storage, 22, quick_rides()).size() == 1);
 
     /* One that fills up on the way sends it back with her, on her. */
@@ -2219,329 +2168,6 @@ TEST_CASE("an emoji is carried to another player, or burnt at the place") {
     CHECK(furniture_burn(storage, "alice", "🍕").shown == "[]⚡⚡⚡⚡");
     CHECK(house_of(storage, "alice").empty());
     CHECK(furniture_burn(storage, "alice", "🎺").status == FurnitureBurnStatus::not_owned);
-}
-
-TEST_CASE("his only balloon is his own: it goes to nobody") {
-    const TestPaths paths{"own-balloon-test"};
-    {
-        std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":null,"scores":{"alice":10,"bob":10,"carol":10},"quotes_added":{},)"
-             << R"("furniture":{"carol":"🎈"},"equipped":{"alice":"🎈","bob":"🎈","carol":"🎈"}})";
-    }
-    Storage storage{paths.conquister, paths.quotes};
-
-    /* The one she was handed stays with her, given or delivered. */
-    CHECK(raid_start(storage, 0, "alice", "bob", 0, quick_rides(), RaidTargetKind::any, 0, "🎈").status ==
-          RaidStatus::own_balloon);
-    CHECK(raid_start(storage, 0, "alice", "bob", 0, quick_rides(), RaidTargetKind::any, 0, "🎈", true).status ==
-          RaidStatus::own_balloon);
-    /* With one on him and one in the house, one of them can go. */
-    REQUIRE(raid_start(storage, 0, "carol", "bob", 0, quick_rides(), RaidTargetKind::any, 0, "🎈").status ==
-            RaidStatus::started);
-}
-
-TEST_CASE("leaving again too soon after a ride only seems to work, until somebody else gets there") {
-    const TestPaths paths{"breath-test"};
-    {
-        std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":null,"scores":{"alice":30,"bob":50,"carol":0},"quotes_added":{}})";
-    }
-    Storage storage{paths.conquister, paths.quotes};
-    RaidRules rules = quick_rides();
-    rules.rest_min_seconds = 20;
-    rules.rest_max_seconds = 60;
-    const auto riding = [&storage] {
-        return storage.transaction([](StorageSession &session) { return session.state().raids.size(); });
-    };
-    const auto score = [&storage](const std::string &player) {
-        return storage.transaction([&player](StorageSession &session) { return session.state().scores.at(player); });
-    };
-
-    REQUIRE(raid_start(storage, 0, "alice", "bob", 0, rules).status == RaidStatus::started);
-    static_cast<void>(raid_due(storage, 1000, rules));
-    const std::int64_t home = 1000;
-    REQUIRE(riding() == 0);
-    const std::int64_t before = score("alice");
-
-    /* Back this instant: she is told she left, as she would have been, and nothing moved. */
-    const RaidResult dreamt = raid_start(storage, 0, "alice", "bob", home, rules);
-    CHECK(dreamt.status == RaidStatus::started);
-    CHECK(dreamt.phantom);
-    CHECK(dreamt.target == "bob");
-    CHECK(dreamt.seconds > 0);
-    CHECK(riding() == 0);
-    /* Trying too soon starts the breath over, and what she takes along never leaves either. */
-    CHECK(raid_start(storage, 0, "alice", "bob", home + 19, rules, RaidTargetKind::any, 10).phantom);
-    CHECK(score("alice") == before);
-    CHECK(raid_start(storage, 0, "alice", "bob", home + 38, rules).phantom);
-    CHECK(riding() == 0);
-
-    /* Nobody else is kept waiting, and the one who really gets there wakes her up. */
-    REQUIRE(raid_start(storage, 0, "carol", "bob", home + 40, rules).status == RaidStatus::started);
-    const std::vector<RaidEvent> settled = raid_due(storage, home + 2000, rules);
-    const auto woken = std::ranges::count_if(settled, [](const RaidEvent &event) {
-        return event.kind == RaidEvent::Kind::fooled && event.raider == "alice" && event.target == "bob";
-    });
-    CHECK(woken == 1);
-    CHECK(std::ranges::none_of(raid_due(storage, home + 2001, rules), [](const RaidEvent &event) {
-        return event.kind == RaidEvent::Kind::fooled;
-    }));
-
-    /* Left alone, the breath is over within the longest. */
-    const RaidResult real = raid_start(storage, 0, "alice", "bob", home + 2000, rules);
-    CHECK(real.status == RaidStatus::started);
-    CHECK_FALSE(real.phantom);
-    CHECK(riding() == 1);
-}
-
-TEST_CASE("every player has a story: raids got through, the biggest, the longest hold, the favourite target") {
-    const TestPaths paths{"story-test"};
-    {
-        std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":null,"scores":{"alice":0,"bob":100000},"quotes_added":{},)"
-             << R"("raids_won":{"alice":99},"best_loot":{"alice":1}})";
-    }
-    Storage storage{paths.conquister, paths.quotes};
-    REQUIRE(raid_start(storage, 0, "alice", "bob", 0, quick_rides()).status == RaidStatus::started);
-    const std::vector<RaidEvent> arrival = raid_due(storage, 1000, quick_rides());
-    const auto stolen = std::ranges::find_if(arrival, [](const RaidEvent &event) {
-        return event.kind == RaidEvent::Kind::stolen;
-    });
-    REQUIRE(stolen != arrival.end());
-    REQUIRE(stolen->loot > 1);
-    /* The hundredth that got through, and the most one ever took. */
-    CHECK(stolen->milestone == 100);
-    CHECK(stolen->record);
-
-    /* A hold goes in it too, as long as it lasted. */
-    REQUIRE(conquister_claim(storage, 0, "alice", 2000).status == ClaimStatus::taken);
-    REQUIRE(conquister_claim(storage, 0, "bob", 2500).status == ClaimStatus::taken);
-
-    const Profile profile = player_profile_of(storage, "alice", 3000);
-    CHECK(profile.raids_won == 100);
-    CHECK(profile.best_loot == stolen->loot);
-    CHECK(profile.longest_hold == 500);
-    CHECK(profile.foe == "bob");
-    CHECK(profile.foe_raids == 1);
-    /* Seen first when she says something to the bot. */
-    CHECK(player_seen(storage, 0, "alice", {}, 10, 5000) == "alice");
-    CHECK(player_profile_of(storage, "alice", 5000).joined == 5000);
-    CHECK(player_seen(storage, 0, "alice", {}, 10, 9000) == "alice");
-    CHECK(player_profile_of(storage, "alice", 9000).joined == 5000);
-}
-
-TEST_CASE("setting off rested, a player may find palle on the way; never in a hurry") {
-    const TestPaths paths{"find-test"};
-    {
-        std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":null,"scores":{"alice":0,"bob":0},"quotes_added":{}})";
-    }
-    Storage storage{paths.conquister, paths.quotes};
-    RaidRules rules = quick_rides();
-    rules.find_percent = 100;
-    const RaidResult rested = raid_start(storage, 0, "alice", "bob", 0, rules);
-    REQUIRE(rested.status == RaidStatus::started);
-    CHECK(rested.found >= find_least);
-    CHECK(rested.found <= find_most);
-    CHECK(conquister_user(storage, "alice")->score == rested.found);
-    static_cast<void>(raid_due(storage, 1000, rules));
-    /* Just back, nothing. */
-    const RaidResult hurried = raid_start(storage, 0, "alice", "bob", 1001, rules);
-    REQUIRE(hurried.status == RaidStatus::started);
-    CHECK(hurried.found == 0);
-}
-
-TEST_CASE("playing on for hours without a pause, a player dreams some of his rides; a pause wakes him rested") {
-    const TestPaths paths{"tired-test"};
-    {
-        std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":null,"scores":{"alice":0,"bob":0},"quotes_added":{}})";
-    }
-    Storage storage{paths.conquister, paths.quotes};
-    RaidRules rules = quick_rides();
-    rules.tired_seconds = 5 * 60 * 60;
-    rules.find_percent = 100;
-    /* A ride every ten minutes, the whole night long. */
-    std::int64_t now = 0;
-    const auto ride = [&]() {
-        const RaidResult left = raid_start(storage, 0, "alice", "bob", now, rules);
-        REQUIRE(left.status == RaidStatus::started);
-        static_cast<void>(raid_due(storage, now + 300, rules));
-        now += 600;
-        return left;
-    };
-    for (; now < rules.tired_seconds;) {
-        CHECK_FALSE(ride().phantom);
-    }
-    int dreamt = 0;
-    for (int rides = 0; rides < 40; ++rides) {
-        const RaidResult tired = ride();
-        CHECK(tired.found == 0);
-        dreamt += tired.phantom ? 1 : 0;
-    }
-    CHECK(dreamt > 0);
-    CHECK(dreamt < 40);
-    /* A quarter of an hour without doing anything is a sleep: he wakes rested, and may find palle again. */
-    now += pause_seconds;
-    const RaidResult rested = ride();
-    CHECK_FALSE(rested.phantom);
-    CHECK(rested.found > 0);
-}
-
-namespace {
-
-/* The name a road or a fruit is told by, out of "emoji name". */
-std::string word_of(const std::string &told) {
-    return told.substr(told.find(' ') + 1);
-}
-
-std::string fruit_name(const std::string &emoji) {
-    const auto fruit = std::ranges::find(fruits, std::string_view{emoji}, &Riddle::emoji);
-    REQUIRE(fruit != fruits.end());
-    return std::string{riddle_name(*fruit)};
-}
-
-/* Rides every ten minutes from 0 until the player has been at it for two hours. */
-std::int64_t play_for_two_hours(Storage &storage, const RaidRules &rules) {
-    RaidRules plain = rules;
-    plain.fork_percent = 0;
-    std::int64_t now = 0;
-    for (; now < 2 * 60 * 60; now += 600) {
-        REQUIRE(raid_start(storage, 0, "alice", "bob", now, plain).status == RaidStatus::started);
-        static_cast<void>(raid_due(storage, now + 300, plain));
-    }
-    return now;
-}
-
-}
-
-TEST_CASE("playing on for hours a ride may come to a fork: nothing moves until a road is picked") {
-    const TestPaths paths{"fork-test"};
-    {
-        std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":null,"scores":{"alice":0,"bob":5000},"quotes_added":{}})";
-    }
-    Storage storage{paths.conquister, paths.quotes};
-    RaidRules rules = quick_rides();
-    rules.check_seconds = 2 * 60 * 60;
-    rules.fork_percent = 100;
-    const std::int64_t now = play_for_two_hours(storage, rules);
-    const RaidResult left = raid_start(storage, 0, "alice", "bob", now, rules);
-    REQUIRE(left.status == RaidStatus::started);
-    REQUIRE_FALSE(left.fork_left.empty());
-    REQUIRE_FALSE(left.fork_right.empty());
-    CHECK(left.fork_left != left.fork_right);
-    /* Waiting at the fork, he never gets there. */
-    CHECK(raid_due(storage, now + 100, rules).empty());
-    CHECK(raid_road(storage, 0, "alice", "nowhere", now + 100).status == AnswerStatus::wrong);
-    CHECK(raid_road(storage, 0, "bob", word_of(left.fork_left), now + 100).status == AnswerStatus::nothing);
-    const AnswerResult took = raid_road(storage, 0, "alice", word_of(left.fork_right), now + 100);
-    REQUIRE(took.status == AnswerStatus::right);
-    CHECK(took.chosen == left.fork_right);
-    CHECK(took.seconds == left.seconds);
-    CHECK(conquister_user(storage, "alice")->score >= took.found);
-    /* The ride goes on from where it stopped. */
-    CHECK(raid_due(storage, now + 100 + left.seconds - 1, rules).empty());
-    const std::vector<RaidEvent> there = raid_due(storage, now + 100 + left.seconds, rules);
-    REQUIRE_FALSE(there.empty());
-    CHECK(there.front().kind == RaidEvent::Kind::stolen);
-}
-
-TEST_CASE("never picking a road at the fork, the raider gets lost and is home with nothing") {
-    const TestPaths paths{"fork-lost-test"};
-    {
-        std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":null,"scores":{"alice":0,"bob":5000},"quotes_added":{}})";
-    }
-    Storage storage{paths.conquister, paths.quotes};
-    RaidRules rules = quick_rides();
-    rules.check_seconds = 2 * 60 * 60;
-    rules.fork_percent = 100;
-    const std::int64_t now = play_for_two_hours(storage, rules);
-    const std::int64_t before = conquister_user(storage, "bob")->score;
-    REQUIRE_FALSE(raid_start(storage, 0, "alice", "bob", now, rules).fork_left.empty());
-    CHECK(raid_due(storage, now + answer_seconds - 1, rules).empty());
-    const std::vector<RaidEvent> home = raid_due(storage, now + answer_seconds, rules);
-    REQUIRE(home.size() == 1);
-    CHECK(home[0].kind == RaidEvent::Kind::returned);
-    CHECK(home[0].lost);
-    CHECK(home[0].loot == 0);
-    CHECK(conquister_user(storage, "bob")->score == before);
-    CHECK(raid_road(storage, 0, "alice", "ponte", now + answer_seconds + 1).status == AnswerStatus::nothing);
-}
-
-TEST_CASE("playing on for hours, the guard at the door wants the name of a fruit; giving it wakes him up") {
-    const TestPaths paths{"guard-test"};
-    {
-        std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":null,"scores":{"alice":0,"bob":5000},"quotes_added":{}})";
-    }
-    Storage storage{paths.conquister, paths.quotes};
-    RaidRules rides = quick_rides();
-    rides.check_seconds = 2 * 60 * 60;
-    ClaimRules rules;
-    rules.cooldown_seconds = 300;
-    rules.check_seconds = 2 * 60 * 60;
-    const std::int64_t now = play_for_two_hours(storage, rides);
-    const ClaimResult asked = conquister_claim(storage, 0, "alice", now, rules);
-    REQUIRE(asked.status == ClaimStatus::guarded);
-    REQUIRE_FALSE(asked.guard_fruit.empty());
-    /* Asking again gets the same fruit. */
-    CHECK(conquister_claim(storage, 0, "alice", now + 10, rules).guard_fruit == asked.guard_fruit);
-    CHECK(guard_answer(storage, 0, "alice", fruit_name(asked.guard_fruit), now + 20, rules).status ==
-          AnswerStatus::right);
-    CHECK(conquister_claim(storage, 0, "alice", now + 30, rules).status == ClaimStatus::taken);
-}
-
-TEST_CASE("a wrong fruit, or none in time, shuts the door on him for a penalty") {
-    const TestPaths paths{"guard-shut-test"};
-    {
-        std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":null,"scores":{"alice":0,"bob":5000},"quotes_added":{}})";
-    }
-    Storage storage{paths.conquister, paths.quotes};
-    RaidRules rides = quick_rides();
-    rides.check_seconds = 2 * 60 * 60;
-    ClaimRules rules;
-    rules.cooldown_seconds = 300;
-    rules.check_seconds = 2 * 60 * 60;
-    std::int64_t now = play_for_two_hours(storage, rides);
-    REQUIRE(conquister_claim(storage, 0, "alice", now, rules).status == ClaimStatus::guarded);
-    const AnswerResult wrong = guard_answer(storage, 0, "alice", "patata", now + 5, rules);
-    CHECK(wrong.status == AnswerStatus::wrong);
-    CHECK(wrong.penalty_seconds >= 150);
-    CHECK(guard_answer(storage, 0, "alice", "pera", now + 6, rules).status == AnswerStatus::nothing);
-    now += 5 + wrong.penalty_seconds;
-    REQUIRE(conquister_claim(storage, 0, "alice", now, rules).status == ClaimStatus::guarded);
-    const ClaimResult shut = conquister_claim(storage, 0, "alice", now + answer_seconds, rules);
-    CHECK(shut.status == ClaimStatus::shut);
-    CHECK(shut.penalty_seconds >= 150);
-}
-
-TEST_CASE("the wanderer drops a bag in front of somebody around, and the first who asks picks it up") {
-    const TestPaths paths{"wanderer-test"};
-    {
-        std::ofstream file{paths.conquister, std::ios::binary};
-        file << R"({"current":null,"scores":{"alice":0,"bob":0},"quotes_added":{}})";
-    }
-    Storage storage{paths.conquister, paths.quotes};
-    RaidRules rules = quick_rides();
-    rules.wanderer_seconds = 3600;
-    /* The first time he only says when he will come. */
-    CHECK_FALSE(wanderer_due(storage, 0, rules).has_value());
-    CHECK(bag_collect(storage, 0, "bob", 10) == 0);
-    /* Nobody around: he comes back later. */
-    CHECK_FALSE(wanderer_due(storage, 2 * 3600, rules).has_value());
-    REQUIRE(raid_start(storage, 0, "alice", "bob", 3 * 3600, rules).status == RaidStatus::started);
-    const std::optional<Wanderer> wanderer = wanderer_due(storage, 3 * 3600, rules);
-    REQUIRE(wanderer.has_value());
-    CHECK(wanderer->near == "alice");
-    CHECK(wanderer->bag >= bag_least);
-    CHECK(wanderer->bag <= bag_most);
-    CHECK_FALSE(wanderer_due(storage, 3 * 3600 + 1, rules).has_value());
-    CHECK(bag_collect(storage, 0, "bob", 3 * 3600 + 30) == wanderer->bag);
-    CHECK(conquister_user(storage, "bob")->score == wanderer->bag);
-    CHECK(bag_collect(storage, 0, "alice", 3 * 3600 + 31) == 0);
 }
 
 TEST_CASE("turning back mid journey only costs the road already walked") {
