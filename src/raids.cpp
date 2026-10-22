@@ -23,6 +23,8 @@ namespace norelecbot {
 namespace {
 
 constexpr std::chrono::seconds tick{5};
+/* How long the sentinel keeps a script out of the game. */
+constexpr std::int64_t block_seconds = 24 * 60 * 60;
 
 std::int64_t seconds_now() {
     return std::chrono::duration_cast<std::chrono::seconds>(
@@ -72,6 +74,11 @@ void sentinel_round(Storage &storage, const AppConfig &config, std::int64_t now)
     }
     sentinel().set_reported_day(local_day(now));
     const std::map<std::string, std::string> names = player_names(storage);
+    /* The scripts it is sure of are kept out of the game for a day, until an owner lets them back in. */
+    for (const std::string &script : sentinel().scripts(now)) {
+        sentinel().block(script, now + block_seconds);
+        log_info("Sentinel blocked user={} until={}", script, now + block_seconds);
+    }
     const std::string report = sentinel().report(now, [&names](const std::string &key) {
         const auto found = names.find(key);
         return found != names.end() ? found->second : key;

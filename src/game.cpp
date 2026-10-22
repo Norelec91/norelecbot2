@@ -2520,6 +2520,12 @@ std::map<std::string, std::string> player_names(Storage &storage) {
         for (const auto &[key, score] : state.scores) {
             names.emplace(key, display_name(state, key));
         }
+        for (const auto &[key, id] : state.telegram_ids) {
+            names.emplace(key, display_name(state, key));
+        }
+        for (const auto &[key, shown] : state.display_names) {
+            names.emplace(key, display_name(state, key));
+        }
         return names;
     });
 }

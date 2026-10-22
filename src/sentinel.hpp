@@ -32,6 +32,16 @@ public:
     /* Who looks like a script and who looks like the same person, and why. */
     [[nodiscard]] std::string report(std::int64_t now, const Names &name) const;
 
+    /* The accounts it is sure play by themselves, once it has watched a whole day. */
+    [[nodiscard]] std::vector<std::string> scripts(std::int64_t now) const;
+    /* An account kept out of the game until a time, and let back in by the owner. */
+    void block(const std::string &player, std::int64_t until);
+    bool unblock(const std::string &player);
+    /* Until when the account is kept out, 0 when it is not. */
+    [[nodiscard]] std::int64_t blocked_until(const std::string &player, std::int64_t now) const;
+    /* Whether a blocked account should be told so again: once an hour at most. */
+    [[nodiscard]] bool tell_blocked(const std::string &player, std::int64_t now);
+
     /* The day the daily report last went out, so that a restart does not send it twice. */
     [[nodiscard]] std::int64_t reported_day() const;
     void set_reported_day(std::int64_t day);
@@ -69,6 +79,8 @@ private:
     std::int64_t forgotten_ = 0;
     std::map<std::string, Player> players_;
     std::map<std::string, Identity> identities_;
+    std::map<std::string, std::int64_t> blocked_;
+    std::map<std::string, std::int64_t> told_;
 };
 
 /* The one the bot keeps. */

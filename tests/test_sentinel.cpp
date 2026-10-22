@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 using namespace norelecbot;
 
@@ -109,4 +110,40 @@ TEST_CASE("what the sentinel saw survives a restart, and a week later it is forg
     CHECK(again.reported_day() == 42);
     CHECK(again.report(now, same) == watching.report(now, same));
     CHECK(again.report(now + 8 * 24 * 60 * 60, same).contains("Ancora pochi dati"));
+}
+
+TEST_CASE("only after a whole day of watching are the sure scripts named for blocking") {
+    Sentinel watching;
+    std::int64_t now = 1'000'000;
+    for (int ride = 0; ride < 300; ++ride) {
+        watching.ride("bot", "victim", false, now);
+        now += 299;
+        watching.back("bot", now);
+        now += 1;
+        if (now - 1'000'000 < 24 * 60 * 60) {
+            CHECK(watching.scripts(now).empty());
+        }
+    }
+    play_like_a_person(watching, "anna", 1'000'000);
+    CHECK(watching.scripts(now) == std::vector<std::string>{"bot"});
+}
+
+TEST_CASE("a blocked account stays out until its time or an owner lets it back, and is told once an hour") {
+    const TestPaths paths{"sentinel-block-test"};
+    Sentinel watching;
+    watching.block("bot", 5000);
+    CHECK(watching.blocked_until("bot", 1000) == 5000);
+    CHECK(watching.blocked_until("bot", 5000) == 0);
+    CHECK(watching.blocked_until("anna", 1000) == 0);
+    CHECK(watching.tell_blocked("bot", 1000));
+    CHECK_FALSE(watching.tell_blocked("bot", 1000 + 3599));
+    CHECK(watching.tell_blocked("bot", 1000 + 3600));
+    CHECK(watching.report(1000, same).contains("🚫 Bloccati"));
+    watching.save(paths.conquister);
+    Sentinel again;
+    again.load(paths.conquister);
+    CHECK(again.blocked_until("bot", 1000) == 5000);
+    CHECK(again.unblock("bot"));
+    CHECK_FALSE(again.unblock("bot"));
+    CHECK(again.blocked_until("bot", 1000) == 0);
 }

@@ -38,6 +38,8 @@ constexpr int script_points = 60;
 constexpr int suspect_points = 35;
 constexpr int pair_points = 40;
 constexpr std::size_t report_limit = 3800;
+/* Nobody is blocked before the sentinel has watched a whole day. */
+constexpr std::int64_t watch_before_blocking = 24 * 60 * 60;
 
 struct Finding {
     int points = 0;
@@ -357,7 +359,96 @@ void forget_before(std::vector<std::int64_t> &times, std::int64_t oldest) {
     std::erase_if(times, [oldest](std::int64_t at) { return at < oldest; });
 }
 
+struct Judged {
+    std::string player;
+    int points = 0;
+    std::vector<Finding> found;
+};
+
+/* Every account with enough play scored, the rest of those with enough told as normal, and what each did. */
+struct Judgement {
+    std::vector<Judged> judged;
+    std::vector<std::string> normal;
+    std::map<std::string, Traits> traits;
+};
+
+Judgement judge(const std::map<std::string, Sentinel::Player> &players,
+                const std::map<std::string, Sentinel::Identity> &identities, std::int64_t now,
+                const Sentinel::Names &name) {
+    const std::int64_t oldest = now - remembered_seconds;
+    /* Whether the bot hears plain words at all on each side: a Telegram bot may only get commands. */
+    bool telegram_words = false;
+    bool irc_words = false;
+    for (const auto &[key, identity] : identities) {
+        const bool any = std::ranges::any_of(identity.chats, [oldest](std::int64_t at) { return at >= oldest; });
+        (key.starts_with("tg:") ? telegram_words : irc_words) |= any;
+    }
+
+    Judgement judgement;
+    std::vector<Judged> &judged = judgement.judged;
+    std::vector<std::string> &normal = judgement.normal;
+    std::map<std::string, Traits> &traits = judgement.traits;
+    for (const auto &[key, player] : players) {
+        Sentinel::Player recent = player;
+        std::erase_if(recent.acts, [oldest](const Sentinel::Act &act) { return act.at < oldest; });
+        forget_before(recent.backs, oldest);
+        std::erase_if(recent.robbed_by, [oldest](const auto &robbery) { return robbery.first < oldest; });
+        if (recent.acts.empty()) {
+            continue;
+        }
+        std::int64_t commands = 0;
+        std::int64_t chats = 0;
+        bool chats_count = false;
+        std::vector<std::int64_t> command_times;
+        Traits &mine = traits[key];
+        for (const auto &[identity_key, identity] : identities) {
+            if (identity.player != key) {
+                continue;
+            }
+            const auto recent_count = [oldest](const std::vector<std::int64_t> &times) {
+                return static_cast<std::int64_t>(
+                    std::ranges::count_if(times, [oldest](std::int64_t at) { return at >= oldest; }));
+            };
+            commands += recent_count(identity.commands);
+            chats += recent_count(identity.chats);
+            chats_count |= identity_key.starts_with("tg:") ? telegram_words : irc_words;
+            std::ranges::copy_if(identity.commands, std::back_inserter(command_times),
+                                 [oldest](std::int64_t at) { return at >= oldest; });
+            if (!identity.host.empty()) {
+                mine.hosts.insert(identity.host);
+            }
+        }
+        std::ranges::sort(command_times);
+        mine.first_seen = player.first_seen;
+        mine.acts = recent.acts.size();
+        for (const Sentinel::Act &act : recent.acts) {
+            if (act.kind == 0) {
+                ++mine.raids[act.target];
+            } else if (act.kind == 1) {
+                ++mine.gifts[act.target];
+            }
+            if (act.kind != 2) {
+                mine.starts.push_back(act.at);
+            }
+            mine.buckets.insert(act.at / bucket_seconds);
+        }
+        if (recent.acts.size() < 20) {
+            continue;
+        }
+        std::vector<Finding> found = script_signs(recent, commands, chats, chats_count, command_times, name);
+        const int points = total(found);
+        if (points >= suspect_points) {
+            judged.push_back({key, points, std::move(found)});
+        } else {
+            normal.push_back(name(key));
+        }
+    }
+    std::ranges::sort(judged, std::greater{}, &Judged::points);
+    return judgement;
 }
+
+}
+
 
 int local_hour(std::int64_t at) {
     const std::chrono::local_seconds local =
@@ -439,6 +530,47 @@ void Sentinel::link(const std::string &identity, const std::string &player_key) 
     identities_[identity].player = player_key;
 }
 
+std::vector<std::string> Sentinel::scripts(std::int64_t now) const {
+    const std::scoped_lock lock{mutex_};
+    std::vector<std::string> sure;
+    if (started_ == 0 || now - started_ < watch_before_blocking) {
+        return sure;
+    }
+    for (const Judged &one : judge(players_, identities_, now, [](const std::string &key) { return key; }).judged) {
+        if (one.points >= script_points) {
+            sure.push_back(one.player);
+        }
+    }
+    return sure;
+}
+
+void Sentinel::block(const std::string &player_key, std::int64_t until) {
+    const std::scoped_lock lock{mutex_};
+    blocked_[player_key] = until;
+}
+
+bool Sentinel::unblock(const std::string &player_key) {
+    const std::scoped_lock lock{mutex_};
+    told_.erase(player_key);
+    return blocked_.erase(player_key) > 0;
+}
+
+std::int64_t Sentinel::blocked_until(const std::string &player_key, std::int64_t now) const {
+    const std::scoped_lock lock{mutex_};
+    const auto found = blocked_.find(player_key);
+    return found != blocked_.end() && found->second > now ? found->second : 0;
+}
+
+bool Sentinel::tell_blocked(const std::string &player_key, std::int64_t now) {
+    const std::scoped_lock lock{mutex_};
+    const auto told = told_.find(player_key);
+    if (told != told_.end() && now - told->second < 3600) {
+        return false;
+    }
+    told_[player_key] = now;
+    return true;
+}
+
 std::int64_t Sentinel::reported_day() const {
     const std::scoped_lock lock{mutex_};
     return reported_day_;
@@ -451,79 +583,10 @@ void Sentinel::set_reported_day(std::int64_t day) {
 
 std::string Sentinel::report(std::int64_t now, const Names &name) const {
     const std::scoped_lock lock{mutex_};
-    const std::int64_t oldest = now - remembered_seconds;
-    /* Whether the bot hears plain words at all on each side: a Telegram bot may only get commands. */
-    bool telegram_words = false;
-    bool irc_words = false;
-    for (const auto &[key, identity] : identities_) {
-        const bool any = std::ranges::any_of(identity.chats, [oldest](std::int64_t at) { return at >= oldest; });
-        (key.starts_with("tg:") ? telegram_words : irc_words) |= any;
-    }
-
-    struct Judged {
-        std::string player;
-        int points = 0;
-        std::vector<Finding> found;
-    };
-    std::vector<Judged> judged;
-    std::vector<std::string> normal;
-    std::map<std::string, Traits> traits;
-    for (const auto &[key, player] : players_) {
-        Player recent = player;
-        std::erase_if(recent.acts, [oldest](const Act &act) { return act.at < oldest; });
-        forget_before(recent.backs, oldest);
-        std::erase_if(recent.robbed_by, [oldest](const auto &robbery) { return robbery.first < oldest; });
-        if (recent.acts.empty()) {
-            continue;
-        }
-        std::int64_t commands = 0;
-        std::int64_t chats = 0;
-        bool chats_count = false;
-        std::vector<std::int64_t> command_times;
-        Traits &mine = traits[key];
-        for (const auto &[identity_key, identity] : identities_) {
-            if (identity.player != key) {
-                continue;
-            }
-            const auto recent_count = [oldest](const std::vector<std::int64_t> &times) {
-                return static_cast<std::int64_t>(
-                    std::ranges::count_if(times, [oldest](std::int64_t at) { return at >= oldest; }));
-            };
-            commands += recent_count(identity.commands);
-            chats += recent_count(identity.chats);
-            chats_count |= identity_key.starts_with("tg:") ? telegram_words : irc_words;
-            std::ranges::copy_if(identity.commands, std::back_inserter(command_times),
-                                 [oldest](std::int64_t at) { return at >= oldest; });
-            if (!identity.host.empty()) {
-                mine.hosts.insert(identity.host);
-            }
-        }
-        std::ranges::sort(command_times);
-        mine.first_seen = player.first_seen;
-        mine.acts = recent.acts.size();
-        for (const Act &act : recent.acts) {
-            if (act.kind == 0) {
-                ++mine.raids[act.target];
-            } else if (act.kind == 1) {
-                ++mine.gifts[act.target];
-            }
-            if (act.kind != 2) {
-                mine.starts.push_back(act.at);
-            }
-            mine.buckets.insert(act.at / bucket_seconds);
-        }
-        if (recent.acts.size() < 20) {
-            continue;
-        }
-        std::vector<Finding> found = script_signs(recent, commands, chats, chats_count, command_times, name);
-        const int points = total(found);
-        if (points >= suspect_points) {
-            judged.push_back({key, points, std::move(found)});
-        } else {
-            normal.push_back(name(key));
-        }
-    }
-    std::ranges::sort(judged, std::greater{}, &Judged::points);
+    Judgement judgement = judge(players_, identities_, now, name);
+    std::vector<Judged> &judged = judgement.judged;
+    std::vector<std::string> &normal = judgement.normal;
+    std::map<std::string, Traits> &traits = judgement.traits;
 
     /* Pairs that look like one person, gathered into groups. */
     std::vector<std::string> keys;
@@ -570,6 +633,15 @@ std::string Sentinel::report(std::int64_t now, const Names &name) const {
             told += std::format("\n\n{}{}", title, part);
         }
     };
+    std::string blocked;
+    for (const auto &[key, until] : blocked_) {
+        if (until > now) {
+            blocked += std::format("\n• {} ancora per {}", name(key), hours(until - now));
+        }
+    }
+    if (!blocked.empty()) {
+        told += std::format("\n\n🚫 Bloccati (sblocca con /sblocca <nome>){}", blocked);
+    }
     section("🤖 Script quasi certi", script_points, 100);
     section("🤔 Da tenere d'occhio", suspect_points, script_points - 1);
     std::map<std::size_t, std::vector<std::size_t>> groups;
@@ -626,6 +698,7 @@ void Sentinel::load(const std::string &path) {
         const std::scoped_lock lock{mutex_};
         started_ = saved.value("started", std::int64_t{0});
         reported_day_ = saved.value("reported_day", std::int64_t{0});
+        blocked_ = saved.value("blocked", std::map<std::string, std::int64_t>{});
         const Json players = saved.value("players", Json::object());
         for (const auto &[key, entry] : players.items()) {
             Player &player = players_[key];
@@ -660,6 +733,7 @@ void Sentinel::save(const std::string &path) const {
         const std::scoped_lock lock{mutex_};
         saved["started"] = started_;
         saved["reported_day"] = reported_day_;
+        saved["blocked"] = blocked_;
         Json players = Json::object();
         for (const auto &[key, player] : players_) {
             Json acts = Json::array();

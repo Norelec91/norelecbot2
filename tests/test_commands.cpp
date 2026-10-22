@@ -2,6 +2,7 @@
 
 #include "game.hpp"
 #include "commands.hpp"
+#include "sentinel.hpp"
 #include "zodiac.hpp"
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
@@ -1849,4 +1850,31 @@ TEST_CASE("/house shows the house slot by slot, with its numbers") {
     /* /home is gone: it is not a command any more. */
     CHECK_FALSE(command_is_for_bot("/home"));
     CHECK_FALSE(command_dispatch(alice, "/home").has_value());
+}
+
+TEST_CASE("a player the sentinel blocked is told to write to Norelec, once an hour, until an owner unblocks him") {
+    const TestPaths paths{"blocked-command-test"};
+    Storage storage{paths.conquister, paths.quotes};
+    const AppConfig config;
+    const CommandContext alice{.storage = storage, .config = config, .user_id = 41, .username = "Alice"};
+    const CommandContext boss{.storage = storage, .config = config, .user_id = 42, .username = "Boss", .owner = true};
+    REQUIRE(command_dispatch(alice, "/leaderboard"));
+    std::string key;
+    for (const auto &[player, shown] : player_names(storage)) {
+        if (shown == "Alice") {
+            key = player;
+        }
+    }
+    REQUIRE_FALSE(key.empty());
+    sentinel().block(key, std::chrono::duration_cast<std::chrono::seconds>(
+                              std::chrono::system_clock::now().time_since_epoch()).count() + 7200);
+    const std::optional<std::string> told = command_dispatch(alice, "/leaderboard");
+    REQUIRE(told.has_value());
+    CHECK(told->starts_with("Alice il tuo account è bloccato per "));
+    CHECK(told->ends_with("Se è un errore scrivi a Norelec per farti sbloccare."));
+    CHECK_FALSE(command_dispatch(alice, "/leaderboard").has_value());
+    CHECK(command_dispatch(alice, "/sblocca Alice") == "Solo il proprietario del bot può sbloccare un giocatore.");
+    CHECK(command_dispatch(boss, "/sblocca Alice") == "Alice è sbloccato e può tornare a giocare.");
+    CHECK(command_dispatch(boss, "/sblocca Alice") == "Alice non era bloccato.");
+    CHECK_FALSE(command_dispatch(alice, "/leaderboard").value_or("").contains("bloccato"));
 }
