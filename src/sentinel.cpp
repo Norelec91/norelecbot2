@@ -640,7 +640,7 @@ std::string Sentinel::report(std::int64_t now, const Names &name) const {
         }
     }
     if (!blocked.empty()) {
-        told += std::format("\n\n🚫 Bloccati (sblocca con /sblocca <nome>){}", blocked);
+        told += std::format("\n\n🚫 Bloccati (sblocca con /unblock <nome>){}", blocked);
     }
     section("🤖 Script quasi certi", script_points, 100);
     section("🤔 Da tenere d'occhio", suspect_points, script_points - 1);

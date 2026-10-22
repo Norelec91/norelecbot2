@@ -1564,14 +1564,14 @@ std::string handle_delete_quote(const CommandContext &context, std::string_view 
     return removed ? std::format("Citazione eliminata: {}", *removed) : "Citazione non trovata.";
 }
 
-/* "/sblocca name": an owner lets a player the sentinel blocked back into the game. */
+/* "/unblock name": an owner lets a player the sentinel blocked back into the game. */
 std::string handle_unblock(const CommandContext &context, std::string_view argument) {
     if (!context.owner) {
         return "Solo il proprietario del bot può sbloccare un giocatore.";
     }
     const std::string_view wanted = argument.starts_with('@') ? argument.substr(1) : argument;
     if (wanted.empty()) {
-        return std::format("Uso: {}sblocca <nome>.", command_prefix(context));
+        return std::format("Uso: {}unblock <nome>.", command_prefix(context));
     }
     for (const auto &[key, shown] : player_names(context.storage)) {
         if (text::equals_ignore_case(shown, wanted) || text::equals_ignore_case(key, wanted)) {
@@ -1632,7 +1632,7 @@ constexpr std::array commands{
     CommandDefinition{"/move", handle_move_usage},
     CommandDefinition{"/take", handle_take},
     CommandDefinition{"/store", handle_store},
-    CommandDefinition{"/sblocca", handle_unblock},
+    CommandDefinition{"/unblock", handle_unblock},
 };
 
 const CommandDefinition *find_command(std::string_view name) {
@@ -1912,7 +1912,7 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
         };
         /* A player the sentinel blocked is told so, once an hour, and nothing he asks is done. Owners never are. */
         if (!context.owner && !context.username.empty() && command_is_for_bot(text) &&
-            parse_command(message).name != "/sblocca") {
+            parse_command(message).name != "/unblock") {
             remember_sender();
             if (const std::int64_t until = sentinel().blocked_until(bound_key, seconds_now()); until > 0) {
                 if (!sentinel().tell_blocked(bound_key, seconds_now())) {

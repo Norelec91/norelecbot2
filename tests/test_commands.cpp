@@ -1873,8 +1873,8 @@ TEST_CASE("a player the sentinel blocked is told to write to Norelec, once an ho
     CHECK(told->starts_with("Alice il tuo account è bloccato per "));
     CHECK(told->ends_with("Se è un errore scrivi a Norelec per farti sbloccare."));
     CHECK_FALSE(command_dispatch(alice, "/leaderboard").has_value());
-    CHECK(command_dispatch(alice, "/sblocca Alice") == "Solo il proprietario del bot può sbloccare un giocatore.");
-    CHECK(command_dispatch(boss, "/sblocca Alice") == "Alice è sbloccato e può tornare a giocare.");
-    CHECK(command_dispatch(boss, "/sblocca Alice") == "Alice non era bloccato.");
+    CHECK(command_dispatch(alice, "/unblock Alice") == "Solo il proprietario del bot può sbloccare un giocatore.");
+    CHECK(command_dispatch(boss, "/unblock Alice") == "Alice è sbloccato e può tornare a giocare.");
+    CHECK(command_dispatch(boss, "/unblock Alice") == "Alice non era bloccato.");
     CHECK_FALSE(command_dispatch(alice, "/leaderboard").value_or("").contains("bloccato"));
 }
