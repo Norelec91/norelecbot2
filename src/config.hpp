@@ -70,6 +70,9 @@ struct AppConfig {
     static constexpr std::string_view default_api_host = "0.0.0.0";
     static constexpr std::string_view default_conquister_path = "conquister.json";
     static constexpr std::string_view default_sentinel_path = "sentinel.json";
+    static constexpr std::string_view default_pulse_path = "pulse.json";
+    /* The hour every raid that gets through takes twice as much; -1 for none. */
+    static constexpr int default_golden_hour = 21;
     static constexpr int default_sentinel_hour = 9;
     static constexpr std::string_view default_quotes_path = "quotes.json";
 
@@ -113,6 +116,8 @@ struct AppConfig {
     int hourglass_percent = default_hourglass_percent;
     /* Whether a player seen for the first time is handed a 🎈. */
     bool starter_balloon = true;
+    /* Whether a newcomer is told as one: spared his first day, shown what to try, free to name who invited him. */
+    bool newcomers = true;
     /* Players whose real sign the owner knows, instead of the one their name gives. */
     std::vector<zodiac::Override> zodiac_signs;
     std::int64_t conquister_chat_id = 0;
@@ -125,6 +130,9 @@ struct AppConfig {
     /* Where the sentinel keeps what it saw, and the hour its report reaches the owners. */
     std::string sentinel_path{default_sentinel_path};
     int sentinel_hour = default_sentinel_hour;
+    /* Where the counts of what the chats say and the game does are kept, minute by minute, with no words. */
+    std::string pulse_path{default_pulse_path};
+    int golden_hour = default_golden_hour;
     bool irc_enabled = false;
     std::string irc_server;
     int irc_port = default_irc_port;

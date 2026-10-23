@@ -530,6 +530,24 @@ void Sentinel::link(const std::string &identity, const std::string &player_key) 
     identities_[identity].player = player_key;
 }
 
+bool Sentinel::same_person(const std::string &left, const std::string &right, std::int64_t now) const {
+    const std::scoped_lock lock{mutex_};
+    const Names same = [](const std::string &key) { return key; };
+    Judgement judgement = judge(players_, identities_, now, same);
+    const auto a = judgement.traits.find(left);
+    const auto b = judgement.traits.find(right);
+    if (a == judgement.traits.end() || b == judgement.traits.end()) {
+        return false;
+    }
+    std::map<std::string, std::size_t> raiders;
+    for (const auto &[key, mine] : judgement.traits) {
+        for (const auto &[target, count] : mine.raids) {
+            ++raiders[target];
+        }
+    }
+    return total(pair_signs(left, a->second, right, b->second, started_, raiders, same)) >= pair_points;
+}
+
 std::vector<std::string> Sentinel::scripts(std::int64_t now) const {
     const std::scoped_lock lock{mutex_};
     std::vector<std::string> sure;

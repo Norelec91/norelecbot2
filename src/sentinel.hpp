@@ -32,6 +32,8 @@ public:
     /* Who looks like a script and who looks like the same person, and why. */
     [[nodiscard]] std::string report(std::int64_t now, const Names &name) const;
 
+    /* Whether two accounts look like one person behind two names. */
+    [[nodiscard]] bool same_person(const std::string &left, const std::string &right, std::int64_t now) const;
     /* The accounts it is sure play by themselves, once it has watched a whole day. */
     [[nodiscard]] std::vector<std::string> scripts(std::int64_t now) const;
     /* An account kept out of the game until a time, and let back in by the owner. */

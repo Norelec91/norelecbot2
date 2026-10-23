@@ -1,6 +1,7 @@
 #include "commands.hpp"
 
 #include "game.hpp"
+#include "pulse.hpp"
 #include "sentinel.hpp"
 #include "text.hpp"
 #include "zodiac.hpp"
@@ -336,6 +337,7 @@ RaidRules raid_rules(const CommandContext &context) {
         .salt_percent = context.config.salt_percent,
         .frozen_seconds = context.config.frozen_seconds,
         .fire_percent = context.config.fire_percent,
+        .golden_hour = context.config.golden_hour,
     };
 }
 
@@ -406,6 +408,9 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
         return std::format("{} hai già {} emoji con te: per portare {} serve un posto libero. Rimetti qualcosa in casa "
                            "con {}store <emoji>.", username, carried_limit, gift_emoji,
                            context.user_id == 0 ? "!" : "/");
+    case RaidStatus::protected_target:
+        return std::format("{} {} è appena arrivato nel gioco: per altre {} nessuno può derubarlo o lanciargli "
+                           "qualcosa.", username, result.target, format_wait(result.seconds));
     case RaidStatus::frozen:
         return frozen_reply(username, result.seconds);
     case RaidStatus::started:
@@ -850,6 +855,10 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
     std::string reply;
     if (result.sneaked) {
         reply = std::format("{} scivoli di nascosto oltre il palloncino di {}!\n", claimer, kicked);
+        named();
+    }
+    if (result.first_entry && !result.previous_username.empty()) {
+        reply = std::format("🎉 {} è il tuo primo ingresso: il palloncino di {} ti lascia passare!\n", claimer, kicked);
         named();
     }
     if (result.balloon_popped) {
@@ -1564,6 +1573,36 @@ std::string handle_delete_quote(const CommandContext &context, std::string_view 
     return removed ? std::format("Citazione eliminata: {}", *removed) : "Citazione non trovata.";
 }
 
+/* "/invitedby name": a newcomer names who brought him into the game. */
+std::string handle_invited_by(const CommandContext &context, std::string_view argument) {
+    if (context.username.empty()) {
+        return missing_username_reply();
+    }
+    if (argument.empty()) {
+        return std::format("Uso: {}invitedby <nome di chi ti ha invitato>.", command_prefix(context));
+    }
+    const bool telegram = argument.starts_with('@');
+    std::string shown;
+    switch (invite_record(context.storage, std::string{context.player_key}, telegram ? argument.substr(1) : argument,
+                          telegram ? RaidTargetKind::telegram : RaidTargetKind::irc, seconds_now(), shown)) {
+    case InviteStatus::recorded:
+        return std::format("{} ti ha invitato {}: dopo {} giorni di gioco tu ricevi {} e {} ne riceve {}.",
+                           context.username, shown, invite_days_needed, palle(invited_reward), shown,
+                           palle(inviter_reward));
+    case InviteStatus::unknown_inviter:
+        return std::format("{} non conosco nessun giocatore di nome {}.", context.username, argument);
+    case InviteStatus::self:
+        return std::format("{} non puoi invitarti da solo.", context.username);
+    case InviteStatus::too_late:
+        return std::format("{} chi ti ha invitato si può dire solo nei primi 3 giorni di gioco.", context.username);
+    case InviteStatus::already:
+        return std::format("{} hai già detto che ti ha invitato {}.", context.username, shown);
+    case InviteStatus::not_new:
+        return std::format("{} l'invito vale solo per chi è appena arrivato nel gioco.", context.username);
+    }
+    return {};
+}
+
 /* "/unblock name": an owner lets a player the sentinel blocked back into the game. */
 std::string handle_unblock(const CommandContext &context, std::string_view argument) {
     if (!context.owner) {
@@ -1633,6 +1672,7 @@ constexpr std::array commands{
     CommandDefinition{"/take", handle_take},
     CommandDefinition{"/store", handle_store},
     CommandDefinition{"/unblock", handle_unblock},
+    CommandDefinition{"/invitedby", handle_invited_by},
 };
 
 const CommandDefinition *find_command(std::string_view name) {
@@ -1653,6 +1693,18 @@ std::string sentinel_identity(std::int64_t user_id, std::string_view nick) {
         lowered.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(letter))));
     }
     return lowered;
+}
+
+std::string guide(const CommandContext &context) {
+    const std::string_view p = command_prefix(context);
+    return std::format(
+        "\n\n👋 Benvenuto {}! Ecco cosa provare:\n"
+        "• {}raid <nome>: vai a rubare palle a qualcuno\n"
+        "• {}buy: compra emoji con poteri, come un 🎈 che ti difende\n"
+        "• {}profile: guarda come stai andando\n"
+        "Per le prime 24 ore nessuno può derubarti, e il tuo primo ingresso in {} riesce sempre. "
+        "Ti ha invitato qualcuno? Scrivi {}invitedby <nome>: dopo {} giorni di gioco riceverete un premio tutti e due.",
+        context.username, p, p, p, conquister_place, p, invite_days_needed);
 }
 
 bool command_is_for_bot(std::string_view text) {
@@ -1830,6 +1882,9 @@ std::optional<std::string> raid_event_story(const RaidEvent &event, const AppCon
         reply += ", che non era a casa";
     }
     reply += std::format("! Torni in {} tra {}.", home, format_wait(event.seconds));
+    if (event.golden && event.loot > 0) {
+        reply += "\n🌟 Ora d'oro: bottino doppio!";
+    }
     if (!event.boarded.empty()) {
         reply += std::format("\nArrembaggio: ti porti via anche {} da casa sua: {}. {}.", event.boarded,
                              now_on(event.raider_emoji),
@@ -1892,7 +1947,9 @@ std::optional<std::string> old_line_instead(const CommandContext &context, std::
     return std::nullopt;
 }
 
-std::optional<std::string> command_dispatch(const CommandContext &context, std::string_view text) {
+namespace {
+
+std::optional<std::string> dispatch(const CommandContext &context, std::string_view text, std::string &seen) {
     try {
         const Verbed verbed = expand_verb(expand_buy(context, expand_adventure(text::trim(text))));
         const std::string_view message = verbed.message;
@@ -1905,8 +1962,11 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
                                         context.account_name,
                                         /* No room at all is how nobody is handed one. */
                                         context.config.starter_balloon
-                                            ? static_cast<std::size_t>(context.config.furniture_limit) : 0);
+                                            ? static_cast<std::size_t>(context.config.furniture_limit) : 0,
+                                        /* With no time, nobody is told as a newcomer. */
+                                        context.config.newcomers ? seconds_now() : 0);
                 bound.player_key = bound_key;
+                seen = bound_key;
                 sentinel().link(sentinel_identity(context.user_id, context.username), bound_key);
             }
         };
@@ -2061,6 +2121,30 @@ std::optional<std::string> command_dispatch(const CommandContext &context, std::
     } catch (const std::exception &) {
         return std::string{internal_error_reply};
     }
+}
+
+}
+
+std::optional<std::string> command_dispatch(const CommandContext &context, std::string_view text) {
+    std::string seen;
+    std::optional<std::string> reply = dispatch(context, text, seen);
+    if (!reply || seen.empty() || !context.claims_allowed) {
+        return reply;
+    }
+    try {
+        /* A newcomer who played his days pays off whoever brought him, and is shown what to try the first time. */
+        if (const std::optional<InviteReward> reward = invite_due(context.storage, seen, seconds_now())) {
+            *reply += std::format("\n\n🎁 {} ha giocato {} giorni: {} riceve {} per averlo invitato, e {} ne riceve {}!",
+                                  reward->newcomer, invite_days_needed, reward->inviter, palle(reward->inviter_palle),
+                                  reward->newcomer, palle(reward->newcomer_palle));
+        }
+        if (guide_due(context.storage, seen)) {
+            *reply += guide(context);
+        }
+    } catch (const std::exception &) {
+        return reply;
+    }
+    return reply;
 }
 
 }

@@ -123,6 +123,8 @@ struct ClaimResult {
     bool balloon_popped = false;
     /* taken: a 🥷 took him past the holder's 🎈, unnoticed and untouched. */
     bool sneaked = false;
+    /* taken: a newcomer's first time in, which no 🎈 stops. */
+    bool first_entry = false;
     /* taken: what the new hold is worth in percent, set by the ⚡ on his name; 0 without one. */
     std::int64_t entered_lightning = 0;
     /* taken: what the 🦞 on his name became, slot by slot, copying the kicked holder's; empty if none did. */
@@ -206,7 +208,9 @@ enum class RaidStatus {
     no_room,
     hands_full,
     /* A 🧊 hit him not long ago: he cannot set off until he thaws. */
-    frozen
+    frozen,
+    /* The target came less than a day ago: nobody robs him or throws anything at him yet. */
+    protected_target
 };
 
 enum class RaidTargetKind { any, telegram, irc };
@@ -269,6 +273,8 @@ struct RaidRules {
     std::int64_t frozen_seconds = 300;
     /* How much of the time a 🧊 freezes him each 🔥 he has with him melts away, in percent: they add up. */
     std::int64_t fire_percent = 0;
+    /* The hour of the day, in local time, when every raid that gets through takes twice as much; -1 never. */
+    int golden_hour = -1;
 };
 
 struct RaidResult {
@@ -358,6 +364,8 @@ struct RaidEvent {
     int target_percent = 100;
     /* The target was away, so there was nothing to get past. */
     bool undefended = false;
+    /* stolen: it got through in the golden hour, and took twice as much. */
+    bool golden = false;
     /* The target was home with his balloon: it held and nothing was taken, with the chance the next
        raid has of popping it, or it popped and the raid went on. */
     bool balloon_held = false;
@@ -486,7 +494,36 @@ struct Profile {
 [[nodiscard]] std::string player_seen(Storage &storage, std::int64_t user_id, const std::string &username,
                                       std::string_view account_name = {},
                                       /* A player seen for the first time is handed his 🎈, if it fits. */
-                                      std::size_t furniture_limit = 10);
+                                      std::size_t furniture_limit = 10,
+                                      /* When he is seen: a newcomer is told from then, and his days counted. */
+                                      std::int64_t now = 0);
+
+/* A newcomer is spared for his first day: nobody robs him or throws anything at him, and his first try at
+   @TheConquister37 gets in whatever 🎈 is there. */
+inline constexpr std::int64_t newcomer_seconds = 24 * 60 * 60;
+/* A newcomer says who brought him within his first three days; after three days of play, both are paid. */
+inline constexpr std::int64_t invite_window_seconds = 3 * 24 * 60 * 60;
+inline constexpr std::int64_t invite_days_needed = 3;
+inline constexpr std::int64_t inviter_reward = 1000;
+inline constexpr std::int64_t invited_reward = 500;
+
+/* Whether a newcomer should be shown what to try now: true once, the first time he does anything. */
+[[nodiscard]] bool guide_due(Storage &storage, const std::string &player);
+
+enum class InviteStatus { recorded, unknown_inviter, self, too_late, already, not_new };
+/* A newcomer names who brought him: shown is the inviter's name as the chats know it. */
+[[nodiscard]] InviteStatus invite_record(Storage &storage, const std::string &newcomer, std::string_view inviter,
+                                         RaidTargetKind platform, std::int64_t now, std::string &shown);
+
+struct InviteReward {
+    std::string inviter;
+    std::string newcomer;
+    std::int64_t inviter_palle = 0;
+    std::int64_t newcomer_palle = 0;
+};
+/* The reward for an invite, once the newcomer has played his days: never when the sentinel takes the two
+   for one person behind two names. */
+[[nodiscard]] std::optional<InviteReward> invite_due(Storage &storage, const std::string &newcomer, std::int64_t now);
 /* Everybody starts with a 🎈: hands one, once, to every known player who has none and a free slot. */
 void balloons_hand_out(Storage &storage, std::size_t furniture_limit);
 /* Sorts what saves from before had on a single name: the 🎈 and what works on him go on him, as many as

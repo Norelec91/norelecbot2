@@ -1,11 +1,15 @@
 #include "test_paths.hpp"
 
+#include "pulse.hpp"
 #include "sentinel.hpp"
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
 
 #include <cstdint>
+#include <fstream>
+#include <iterator>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -146,4 +150,29 @@ TEST_CASE("a blocked account stays out until its time or an owner lets it back, 
     CHECK(again.unblock("bot"));
     CHECK_FALSE(again.unblock("bot"));
     CHECK(again.blocked_until("bot", 1000) == 0);
+}
+
+TEST_CASE("the pulse counts messages, laughter, topics and events, and keeps no word or name") {
+    const TestPaths paths{"pulse-test"};
+    Pulse beat;
+    beat.message("tg", "AHAHAH Lucy mi ha rubato tutto e bucato il 🎈", 1000);
+    beat.message("irc", "ciao a tutti", 1001);
+    beat.event("robbed", 1002);
+    std::map<std::string, std::int64_t> counts = beat.at(1000);
+    CHECK(counts["messages:tg"] == 1);
+    CHECK(counts["laughs:tg"] == 1);
+    CHECK(counts["topic:raid"] == 1);
+    CHECK(counts["topic:balloon"] == 1);
+    CHECK(counts["messages:irc"] == 1);
+    CHECK(counts["event:robbed"] == 1);
+    CHECK_FALSE(counts.contains("laughs:irc"));
+    beat.save(paths.conquister);
+    std::ifstream file{paths.conquister, std::ios::binary};
+    const std::string saved{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
+    CHECK_FALSE(saved.contains("Lucy"));
+    CHECK_FALSE(saved.contains("rubato"));
+    Pulse again;
+    again.load(paths.conquister);
+    CHECK(again.at(1000) == beat.at(1000));
+    CHECK(again.at(1000 + 300).empty());
 }

@@ -5,6 +5,7 @@
 #include "commands.hpp"
 #include "game.hpp"
 #include "irc.hpp"
+#include "pulse.hpp"
 #include "sentinel.hpp"
 #include "text.hpp"
 
@@ -105,6 +106,9 @@ void process_message(Storage &storage, const AppConfig &config, const Json &mess
         std::chrono::system_clock::now().time_since_epoch()).count();
     if (config.conquister_chat_id != 0 && chat == config.conquister_chat_id) {
         sentinel().heard(sentinel_identity(sender_id, {}), {}, command_is_for_bot(said), now);
+        if (!command_is_for_bot(said)) {
+            pulse().message("tg", said, now);
+        }
     }
     /* What the sentinel saw, only to an owner and only in private. */
     if (text::trim(said) == "/sospetti" && chat == sender_id && context.owner) {

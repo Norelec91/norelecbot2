@@ -67,6 +67,7 @@ set(CORE_SOURCES
     src/zodiac.cpp
     src/position.cpp
     src/sentinel.cpp
+    src/pulse.cpp
 )
 
 add_library(norelecbot_core STATIC ${CORE_SOURCES})

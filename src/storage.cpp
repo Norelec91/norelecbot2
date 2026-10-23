@@ -231,6 +231,13 @@ ConquisterState parse_state(const Json &json) {
         parse_authors(json, "equipped"),
         json.contains("split") && json.at("split").get<bool>(),
         parse_counters(json, "pugliesi"),
+        parse_counters(json, "joined"),
+        parse_counters(json, "guided"),
+        parse_counters(json, "entered"),
+        parse_authors(json, "invited_by"),
+        parse_counters(json, "invite_days"),
+        parse_counters(json, "invite_last_day"),
+        parse_counters(json, "invite_paid"),
     };
     return state;
 }
@@ -310,6 +317,13 @@ Json state_to_json(const ConquisterState &state) {
         {"equipped", state.equipped},
         {"split", state.split},
         {"pugliesi", state.pugliesi},
+        {"joined", state.joined},
+        {"guided", state.guided},
+        {"entered", state.entered},
+        {"invited_by", state.invited_by},
+        {"invite_days", state.invite_days},
+        {"invite_last_day", state.invite_last_day},
+        {"invite_paid", state.invite_paid},
     };
 }
 

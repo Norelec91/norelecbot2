@@ -2,6 +2,7 @@
 
 #include "logging.hpp"
 #include "position.hpp"
+#include "pulse.hpp"
 #include "sentinel.hpp"
 #include "text.hpp"
 #include "zodiac.hpp"
@@ -434,7 +435,7 @@ void balloons_hand_out(Storage &storage, std::size_t furniture_limit) {
 }
 
 std::string player_seen(Storage &storage, std::int64_t user_id, const std::string &username,
-                        std::string_view account_name, std::size_t furniture_limit) {
+                        std::string_view account_name, std::size_t furniture_limit, std::int64_t now) {
     return storage.transaction([&](StorageSession &session) {
         ConquisterState &state = session.state();
         const std::string account = platform_key(user_id, username, account_name);
@@ -458,7 +459,20 @@ std::string player_seen(Storage &storage, std::int64_t user_id, const std::strin
             state.display_names[key] = username;
         }
         remember_platform(state, key, user_id);
+        /* Somebody nobody ever welcomed is new: from now on he is told as one. */
+        if (now > 0 && counter(state.welcomed, key) == 0 && find_entry(state.joined, key) == state.joined.end()) {
+            state.joined[key] = now;
+        }
         welcome(state, key, furniture_limit);
+        /* The days a newcomer plays, until his invite is settled. */
+        if (now > 0 && find_entry(state.joined, key) != state.joined.end() &&
+            find_entry(state.invite_paid, key) == state.invite_paid.end()) {
+            const std::int64_t today = local_day(now);
+            if (counter(state.invite_last_day, key) != today) {
+                state.invite_last_day[key] = today;
+                state.invite_days[key] = counter(state.invite_days, key) + 1;
+            }
+        }
         return key;
     });
 }
@@ -622,9 +636,14 @@ ClaimResult conquister_claim(
             /* The 🥷 he has on him may take him past the holder's 🎈, which is not even touched. */
             const std::int64_t stealth = std::min<std::int64_t>(
                 100, carried_copies(state, username, power::ninja) * std::max<std::int64_t>(rules.ninja, 0));
-            outcome.sneaked = stealth > 0 && balloon_there(state, holder, Whereabouts::conquister, now) &&
+            /* A newcomer's first time in, no 🎈 stops him: whoever tries the game wins something at once. */
+            const auto came = find_entry(state.joined, username);
+            outcome.first_entry = came != state.joined.end() && now - came->second < newcomer_seconds &&
+                counter(state.entered, username) == 0;
+            outcome.sneaked = !outcome.first_entry && stealth > 0 &&
+                balloon_there(state, holder, Whereabouts::conquister, now) &&
                 static_cast<std::int64_t>(session.random_index(100)) < stealth;
-            const BalloonRoll balloon = outcome.sneaked
+            const BalloonRoll balloon = outcome.sneaked || outcome.first_entry
                 ? BalloonRoll::none : balloon_attempt(session, state, holder, Whereabouts::conquister, now);
             if (balloon == BalloonRoll::held) {
                 /* Every ⏳ he has with him takes its share off the wait: enough of them and there is none. */
@@ -642,7 +661,7 @@ ClaimResult conquister_claim(
             }
             outcome.balloon_popped = balloon == BalloonRoll::popped;
             /* Kicked out, his 🎈 is fresh again; one he was slipped past is as worn as it was. */
-            if (!outcome.sneaked) {
+            if (!outcome.sneaked && !outcome.first_entry) {
                 state.balloons.erase(holder);
             }
             outcome.previous_username = display_name(state, holder);
@@ -661,6 +680,9 @@ ClaimResult conquister_claim(
             outcome.lobsters_became.push_back(emoji);
         }
         outcome.carried_before = shown_gear(state, username);
+        if (find_entry(state.joined, username) != state.joined.end()) {
+            state.entered[username] = 1;
+        }
         state.current = Holder{.user_id = user_id, .username = username, .since = now,
                                .lightning_percent = 0, .bolts = 0, .banked = 0, .counted_from = 0,
                                .lobsters = std::move(lobsters)};
@@ -674,6 +696,11 @@ ClaimResult conquister_claim(
         return outcome;
     });
     sentinel().claim(username, now);
+    if (result.status == ClaimStatus::taken) {
+        pulse().event("claim_taken", now);
+    } else if (result.status == ClaimStatus::defended) {
+        pulse().event("claim_defended", now);
+    }
 
     switch (result.status) {
     case ClaimStatus::taken:
@@ -1798,6 +1825,15 @@ RaidResult raid_start(
             outcome.seconds = std::max<std::int64_t>(travelling->back - now, 0);
             return outcome;
         }
+        /* A newcomer's first day nobody robs him or throws anything at him; presents still reach him. */
+        const bool blow = gift == 0 && (gift_emoji.empty() || (!intact && is_thrown(gift_emoji)));
+        if (const auto came = find_entry(state.joined, *known);
+            blow && came != state.joined.end() && now - came->second < newcomer_seconds) {
+            outcome.status = RaidStatus::protected_target;
+            outcome.target = display_name(state, *known);
+            outcome.seconds = newcomer_seconds - (now - came->second);
+            return outcome;
+        }
         if (const std::int64_t wait = frozen_for(state, username, now); wait > 0) {
             outcome.status = RaidStatus::frozen;
             outcome.seconds = wait;
@@ -2318,7 +2354,10 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                     event.target_percent = day_percent(event.target, now, rules.signs);
                     const std::int64_t walked =
                         rules.loot_divisor > 0 ? event.distance / rules.loot_divisor : event.distance;
-                    const std::int64_t carried = walked * event.raider_percent / event.target_percent;
+                    /* In the golden hour the road carries twice as much. */
+                    event.golden = rules.golden_hour >= 0 && local_hour(now) == rules.golden_hour;
+                    const std::int64_t carried =
+                        walked * event.raider_percent / event.target_percent * (event.golden ? 2 : 1);
                     /* The road says what can be taken, and nobody loses more than he has; every 🥺
                        on his name as the raider arrives makes him take a share less. */
                     const std::int64_t taken = std::min(theirs, carried);
@@ -2541,6 +2580,76 @@ std::map<std::string, std::string> player_names(Storage &storage) {
         }
         return names;
     });
+}
+
+
+bool guide_due(Storage &storage, const std::string &player) {
+    return storage.transaction([&](StorageSession &session) {
+        ConquisterState &state = session.state();
+        if (find_entry(state.joined, player) == state.joined.end() || counter(state.guided, player) != 0) {
+            return false;
+        }
+        state.guided[player] = 1;
+        return true;
+    });
+}
+
+InviteStatus invite_record(Storage &storage, const std::string &newcomer, std::string_view inviter,
+                           RaidTargetKind platform, std::int64_t now, std::string &shown) {
+    const InviteStatus status = storage.transaction([&](StorageSession &session) {
+        ConquisterState &state = session.state();
+        const auto came = find_entry(state.joined, newcomer);
+        if (came == state.joined.end()) {
+            return InviteStatus::not_new;
+        }
+        if (now - came->second >= invite_window_seconds) {
+            return InviteStatus::too_late;
+        }
+        if (state.invited_by.find(newcomer) != state.invited_by.end()) {
+            shown = display_name(state, state.invited_by.at(newcomer));
+            return InviteStatus::already;
+        }
+        const std::optional<std::string> known = player_by_name(state, inviter, platform);
+        if (!known) {
+            return InviteStatus::unknown_inviter;
+        }
+        if (*known == newcomer) {
+            return InviteStatus::self;
+        }
+        state.invited_by[newcomer] = *known;
+        shown = display_name(state, *known);
+        return InviteStatus::recorded;
+    });
+    log_info("invite user={} inviter={} status={}", newcomer, inviter, static_cast<int>(status));
+    return status;
+}
+
+std::optional<InviteReward> invite_due(Storage &storage, const std::string &newcomer, std::int64_t now) {
+    const std::optional<InviteReward> reward = storage.transaction([&](StorageSession &session)
+                                                                       -> std::optional<InviteReward> {
+        ConquisterState &state = session.state();
+        const auto inviter = state.invited_by.find(newcomer);
+        if (inviter == state.invited_by.end() || find_entry(state.invite_paid, newcomer) != state.invite_paid.end() ||
+            counter(state.invite_days, newcomer) < invite_days_needed) {
+            return std::nullopt;
+        }
+        const std::string brought_by = inviter->second;
+        /* One person behind two names gets nothing for inviting himself. */
+        if (sentinel().same_person(newcomer, brought_by, now)) {
+            state.invite_paid[newcomer] = -1;
+            log_info("invite refused user={} inviter={} same_person=1", newcomer, brought_by);
+            return std::nullopt;
+        }
+        state.invite_paid[newcomer] = 1;
+        state.scores[brought_by] = counter(state.scores, brought_by) + inviter_reward;
+        state.scores[newcomer] = counter(state.scores, newcomer) + invited_reward;
+        return InviteReward{.inviter = display_name(state, brought_by), .newcomer = display_name(state, newcomer),
+                            .inviter_palle = inviter_reward, .newcomer_palle = invited_reward};
+    });
+    if (reward) {
+        log_info("invite paid user={} inviter={}", reward->newcomer, reward->inviter);
+    }
+    return reward;
 }
 
 }

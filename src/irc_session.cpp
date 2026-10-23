@@ -2,6 +2,7 @@
 
 #include "commands.hpp"
 #include "logging.hpp"
+#include "pulse.hpp"
 #include "sentinel.hpp"
 
 #include <algorithm>
@@ -175,6 +176,7 @@ std::vector<std::string> Session::handle(const Message &message, std::int64_t no
                      prefix.find('@') == std::string_view::npos ? std::string_view{} : prefix.substr(prefix.find('@') + 1),
                      for_bot, now);
     if (!for_bot) {
+        pulse().message("irc", text, now);
         return lines;
     }
     const std::string lowered = to_lower(sender);

@@ -147,6 +147,10 @@ constexpr std::array settings{
     Setting{"NORELECBOT_BALLOON_COST", [](AppConfig &config, std::string_view value) {
         return set_number(config.balloon_cost, value, AppConfig::default_balloon_cost, 0);
     }},
+    Setting{"NORELECBOT_NEWCOMERS", [](AppConfig &config, std::string_view value) {
+        config.newcomers = value.empty() || (value != "0" && !text::equals_ignore_case(value, "false"));
+        return true;
+    }},
     Setting{"NORELECBOT_STARTER_BALLOON", [](AppConfig &config, std::string_view value) {
         config.starter_balloon = value.empty() || (value != "0" && !text::equals_ignore_case(value, "false"));
         return true;
@@ -240,6 +244,12 @@ constexpr std::array settings{
     Setting{"NORELECBOT_SENTINEL_FILE", [](AppConfig &config, std::string_view value) {
         return set_text(config.sentinel_path, value, AppConfig::default_sentinel_path);
     }},
+    Setting{"NORELECBOT_PULSE_FILE", [](AppConfig &config, std::string_view value) {
+        return set_text(config.pulse_path, value, AppConfig::default_pulse_path);
+    }},
+    Setting{"NORELECBOT_GOLDEN_HOUR", [](AppConfig &config, std::string_view value) {
+        return set_number(config.golden_hour, value, AppConfig::default_golden_hour, -1, 23);
+    }},
     Setting{"NORELECBOT_SENTINEL_HOUR", [](AppConfig &config, std::string_view value) {
         return set_number(config.sentinel_hour, value, AppConfig::default_sentinel_hour, 0, 23);
     }},
@@ -303,6 +313,10 @@ std::optional<AppConfig> load_config(const std::filesystem::path &dotenv_path) {
     if (config.sentinel_path == AppConfig::default_sentinel_path) {
         config.sentinel_path =
             (std::filesystem::path{config.conquister_path}.parent_path() / AppConfig::default_sentinel_path).string();
+    }
+    if (config.pulse_path == AppConfig::default_pulse_path) {
+        config.pulse_path =
+            (std::filesystem::path{config.conquister_path}.parent_path() / AppConfig::default_pulse_path).string();
     }
     return config;
 }

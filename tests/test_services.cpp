@@ -4,6 +4,7 @@
 #include "storage.hpp"
 #include "position.hpp"
 #include "zodiac.hpp"
+#include "sentinel.hpp"
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
@@ -2310,4 +2311,27 @@ TEST_CASE("with the zodiac switched off every day is worth the same to everybody
             CHECK(day_percent(player, day * 86400 + 3600) == 100);
         }
     }
+}
+
+TEST_CASE("in the golden hour every raid that gets through takes twice as much") {
+    const TestPaths paths{"golden-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{"alice":100000,"bob":40},"quotes_added":{}})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    RaidRules rules = quick_rides();
+    rules.golden_hour = local_hour(5);
+    REQUIRE(raid_start(storage, 7, "bob", "alice", 0, rules).status == RaidStatus::started);
+    const std::vector<RaidEvent> arrival = raid_due(storage, 5, rules);
+    REQUIRE(arrival.size() == 1);
+    CHECK(arrival[0].golden);
+    const std::int64_t carried = (arrival[0].distance / 50) * day_percent("bob", 5) / day_percent("alice", 5);
+    CHECK(arrival[0].loot == carried * 2);
+    rules.golden_hour = (local_hour(5) + 1) % 24;
+    static_cast<void>(raid_due(storage, 10, rules));
+    REQUIRE(raid_start(storage, 7, "bob", "alice", 11, rules).status == RaidStatus::started);
+    const std::vector<RaidEvent> plain = raid_due(storage, 16, rules);
+    REQUIRE(plain.size() == 1);
+    CHECK_FALSE(plain[0].golden);
 }

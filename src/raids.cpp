@@ -4,6 +4,7 @@
 #include "game.hpp"
 #include "irc.hpp"
 #include "logging.hpp"
+#include "pulse.hpp"
 #include "sentinel.hpp"
 #include "telegram.hpp"
 
@@ -66,6 +67,41 @@ void announce_news(const AppConfig &config) {
     }
 }
 
+/* What a raid event is called in the pulse. */
+std::string_view event_name(const RaidEvent &event) {
+    switch (event.kind) {
+    case RaidEvent::Kind::stolen:
+        return event.loot > 0 ? "robbed" : "held_off";
+    case RaidEvent::Kind::delivered:
+        return "delivered";
+    case RaidEvent::Kind::returned:
+        return "returned";
+    case RaidEvent::Kind::born:
+        return "born";
+    case RaidEvent::Kind::gone:
+        return "gone";
+    }
+    return "other";
+}
+
+/* The golden hour is told as it starts and as it ends, once a day each. */
+void golden_round(const AppConfig &config, std::int64_t now, std::int64_t &began, std::int64_t &ended) {
+    if (config.golden_hour < 0) {
+        return;
+    }
+    const int hour = local_hour(now);
+    const std::int64_t today = local_day(now);
+    if (hour == config.golden_hour && began != today) {
+        began = today;
+        announce(config, std::format("🌟 È l'ora d'oro: fino alle {} ogni raid riuscito ruba il doppio delle palle!",
+                                     (config.golden_hour + 1) % 24));
+        pulse().event("golden_start", now);
+    } else if (hour == (config.golden_hour + 1) % 24 && began == today && ended != today) {
+        ended = today;
+        announce(config, std::format("🌙 L'ora d'oro è finita: torna domani alle {}.", config.golden_hour));
+    }
+}
+
 /* Once a day, at its hour, the sentinel tells every owner in private what it saw. */
 void sentinel_round(Storage &storage, const AppConfig &config, std::int64_t now) {
     if (config.owner_ids.empty() || config.bot_token.empty() || local_hour(now) != config.sentinel_hour ||
@@ -116,10 +152,13 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
         .salt_percent = config.salt_percent,
         .frozen_seconds = config.frozen_seconds,
         .fire_percent = config.fire_percent,
+        .golden_hour = config.golden_hour,
     };
     /* The news waits for the second round: by then IRC has had a tick to connect. */
     int rounds = 0;
     std::int64_t kept = seconds_now();
+    std::int64_t golden_began = 0;
+    std::int64_t golden_ended = 0;
     while (!stop.load(std::memory_order_relaxed)) {
         if (++rounds == 2) {
             try {
@@ -130,6 +169,7 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
         }
         try {
             for (const RaidEvent &event : raid_due(storage, seconds_now(), rules)) {
+                pulse().event(event_name(event), seconds_now());
                 if (const std::optional<std::string> reply = raid_event_reply(event, config)) {
                     announce(config, *reply);
                 }
@@ -139,9 +179,11 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
         }
         try {
             sentinel_round(storage, config, seconds_now());
+            golden_round(config, seconds_now(), golden_began, golden_ended);
             if (seconds_now() - kept >= 600) {
                 kept = seconds_now();
                 sentinel().save(config.sentinel_path);
+                pulse().save(config.pulse_path);
             }
         } catch (const std::exception &error) {
             log_warning("The sentinel could not do its round: {}", error.what());
@@ -151,6 +193,7 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
         }
     }
     sentinel().save(config.sentinel_path);
+    pulse().save(config.pulse_path);
     log_info("Raid keeper stopped");
 }
 

@@ -159,6 +159,17 @@ struct ConquisterState {
     /* The players named "il pugliese" by hand, mapped to when: each keeps it until the season ends, which is
        when a ☢️ starts the whole game over. */
     Counters pugliesi{};
+    /* When each player first showed up, for those who came after it was kept; whether he was shown what
+       to try, and whether he ever got into @TheConquister37. */
+    Counters joined{};
+    Counters guided{};
+    Counters entered{};
+    /* Who brought each newcomer, the days he has played since, the last of them, and whether the two were
+       paid for it: 1 paid, -1 never to be. */
+    Authors invited_by{};
+    Counters invite_days{};
+    Counters invite_last_day{};
+    Counters invite_paid{};
 
     bool operator==(const ConquisterState &) const = default;
 };
