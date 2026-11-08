@@ -1836,6 +1836,13 @@ RaidResult raid_start(
         /* Naming yourself is the way home. */
         if (homewards) {
             if (travelling != nullptr) {
+                /* Who is already riding home does not ride home twice: the road left cannot be
+                   shortened either, so he is only told how much of it is left. */
+                if (travelling->arrived) {
+                    outcome.status = RaidStatus::already_travelling;
+                    outcome.seconds = std::max<std::int64_t>(travelling->back - now, 0);
+                    return outcome;
+                }
                 /* He turns his back on the raid and rides home the way he came: what is left is
                    the road already walked, not the one he had planned. Both legs are the same
                    length, so the departure was as far before the arrival as the arrival is

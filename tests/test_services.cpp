@@ -2193,6 +2193,12 @@ TEST_CASE("turning back mid journey only costs the road already walked") {
     CHECK(back.status == RaidStatus::coming_home);
     CHECK(back.seconds == third);
 
+    /* Looking back again does not shorten the road left: he is only told how much is left,
+       and he is home at the very hour the first look back had set. */
+    const RaidResult twice = raid_start(storage, 7, "bob", "bob", third + 1, slow);
+    CHECK(twice.status == RaidStatus::already_travelling);
+    CHECK(twice.seconds == third - 1);
+
     /* Nothing is stolen, and he is home after exactly the road he had walked. */
     CHECK(raid_due(storage, third + third - 1, slow).empty());
     const std::vector<RaidEvent> home = raid_due(storage, third + third, slow);

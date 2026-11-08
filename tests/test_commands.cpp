@@ -537,6 +537,8 @@ TEST_CASE("We @someone sends the player out to rob them") {
         return said == std::format("{}0 secondi.", start) || said == std::format("{}1 secondo.", start);
     };
     CHECK(soon(reply("/back"), "bob lasci perdere e torni in @bob: arrivi tra "));
+    /* A second look back finds him already riding home: it neither shortens nor lengthens the road. */
+    CHECK(soon(reply("/back"), "bob sei già in viaggio, torni tra "));
     CHECK(soon(reply("/raid @alice"), "bob sei già in viaggio, torni tra "));
 
     CHECK(soon(reply("We @TheConquister37"),
