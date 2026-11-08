@@ -47,6 +47,9 @@ struct Staged {
     std::string track;
     /* Whether IRC, where nothing can be changed once said, hears it too. */
     bool irc = true;
+    /* On Telegram, a line pinned on top of the chat under a name, until a later line names it to unpin it. */
+    std::string pin;
+    std::string unpin;
 };
 [[nodiscard]] std::vector<Staged> staged_due(std::int64_t now);
 

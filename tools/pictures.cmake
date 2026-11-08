@@ -2,7 +2,7 @@
 # Each entry is name:file:mime.
 set(NORELECBOT_PICTURES
     "launch:launch.jpg:image/jpeg"
-    "blast:blast.jpg:image/jpeg"
+    "blast:blast.gif:image/gif"
     "impact:impact.jpg:image/jpeg"
     "fallout:fallout.png:image/png"
 )

@@ -240,7 +240,8 @@ ConquisterState parse_state(const Json &json) {
         parse_counters(json, "invite_paid"),
         json.contains("fallout_until") ? integer(json.at("fallout_until")) : 0,
         json.contains("season_fresh") && json.at("season_fresh").get<bool>(),
-        json.contains("nukes") ? integer(json.at("nukes")) : 0,
+        /* Two went off before they were counted. */
+        json.contains("nukes") ? integer(json.at("nukes")) : 2,
     };
     return state;
 }

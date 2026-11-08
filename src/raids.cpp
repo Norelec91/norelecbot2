@@ -51,6 +51,26 @@ void announce(const AppConfig &config, const std::string &text, std::string_view
    sends; IRC hears it only when it is meant to. */
 void tell_staged(const AppConfig &config, const Staged &line) {
     static std::map<std::string, std::int64_t, std::less<>> tracks;
+    static std::map<std::string, std::int64_t, std::less<>> pinned;
+    const bool on_telegram = config.conquister_chat_id != 0 && !config.bot_token.empty();
+    if (!line.unpin.empty() && on_telegram) {
+        if (const auto shown = pinned.find(line.unpin); shown != pinned.end()) {
+            telegram_pin(config, config.conquister_chat_id, shown->second, false);
+            pinned.erase(shown);
+        }
+    }
+    if (!line.pin.empty()) {
+        if (on_telegram) {
+            if (const std::optional<std::int64_t> id = telegram_send(config, config.conquister_chat_id, line.text)) {
+                telegram_pin(config, config.conquister_chat_id, *id, true);
+                pinned.insert_or_assign(line.pin, *id);
+            }
+        }
+        if (config.irc_enabled && line.irc) {
+            irc_say(line.text);
+        }
+        return;
+    }
     if (line.track.empty()) {
         if (line.irc) {
             announce(config, line.text, line.picture);

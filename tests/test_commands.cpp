@@ -1191,12 +1191,14 @@ TEST_CASE("the ☢️ costs a million and starts the game over from the place") 
     CHECK(show[6].text.contains("☠️ Spazzati via: Alice con 7 palle."));
     CHECK(show[6].text.contains("🔥 In fumo 7 palle e "));
     CHECK(show[6].text.contains("📈 I sismografi impazziscono: magnitudo 3.9."));
-    CHECK(show[6].text.contains("🗓️ È la 1ª bomba atomica nella storia di @TheConquister37."));
+    CHECK(show[6].text.contains("🗓️ È la 3ª bomba atomica nella storia di @TheConquister37."));
     CHECK(show[6].text.ends_with("☢️ «Ora sono diventato Morte, il distruttore di mondi.» — Alice"));
     CHECK(show[6].picture == "blast");
     CHECK(show[7].text == "📺 EDIZIONE STRAORDINARIA 📺\n«Alice rade al suolo @TheConquister37: 7 palle in fumo, 1 giocatore "
-                          "in rovina.»\nGli esperti: «Non era mai successo nella storia del gioco.»\nSeguiranno "
+                          "in rovina.»\nGli esperti: «Le palle non torneranno indietro.»\nSeguiranno "
                           "aggiornamenti. La linea torna allo studio.");
+    CHECK_FALSE(show[7].pin.empty());
+    CHECK(show[9].unpin == show[7].pin);
     CHECK(show[8].text.starts_with("☢️ Fallout: @TheConquister37 è contaminato dalle radiazioni."));
     CHECK(show[8].picture == "fallout");
     CHECK(show[9].text.starts_with("🌱 Il fallout si è diradato: @TheConquister37 è di nuovo aperto!"));
@@ -1206,7 +1208,9 @@ TEST_CASE("the ☢️ costs a million and starts the game over from the place") 
         REQUIRE(photo != nullptr);
         CHECK(photo->bytes.size() > 1000);
     }
-    CHECK(picture("blast")->bytes.starts_with("\xFF\xD8\xFF"));
+    CHECK(picture("blast")->bytes.starts_with("GIF89a"));
+    CHECK(picture("blast")->mime == "image/gif");
+    CHECK(picture("launch")->bytes.starts_with("\xFF\xD8\xFF"));
     CHECK(picture("fallout")->bytes.starts_with("\x89PNG"));
     CHECK(picture("nothing") == nullptr);
     CHECK(staged_due(std::numeric_limits<std::int64_t>::max()).empty());

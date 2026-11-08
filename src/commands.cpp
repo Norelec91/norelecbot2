@@ -723,7 +723,7 @@ std::vector<std::pair<std::int64_t, Staged>> staged_lines;
 void stage(std::string text, std::int64_t at, std::string picture = {}) {
     const std::scoped_lock lock{staged_guard};
     staged_lines.emplace_back(at, Staged{.text = std::move(text), .picture = std::move(picture), .track = {},
-                                         .irc = true});
+                                         .irc = true, .pin = {}, .unpin = {}});
 }
 
 void stage(Staged line, std::int64_t at) {
@@ -751,10 +751,13 @@ std::string nuke_bulletin(std::string_view thrower, const FurnitureBurnResult &b
     std::string told = std::format("📺 EDIZIONE STRAORDINARIA 📺\n«{} rade al suolo {}: {} in fumo, {} {} in "
                                    "rovina.»", thrower, conquister_place, palle(burnt.wiped), burnt.ruined,
                                    burnt.ruined == 1 ? "giocatore" : "giocatori");
-    told += burnt.nuke_number <= 1
-        ? std::string{"\nGli esperti: «Non era mai successo nella storia del gioco.»"}
-        : std::format("\nGli esperti: «È la {}ª volta: {} non ha imparato niente.»", burnt.nuke_number,
-                      conquister_place);
+    /* What the experts say changes with the ruin, so that the news never reads the same twice. */
+    constexpr std::array<std::string_view, 3> experts{
+        "Ci vorranno settimane per ricostruire.",
+        "Le palle non torneranno indietro.",
+        "Consigliamo a tutti di restare in casa, con il proprio 🎈.",
+    };
+    told += std::format("\nGli esperti: «{}»", experts[static_cast<std::size_t>(burnt.wiped) % experts.size()]);
     told += "\nSeguiranno aggiornamenti. La linea torna allo studio.";
     return told;
 }
@@ -847,17 +850,23 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
            the last seconds. */
         for (std::int64_t second = 0; second < flight_seconds; ++second) {
             stage(Staged{.text = flight_frame(second), .picture = {}, .track = std::format("flight-{}", now),
-                         .irc = second >= flight_seconds - 3},
+                         .irc = second >= flight_seconds - 3, .pin = {}, .unpin = {}},
                   now + 3 + second);
         }
         stage(nuke_blast(context.username, burnt, optional_random_quote(context.storage)), now + 3 + flight_seconds,
               "blast");
-        stage(nuke_bulletin(context.username, burnt), now + 15);
+        /* The bulletin stays pinned on top of the chat while the fallout lasts. */
+        const std::string bulletin = std::format("bulletin-{}", now);
+        stage(Staged{.text = nuke_bulletin(context.username, burnt), .picture = {}, .track = {}, .irc = true,
+                     .pin = bulletin, .unpin = {}},
+              now + 15);
         stage(std::format("☢️ Fallout: {} è contaminato dalle radiazioni. Nessuno può entrare per {}: poi si apre la "
                           "corsa alla nuova stagione!", conquister_place, format_wait(fallout_seconds)), now + 10,
               "fallout");
-        stage(std::format("🌱 Il fallout si è diradato: {} è di nuovo aperto! Il primo che entra inaugura la nuova "
-                          "stagione. Pronti… via! 🏁", conquister_place), now + fallout_seconds);
+        stage(Staged{.text = std::format("🌱 Il fallout si è diradato: {} è di nuovo aperto! Il primo che entra "
+                                         "inaugura la nuova stagione. Pronti… via! 🏁", conquister_place),
+                     .picture = {}, .track = {}, .irc = true, .pin = {}, .unpin = bulletin},
+              now + fallout_seconds);
         return std::format("⚠️ DEFCON 1\n🔴 {} ha premuto il pulsante rosso.\n🚨🚨🚨 ALLARME NUCLEARE 🚨🚨🚨\nUn missile ☢️ "
                            "punta dritto su {}!", context.username, conquister_place);
     }

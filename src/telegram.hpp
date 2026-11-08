@@ -21,6 +21,8 @@ void telegram_say(const AppConfig &config, std::int64_t chat_id, const std::stri
 [[nodiscard]] std::optional<std::int64_t> telegram_send(const AppConfig &config, std::int64_t chat_id,
                                                         const std::string &text);
 void telegram_edit(const AppConfig &config, std::int64_t chat_id, std::int64_t message_id, const std::string &text);
+/* Pins a message on top of the chat, quietly, or unpins it: the bot must be allowed to, or nothing happens. */
+void telegram_pin(const AppConfig &config, std::int64_t chat_id, std::int64_t message_id, bool pinned);
 
 /* A picture built into the bot, with the text under it: uploaded the first time, then sent again by the id
    Telegram gave it. Too long for a caption, the text follows as a message of its own. */

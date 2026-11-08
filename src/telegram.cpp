@@ -170,10 +170,14 @@ void telegram_photo(const AppConfig &config, std::int64_t chat_id, const Picture
             known = found->second;
         }
     }
+    /* A GIF moves: Telegram calls it an animation. */
+    const bool moving = picture.mime == "image/gif";
+    const std::string method = moving ? "sendAnimation" : "sendPhoto";
+    const std::string field = moving ? "animation" : "photo";
     bool sent = false;
     if (!known.empty()) {
-        sent = telegram_api(config, "sendPhoto", {{"chat_id", std::to_string(chat_id)}, {"photo", known},
-                                                  {"caption", caption}}, poll_timeout_seconds).has_value();
+        sent = telegram_api(config, method, {{"chat_id", std::to_string(chat_id)}, {field, known},
+                                             {"caption", caption}}, poll_timeout_seconds).has_value();
     }
     if (!sent) {
         httplib::Client client{"https://api.telegram.org"};
@@ -184,23 +188,22 @@ void telegram_photo(const AppConfig &config, std::int64_t chat_id, const Picture
         const httplib::MultipartFormDataItems items{
             {"chat_id", std::to_string(chat_id), "", ""},
             {"caption", caption, "", ""},
-            {"photo", std::string{picture.bytes}, std::string{picture.file_name}, std::string{picture.mime}},
+            {field, std::string{picture.bytes}, std::string{picture.file_name}, std::string{picture.mime}},
         };
-        const httplib::Result result = client.Post(std::format("/bot{}/sendPhoto", config.bot_token), items);
+        const httplib::Result result = client.Post(std::format("/bot{}/{}", config.bot_token, method), items);
         if (!result || result->status < 200 || result->status >= 300) {
             log_warning("Telegram sendPhoto {} failed: {}", picture.name,
                         result ? std::to_string(result->status) : httplib::to_string(result.error()));
         } else {
             sent = true;
             try {
-                /* The largest size is the last: its id sends the same picture again without uploading it. */
+                /* Its id sends the same picture again without uploading it: for a photo, the largest size's,
+                   the last. */
                 const Json reply = Json::parse(result->body);
-                const Json &sizes = reply.at("result").at("photo");
-                if (sizes.is_array() && !sizes.empty()) {
-                    const std::scoped_lock lock{known_guard};
-                    known_ids.insert_or_assign(std::string{picture.name},
-                                               sizes.back().at("file_id").get<std::string>());
-                }
+                const Json &sent_as = reply.at("result").at(field);
+                const Json &kept = sent_as.is_array() ? sent_as.back() : sent_as;
+                const std::scoped_lock lock{known_guard};
+                known_ids.insert_or_assign(std::string{picture.name}, kept.at("file_id").get<std::string>());
             } catch (const std::exception &error) {
                 log_warning("Telegram sendPhoto {} returned no id: {}", picture.name, error.what());
             }
@@ -221,6 +224,15 @@ std::optional<std::int64_t> telegram_send(const AppConfig &config, std::int64_t 
         return id->get<std::int64_t>();
     }
     return std::nullopt;
+}
+
+void telegram_pin(const AppConfig &config, std::int64_t chat_id, std::int64_t message_id, bool pinned) {
+    const std::string id = std::to_string(message_id);
+    static_cast<void>(pinned
+        ? telegram_api(config, "pinChatMessage", {{"chat_id", std::to_string(chat_id)}, {"message_id", id},
+                                                  {"disable_notification", "true"}}, poll_timeout_seconds)
+        : telegram_api(config, "unpinChatMessage", {{"chat_id", std::to_string(chat_id)}, {"message_id", id}},
+                       poll_timeout_seconds));
 }
 
 void telegram_edit(const AppConfig &config, std::int64_t chat_id, std::int64_t message_id, const std::string &text) {

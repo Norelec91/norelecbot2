@@ -174,8 +174,8 @@ struct ConquisterState {
        opens the new season. */
     std::int64_t fallout_until = 0;
     bool season_fresh = false;
-    /* How many ☢️ went off on @TheConquister37 since the game began. */
-    std::int64_t nukes = 0;
+    /* How many ☢️ went off on @TheConquister37 since the game began: two before they were counted. */
+    std::int64_t nukes = 2;
 
     bool operator==(const ConquisterState &) const = default;
 };
