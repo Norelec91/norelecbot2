@@ -722,7 +722,41 @@ std::vector<std::pair<std::int64_t, Staged>> staged_lines;
 
 void stage(std::string text, std::int64_t at, std::string picture = {}) {
     const std::scoped_lock lock{staged_guard};
-    staged_lines.emplace_back(at, Staged{.text = std::move(text), .picture = std::move(picture)});
+    staged_lines.emplace_back(at, Staged{.text = std::move(text), .picture = std::move(picture), .track = {},
+                                         .irc = true});
+}
+
+void stage(Staged line, std::int64_t at) {
+    const std::scoped_lock lock{staged_guard};
+    staged_lines.emplace_back(at, std::move(line));
+}
+
+/* How many seconds the missile flies, and how many steps of road it crosses meanwhile. */
+constexpr std::int64_t flight_seconds = 5;
+constexpr std::int64_t road_steps = 10;
+
+/* A frame of the missile on its way: the silo, the road, the missile and its trail, the place. */
+std::string flight_frame(std::int64_t second) {
+    const std::int64_t at = std::min(road_steps, (second + 1) * road_steps / flight_seconds);
+    std::string road;
+    for (std::int64_t step = 0; step < road_steps; ++step) {
+        road += step == at - 1 ? "💨🚀" : step < at - 1 ? "·" : " ·";
+    }
+    return std::format("📡 Missile ☢️ in volo verso {}: impatto tra {}…\n🏭{}🏯", conquister_place,
+                       flight_seconds - second, road);
+}
+
+/* The bulletin that follows: the news as the television would tell it. */
+std::string nuke_bulletin(std::string_view thrower, const FurnitureBurnResult &burnt) {
+    std::string told = std::format("📺 EDIZIONE STRAORDINARIA 📺\n«{} rade al suolo {}: {} in fumo, {} {} in "
+                                   "rovina.»", thrower, conquister_place, palle(burnt.wiped), burnt.ruined,
+                                   burnt.ruined == 1 ? "giocatore" : "giocatori");
+    told += burnt.nuke_number <= 1
+        ? std::string{"\nGli esperti: «Non era mai successo nella storia del gioco.»"}
+        : std::format("\nGli esperti: «È la {}ª volta: {} non ha imparato niente.»", burnt.nuke_number,
+                      conquister_place);
+    told += "\nSeguiranno aggiornamenti. La linea torna allo studio.";
+    return told;
 }
 
 /* The blast of a ☢️ on the place: the mushroom, the end of the season, who it swept away and what burned. */
@@ -748,6 +782,9 @@ std::string nuke_blast(std::string_view thrower, const FurnitureBurnResult &burn
                         3.0 + std::log10(static_cast<double>(burnt.wiped) + 1.0));
     if (last_words) {
         told += std::format("\n📻 Ultima trasmissione da {} prima del silenzio: «{}»", conquister_place, *last_words);
+    }
+    if (burnt.nuke_number > 0) {
+        told += std::format("\n🗓️ È la {}ª bomba atomica nella storia di {}.", burnt.nuke_number, conquister_place);
     }
     told += std::format("\n☢️ «Ora sono diventato Morte, il distruttore di mondi.» — {}", thrower);
     return told;
@@ -806,10 +843,16 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
         const std::int64_t now = seconds_now();
         stage(std::format("🛰️ Lancio confermato. Bersaglio: {}.\n🚀 Il missile esce dal silo.", conquister_place), now + 2,
               "launch");
-        stage("3… 💨🚀 · · · · · · 🏯", now + 4);
-        stage("2… · · · 💨🚀 · · · 🏯", now + 5);
-        stage("1… · · · · · · 💨🚀🏯", now + 6);
-        stage(nuke_blast(context.username, burnt, optional_random_quote(context.storage)), now + 7, "blast");
+        /* On Telegram the flight is one message, the missile crossing it a second at a time; IRC hears only
+           the last seconds. */
+        for (std::int64_t second = 0; second < flight_seconds; ++second) {
+            stage(Staged{.text = flight_frame(second), .picture = {}, .track = std::format("flight-{}", now),
+                         .irc = second >= flight_seconds - 3},
+                  now + 3 + second);
+        }
+        stage(nuke_blast(context.username, burnt, optional_random_quote(context.storage)), now + 3 + flight_seconds,
+              "blast");
+        stage(nuke_bulletin(context.username, burnt), now + 15);
         stage(std::format("☢️ Fallout: {} è contaminato dalle radiazioni. Nessuno può entrare per {}: poi si apre la "
                           "corsa alla nuova stagione!", conquister_place, format_wait(fallout_seconds)), now + 10,
               "fallout");

@@ -600,6 +600,8 @@ struct FurnitureBurnResult {
     std::int64_t wiped = 0;
     std::size_t ruined = 0;
     std::int64_t emoji_lost = 0;
+    /* Which bomb this was in the history of the game, from 1. */
+    std::int64_t nuke_number = 0;
     /* It was a 💦: the holder is expecting, and the child is born after this many seconds. */
     std::int64_t expecting = 0;
     /* It was a 🧊: the holder is frozen for this many seconds; melted, his 🔥 shortened it, to nothing

@@ -212,6 +212,24 @@ void telegram_photo(const AppConfig &config, std::int64_t chat_id, const Picture
     }
 }
 
+std::optional<std::int64_t> telegram_send(const AppConfig &config, std::int64_t chat_id, const std::string &text) {
+    const std::optional<Json> sent = telegram_api(
+        config, "sendMessage",
+        {{"chat_id", std::to_string(chat_id)}, {"text", text}, {"disable_web_page_preview", "true"}},
+        poll_timeout_seconds);
+    if (const Json *id = integer_member(find_member(sent ? &*sent : nullptr, "result"), "message_id")) {
+        return id->get<std::int64_t>();
+    }
+    return std::nullopt;
+}
+
+void telegram_edit(const AppConfig &config, std::int64_t chat_id, std::int64_t message_id, const std::string &text) {
+    static_cast<void>(telegram_api(
+        config, "editMessageText",
+        {{"chat_id", std::to_string(chat_id)}, {"message_id", std::to_string(message_id)}, {"text", text}},
+        poll_timeout_seconds));
+}
+
 void telegram_run(Storage &storage, const AppConfig &config, const std::atomic<bool> &stop) {
     log_info("Telegram poller started (trigger={})", conquister_trigger);
     std::int64_t offset = -1;

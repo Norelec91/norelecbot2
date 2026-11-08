@@ -47,6 +47,30 @@ void announce(const AppConfig &config, const std::string &text, std::string_view
     }
 }
 
+/* A staged line: a frame of a track changes the one Telegram message of that track, which the first frame
+   sends; IRC hears it only when it is meant to. */
+void tell_staged(const AppConfig &config, const Staged &line) {
+    static std::map<std::string, std::int64_t, std::less<>> tracks;
+    if (line.track.empty()) {
+        if (line.irc) {
+            announce(config, line.text, line.picture);
+        } else if (config.conquister_chat_id != 0 && !config.bot_token.empty()) {
+            telegram_say(config, config.conquister_chat_id, line.text);
+        }
+        return;
+    }
+    if (config.conquister_chat_id != 0 && !config.bot_token.empty()) {
+        if (const auto shown = tracks.find(line.track); shown != tracks.end()) {
+            telegram_edit(config, config.conquister_chat_id, shown->second, line.text);
+        } else if (const std::optional<std::int64_t> id = telegram_send(config, config.conquister_chat_id, line.text)) {
+            tracks.insert_or_assign(line.track, *id);
+        }
+    }
+    if (config.irc_enabled && line.irc) {
+        irc_say(line.text);
+    }
+}
+
 /* Tells both chats what changed in the game, once: the file is gone once it has been said. */
 void announce_news(const AppConfig &config) {
     if (config.news_path.empty()) {
@@ -185,7 +209,7 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
             log_warning("A raid could not be settled: {}", error.what());
         }
         for (const Staged &line : staged_due(seconds_now())) {
-            announce(config, line.text, line.picture);
+            tell_staged(config, line);
         }
         try {
             sentinel_round(storage, config, seconds_now());
@@ -202,7 +226,7 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
             std::this_thread::sleep_for(std::chrono::seconds{1});
             /* What was staged is told on its second, not on the next round. */
             for (const Staged &line : staged_due(seconds_now())) {
-                announce(config, line.text, line.picture);
+                tell_staged(config, line);
             }
         }
     }

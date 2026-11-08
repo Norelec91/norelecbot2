@@ -43,6 +43,10 @@ struct Staged {
     std::string text;
     /* The picture to show with it on Telegram, by name; none when empty. */
     std::string picture;
+    /* On Telegram, the lines of one track are a single message changed in place, frame after frame. */
+    std::string track;
+    /* Whether IRC, where nothing can be changed once said, hears it too. */
+    bool irc = true;
 };
 [[nodiscard]] std::vector<Staged> staged_due(std::int64_t now);
 

@@ -1175,24 +1175,32 @@ TEST_CASE("the ☢️ costs a million and starts the game over from the place") 
     /* The launch, the countdown, the blast and the fallout follow, a second at a time, told by the keeper. */
     CHECK(staged_due(0).empty());
     const std::vector<Staged> show = staged_due(std::numeric_limits<std::int64_t>::max());
-    REQUIRE(show.size() == 7);
+    REQUIRE(show.size() == 10);
     CHECK(show[0].text == "🛰️ Lancio confermato. Bersaglio: @TheConquister37.\n🚀 Il missile esce dal silo.");
-    CHECK(show[1].text == "3… 💨🚀 · · · · · · 🏯");
-    CHECK(show[2].text == "2… · · · 💨🚀 · · · 🏯");
-    CHECK(show[3].text == "1… · · · · · · 💨🚀🏯");
-    CHECK(show[4].text.starts_with("💥💥💥💥💥💥💥💥💥\n☁️☁️☁️🍄🍄🍄☁️☁️☁️\n🔥🔥🔥🔥🔥🔥🔥🔥🔥\n@TheConquister37 è stato raso al suolo."));
-    CHECK(show[4].text.contains("☠️ Spazzati via: Alice con 7 palle."));
-    CHECK(show[4].text.contains("🔥 In fumo 7 palle e "));
-    CHECK(show[4].text.contains("📈 I sismografi impazziscono: magnitudo 3.9."));
-    CHECK(show[4].text.ends_with("☢️ «Ora sono diventato Morte, il distruttore di mondi.» — Alice"));
-    CHECK(show[5].text.starts_with("☢️ Fallout: @TheConquister37 è contaminato dalle radiazioni."));
-    CHECK(show[6].text.starts_with("🌱 Il fallout si è diradato: @TheConquister37 è di nuovo aperto!"));
-    /* The launch, the blast and the fallout come with their pictures on Telegram. */
     CHECK(show[0].picture == "launch");
-    CHECK(show[1].picture.empty());
-    CHECK(show[4].picture == "blast");
-    CHECK(show[5].picture == "fallout");
-    CHECK(show[6].picture.empty());
+    /* The flight is one Telegram message changed second by second; IRC hears only the last three seconds. */
+    CHECK(show[1].text == "📡 Missile ☢️ in volo verso @TheConquister37: impatto tra 5…\n🏭·💨🚀 · · · · · · · ·🏯");
+    CHECK(show[5].text == "📡 Missile ☢️ in volo verso @TheConquister37: impatto tra 1…\n🏭·········💨🚀🏯");
+    for (std::size_t frame = 1; frame <= 5; ++frame) {
+        CHECK_FALSE(show[frame].track.empty());
+        CHECK(show[frame].track == show[1].track);
+        CHECK(show[frame].irc == (frame >= 3));
+    }
+    CHECK(show[0].track.empty());
+    CHECK(show[6].text.starts_with("💥💥💥💥💥💥💥💥💥\n☁️☁️☁️🍄🍄🍄☁️☁️☁️\n🔥🔥🔥🔥🔥🔥🔥🔥🔥\n@TheConquister37 è stato raso al suolo."));
+    CHECK(show[6].text.contains("☠️ Spazzati via: Alice con 7 palle."));
+    CHECK(show[6].text.contains("🔥 In fumo 7 palle e "));
+    CHECK(show[6].text.contains("📈 I sismografi impazziscono: magnitudo 3.9."));
+    CHECK(show[6].text.contains("🗓️ È la 1ª bomba atomica nella storia di @TheConquister37."));
+    CHECK(show[6].text.ends_with("☢️ «Ora sono diventato Morte, il distruttore di mondi.» — Alice"));
+    CHECK(show[6].picture == "blast");
+    CHECK(show[7].text == "📺 EDIZIONE STRAORDINARIA 📺\n«Alice rade al suolo @TheConquister37: 7 palle in fumo, 1 giocatore "
+                          "in rovina.»\nGli esperti: «Non era mai successo nella storia del gioco.»\nSeguiranno "
+                          "aggiornamenti. La linea torna allo studio.");
+    CHECK(show[8].text.starts_with("☢️ Fallout: @TheConquister37 è contaminato dalle radiazioni."));
+    CHECK(show[8].picture == "fallout");
+    CHECK(show[9].text.starts_with("🌱 Il fallout si è diradato: @TheConquister37 è di nuovo aperto!"));
+    CHECK(show[9].picture.empty());
     for (const std::string_view name : {"launch", "blast", "impact", "fallout"}) {
         const Picture *photo = picture(name);
         REQUIRE(photo != nullptr);

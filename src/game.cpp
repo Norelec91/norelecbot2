@@ -1463,6 +1463,7 @@ FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, 
             /* The place is left contaminated for a while; whoever gets in first after it opens a new season. */
             state.fallout_until = now + fallout_seconds;
             state.season_fresh = true;
+            outcome.nuke_number = ++state.nukes;
             outcome.reset = true;
             return outcome;
         }
