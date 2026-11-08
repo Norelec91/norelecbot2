@@ -49,21 +49,15 @@ void announce(const AppConfig &config, const std::string &text, std::string_view
 
 /* A staged line: a frame of a track changes the one Telegram message of that track, which the first frame
    sends; IRC hears it only when it is meant to. */
-void tell_staged(const AppConfig &config, const Staged &line) {
+void tell_staged(Storage &storage, const AppConfig &config, const Staged &line) {
     static std::map<std::string, std::int64_t, std::less<>> tracks;
-    static std::map<std::string, std::int64_t, std::less<>> pinned;
     const bool on_telegram = config.conquister_chat_id != 0 && !config.bot_token.empty();
-    if (!line.unpin.empty() && on_telegram) {
-        if (const auto shown = pinned.find(line.unpin); shown != pinned.end()) {
-            telegram_pin(config, config.conquister_chat_id, shown->second, false);
-            pinned.erase(shown);
-        }
-    }
-    if (!line.pin.empty()) {
+    /* Pinned until the fallout is gone, which may be after many restarts: the state keeps which message it is. */
+    if (line.pin) {
         if (on_telegram) {
             if (const std::optional<std::int64_t> id = telegram_send(config, config.conquister_chat_id, line.text)) {
                 telegram_pin(config, config.conquister_chat_id, *id, true);
-                pinned.insert_or_assign(line.pin, *id);
+                fallout_pinned(storage, *id);
             }
         }
         if (config.irc_enabled && line.irc) {
@@ -229,9 +223,16 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
             log_warning("A raid could not be settled: {}", error.what());
         }
         for (const Staged &line : staged_due(seconds_now())) {
-            tell_staged(config, line);
+            tell_staged(storage, config, line);
         }
         try {
+            /* The fallout gone, the place opens again and the bulletin comes down. */
+            if (const std::optional<std::int64_t> pinned = fallout_over(storage, seconds_now())) {
+                if (*pinned != 0 && config.conquister_chat_id != 0 && !config.bot_token.empty()) {
+                    telegram_pin(config, config.conquister_chat_id, *pinned, false);
+                }
+                announce(config, fallout_over_reply());
+            }
             sentinel_round(storage, config, seconds_now());
             golden_round(config, seconds_now(), golden_began, golden_ended);
             if (seconds_now() - kept >= 600) {
@@ -246,7 +247,7 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
             std::this_thread::sleep_for(std::chrono::seconds{1});
             /* What was staged is told on its second, not on the next round. */
             for (const Staged &line : staged_due(seconds_now())) {
-                tell_staged(config, line);
+                tell_staged(storage, config, line);
             }
         }
     }

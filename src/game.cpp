@@ -2708,5 +2708,26 @@ std::optional<InviteReward> invite_due(Storage &storage, const std::string &newc
     }
     return reward;
 }
+
+
+std::optional<std::int64_t> fallout_over(Storage &storage, std::int64_t now) {
+    return storage.transaction([now](StorageSession &session) -> std::optional<std::int64_t> {
+        ConquisterState &state = session.state();
+        if (state.fallout_until == 0 || state.fallout_until > now) {
+            return std::nullopt;
+        }
+        state.fallout_until = 0;
+        const std::int64_t pinned = state.fallout_pin;
+        state.fallout_pin = 0;
+        return pinned;
+    });
+}
+
+void fallout_pinned(Storage &storage, std::int64_t message_id) {
+    storage.transaction([message_id](StorageSession &session) {
+        session.state().fallout_pin = message_id;
+        return 0;
+    });
+}
 
 }

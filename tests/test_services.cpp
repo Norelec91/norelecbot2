@@ -2319,6 +2319,20 @@ TEST_CASE("with the zodiac switched off every day is worth the same to everybody
     }
 }
 
+TEST_CASE("the fallout of a ☢️ is over once, when its month is gone, and gives back the message to unpin") {
+    const TestPaths paths{"fallout-test"};
+    {
+        std::ofstream file{paths.conquister, std::ios::binary};
+        file << R"({"current":null,"scores":{},"quotes_added":{},"fallout_until":1000})";
+    }
+    Storage storage{paths.conquister, paths.quotes};
+    fallout_pinned(storage, 77);
+    CHECK_FALSE(fallout_over(storage, 999).has_value());
+    CHECK(fallout_over(storage, 1000) == std::optional<std::int64_t>{77});
+    CHECK_FALSE(fallout_over(storage, 2000).has_value());
+    CHECK(conquister_claim(storage, 1, "alice", 2000).status == ClaimStatus::taken);
+}
+
 TEST_CASE("in the golden hour every raid that gets through takes twice as much") {
     const TestPaths paths{"golden-test"};
     {

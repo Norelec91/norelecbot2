@@ -1175,7 +1175,7 @@ TEST_CASE("the ☢️ costs a million and starts the game over from the place") 
     /* The launch, the countdown, the blast and the fallout follow, a second at a time, told by the keeper. */
     CHECK(staged_due(0).empty());
     const std::vector<Staged> show = staged_due(std::numeric_limits<std::int64_t>::max());
-    REQUIRE(show.size() == 10);
+    REQUIRE(show.size() == 9);
     CHECK(show[0].text == "🛰️ Lancio confermato. Bersaglio: @TheConquister37.\n🚀 Il missile esce dal silo.");
     CHECK(show[0].picture == "launch");
     /* The flight is one Telegram message changed second by second; IRC hears only the last three seconds. */
@@ -1197,12 +1197,11 @@ TEST_CASE("the ☢️ costs a million and starts the game over from the place") 
     CHECK(show[7].text == "📺 EDIZIONE STRAORDINARIA 📺\n«Alice rade al suolo @TheConquister37: 7 palle in fumo, 1 giocatore "
                           "in rovina.»\nGli esperti: «Le palle non torneranno indietro.»\nSeguiranno "
                           "aggiornamenti. La linea torna allo studio.");
-    CHECK_FALSE(show[7].pin.empty());
-    CHECK(show[9].unpin == show[7].pin);
+    CHECK(show[7].pin);
     CHECK(show[8].text.starts_with("☢️ Fallout: @TheConquister37 è contaminato dalle radiazioni."));
     CHECK(show[8].picture == "fallout");
-    CHECK(show[9].text.starts_with("🌱 Il fallout si è diradato: @TheConquister37 è di nuovo aperto!"));
-    CHECK(show[9].picture.empty());
+    CHECK(show[8].text.contains("Nessuno può entrare per 30 giorni"));
+    CHECK(fallout_over_reply().starts_with("🌱 Il fallout si è diradato: @TheConquister37 è di nuovo aperto!"));
     for (const std::string_view name : {"launch", "blast", "impact", "fallout"}) {
         const Picture *photo = picture(name);
         REQUIRE(photo != nullptr);

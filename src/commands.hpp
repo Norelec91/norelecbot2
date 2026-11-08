@@ -47,10 +47,12 @@ struct Staged {
     std::string track;
     /* Whether IRC, where nothing can be changed once said, hears it too. */
     bool irc = true;
-    /* On Telegram, a line pinned on top of the chat under a name, until a later line names it to unpin it. */
-    std::string pin;
-    std::string unpin;
+    /* On Telegram, pinned on top of the chat until the fallout is gone. */
+    bool pin = false;
 };
+
+/* What the bot says when the fallout of a ☢️ is gone and @TheConquister37 opens again. */
+[[nodiscard]] std::string fallout_over_reply();
 [[nodiscard]] std::vector<Staged> staged_due(std::int64_t now);
 
 /* How the sentinel knows whoever wrote: "tg:<id>" on Telegram, "irc:<nick>" on IRC. */

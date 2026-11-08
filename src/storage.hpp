@@ -174,6 +174,8 @@ struct ConquisterState {
        opens the new season. */
     std::int64_t fallout_until = 0;
     bool season_fresh = false;
+    /* The Telegram message pinned while the fallout lasts, to unpin when it is gone. */
+    std::int64_t fallout_pin = 0;
     /* How many ☢️ went off on @TheConquister37 since the game began: two before they were counted. */
     std::int64_t nukes = 2;
 

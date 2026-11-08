@@ -507,7 +507,13 @@ struct Profile {
    @TheConquister37 gets in whatever 🎈 is there. */
 inline constexpr std::int64_t newcomer_seconds = 24 * 60 * 60;
 /* How long @TheConquister37 stays contaminated after a ☢️: nobody gets in until then. */
-inline constexpr std::int64_t fallout_seconds = 10 * 60;
+inline constexpr std::int64_t fallout_seconds = 30 * 24 * 60 * 60;
+
+/* Once the fallout of a ☢️ on @TheConquister37 is gone: told once, with the id of the Telegram message pinned
+   while it lasted, 0 when none was. Nothing while it lasts, or when there is none. */
+[[nodiscard]] std::optional<std::int64_t> fallout_over(Storage &storage, std::int64_t now);
+/* The Telegram message pinned for as long as the fallout lasts. */
+void fallout_pinned(Storage &storage, std::int64_t message_id);
 /* A newcomer says who brought him within his first three days; after three days of play, both are paid. */
 inline constexpr std::int64_t invite_window_seconds = 3 * 24 * 60 * 60;
 inline constexpr std::int64_t invite_days_needed = 3;

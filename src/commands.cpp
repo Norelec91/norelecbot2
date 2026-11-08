@@ -723,7 +723,7 @@ std::vector<std::pair<std::int64_t, Staged>> staged_lines;
 void stage(std::string text, std::int64_t at, std::string picture = {}) {
     const std::scoped_lock lock{staged_guard};
     staged_lines.emplace_back(at, Staged{.text = std::move(text), .picture = std::move(picture), .track = {},
-                                         .irc = true, .pin = {}, .unpin = {}});
+                                         .irc = true, .pin = false});
 }
 
 void stage(Staged line, std::int64_t at) {
@@ -850,23 +850,18 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
            the last seconds. */
         for (std::int64_t second = 0; second < flight_seconds; ++second) {
             stage(Staged{.text = flight_frame(second), .picture = {}, .track = std::format("flight-{}", now),
-                         .irc = second >= flight_seconds - 3, .pin = {}, .unpin = {}},
+                         .irc = second >= flight_seconds - 3, .pin = false},
                   now + 3 + second);
         }
         stage(nuke_blast(context.username, burnt, optional_random_quote(context.storage)), now + 3 + flight_seconds,
               "blast");
         /* The bulletin stays pinned on top of the chat while the fallout lasts. */
-        const std::string bulletin = std::format("bulletin-{}", now);
         stage(Staged{.text = nuke_bulletin(context.username, burnt), .picture = {}, .track = {}, .irc = true,
-                     .pin = bulletin, .unpin = {}},
+                     .pin = true},
               now + 15);
         stage(std::format("☢️ Fallout: {} è contaminato dalle radiazioni. Nessuno può entrare per {}: poi si apre la "
                           "corsa alla nuova stagione!", conquister_place, format_wait(fallout_seconds)), now + 10,
               "fallout");
-        stage(Staged{.text = std::format("🌱 Il fallout si è diradato: {} è di nuovo aperto! Il primo che entra "
-                                         "inaugura la nuova stagione. Pronti… via! 🏁", conquister_place),
-                     .picture = {}, .track = {}, .irc = true, .pin = {}, .unpin = bulletin},
-              now + fallout_seconds);
         return std::format("⚠️ DEFCON 1\n🔴 {} ha premuto il pulsante rosso.\n🚨🚨🚨 ALLARME NUCLEARE 🚨🚨🚨\nUn missile ☢️ "
                            "punta dritto su {}!", context.username, conquister_place);
     }
@@ -1879,6 +1874,11 @@ const CommandDefinition *find_command(std::string_view name) {
     return found != commands.end() ? &*found : nullptr;
 }
 
+}
+
+std::string fallout_over_reply() {
+    return std::format("🌱 Il fallout si è diradato: {} è di nuovo aperto! Il primo che entra inaugura la nuova "
+                       "stagione. Pronti… via! 🏁", conquister_place);
 }
 
 std::vector<Staged> staged_due(std::int64_t now) {
