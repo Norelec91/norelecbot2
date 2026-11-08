@@ -170,6 +170,10 @@ struct ConquisterState {
     Counters invite_days{};
     Counters invite_last_day{};
     Counters invite_paid{};
+    /* After a ☢️ on @TheConquister37 nobody gets in until the fallout is gone; the first who does then
+       opens the new season. */
+    std::int64_t fallout_until = 0;
+    bool season_fresh = false;
 
     bool operator==(const ConquisterState &) const = default;
 };

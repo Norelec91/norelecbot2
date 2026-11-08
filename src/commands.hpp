@@ -9,6 +9,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace norelecbot {
 
@@ -35,6 +36,10 @@ struct CommandContext {
 /* What the bot says when a raid reaches its target or comes home: the config gives the numbers of the
    bonus an emoji that ends up on somebody brings him. */
 [[nodiscard]] std::optional<std::string> raid_event_reply(const RaidEvent &event, const AppConfig &config = {});
+
+/* What the bot was told to say later and is due by now, such as the blast of a ☢️ a few seconds after its siren:
+   each line is handed out once. */
+[[nodiscard]] std::vector<std::string> staged_due(std::int64_t now);
 
 /* How the sentinel knows whoever wrote: "tg:<id>" on Telegram, "irc:<nick>" on IRC. */
 [[nodiscard]] std::string sentinel_identity(std::int64_t user_id, std::string_view nick);

@@ -238,6 +238,8 @@ ConquisterState parse_state(const Json &json) {
         parse_counters(json, "invite_days"),
         parse_counters(json, "invite_last_day"),
         parse_counters(json, "invite_paid"),
+        json.contains("fallout_until") ? integer(json.at("fallout_until")) : 0,
+        json.contains("season_fresh") && json.at("season_fresh").get<bool>(),
     };
     return state;
 }
@@ -324,6 +326,8 @@ Json state_to_json(const ConquisterState &state) {
         {"invite_days", state.invite_days},
         {"invite_last_day", state.invite_last_day},
         {"invite_paid", state.invite_paid},
+        {"fallout_until", state.fallout_until},
+        {"season_fresh", state.season_fresh},
     };
 }
 

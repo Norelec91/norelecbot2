@@ -109,7 +109,8 @@ inline constexpr std::int64_t salt_seconds = 5 * 60;
 [[nodiscard]] const Power *power_of(std::string_view emoji);
 
 /* frozen: a 🧊 hit him not long ago. */
-enum class ClaimStatus { taken, already_held, defended, cooldown, travelling, frozen };
+/* contaminated: a ☢️ went off on @TheConquister37 not long ago, and nobody gets in until the fallout is gone. */
+enum class ClaimStatus { taken, already_held, defended, cooldown, travelling, frozen, contaminated };
 
 struct ClaimResult {
     ClaimStatus status = ClaimStatus::taken;
@@ -136,6 +137,8 @@ struct ClaimResult {
     std::int64_t penalty_seconds = 0;
     /* travelling: how long before the claimer is home again. */
     std::int64_t travel_seconds = 0;
+    /* taken: the first one in once the fallout of a ☢️ was gone, who opens the new season. */
+    bool opened_season = false;
     /* taken: what the kicked holder's ⚡ made the hold worth in percent, zero when there was none. */
     std::int64_t lightning = 0;
     /* taken: what the house of the day was worth to the kicked holder, 100 when it was indifferent. */
@@ -330,8 +333,10 @@ struct RaidEvent {
     std::vector<std::string> blown{};
     /* The 💣 was a dud: what it took is the raider's own, among what he had with him. */
     bool backfired = false;
-    /* delivered, with a ☢️: the target starts over. */
+    /* delivered, with a ☢️: the target starts over, and the palle that went up in smoke with his house; blown
+       is every emoji he had. */
     bool reset = false;
+    std::int64_t wiped = 0;
     /* delivered, with a 💦: a child is on the way, born after this many seconds. */
     std::int64_t expecting = 0;
     /* delivered, with a 🧊: whoever it hit is frozen for this many seconds; melted, his 🔥 shortened it,
@@ -501,6 +506,8 @@ struct Profile {
 /* A newcomer is spared for his first day: nobody robs him or throws anything at him, and his first try at
    @TheConquister37 gets in whatever 🎈 is there. */
 inline constexpr std::int64_t newcomer_seconds = 24 * 60 * 60;
+/* How long @TheConquister37 stays contaminated after a ☢️: nobody gets in until then. */
+inline constexpr std::int64_t fallout_seconds = 10 * 60;
 /* A newcomer says who brought him within his first three days; after three days of play, both are paid. */
 inline constexpr std::int64_t invite_window_seconds = 3 * 24 * 60 * 60;
 inline constexpr std::int64_t invite_days_needed = 3;
@@ -564,6 +571,8 @@ void debug_set(Storage &storage, const std::string &username, bool wanted);
                                                  std::int64_t now, zodiac::Overrides signs = {});
 /* What everybody has on him, for whoever only has names to write. */
 [[nodiscard]] Authors furniture_all(Storage &storage);
+/* Whether a player has this emoji, in his house or with him. */
+[[nodiscard]] bool owns_emoji(Storage &storage, const std::string &player, std::string_view emoji);
 
 /* Palle brought back to @TheConquister37 leave the game: nobody receives them. Not from the road. */
 [[nodiscard]] BurnResult palle_burn(Storage &storage, const std::string &player, std::int64_t amount);
@@ -584,8 +593,13 @@ struct FurnitureBurnResult {
     std::vector<std::string> blown{};
     /* The 💣 was a dud: what it took is the thrower's own, among what he had with him. */
     bool backfired = false;
-    /* It was a ☢️: the game started over. */
+    /* It was a ☢️: the game started over. The richest it swept away, with what each had, the palle that
+       went up in smoke and how many had any. */
     bool reset = false;
+    std::vector<std::pair<std::string, std::int64_t>> fallen{};
+    std::int64_t wiped = 0;
+    std::size_t ruined = 0;
+    std::int64_t emoji_lost = 0;
     /* It was a 💦: the holder is expecting, and the child is born after this many seconds. */
     std::int64_t expecting = 0;
     /* It was a 🧊: the holder is frozen for this many seconds; melted, his 🔥 shortened it, to nothing

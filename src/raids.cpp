@@ -177,6 +177,9 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
         } catch (const std::exception &error) {
             log_warning("A raid could not be settled: {}", error.what());
         }
+        for (const std::string &line : staged_due(seconds_now())) {
+            announce(config, line);
+        }
         try {
             sentinel_round(storage, config, seconds_now());
             golden_round(config, seconds_now(), golden_began, golden_ended);
@@ -190,6 +193,10 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
         }
         for (int waited = 0; waited < tick.count() && !stop.load(std::memory_order_relaxed); ++waited) {
             std::this_thread::sleep_for(std::chrono::seconds{1});
+            /* What was staged is told on its second, not on the next round. */
+            for (const std::string &line : staged_due(seconds_now())) {
+                announce(config, line);
+            }
         }
     }
     sentinel().save(config.sentinel_path);

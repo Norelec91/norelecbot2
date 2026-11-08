@@ -35,8 +35,9 @@ struct Landing {
     bool smeared = false;
     /* A 💣 that was a dud went off in the thrower's hand: what is blown is his, not the victim's. */
     bool backfired = false;
-    /* A ☢️ made the victim start over. */
+    /* A ☢️ made the victim start over: the palle he lost, and every emoji is in blown. */
     bool reset = false;
+    std::int64_t wiped = 0;
     /* A 💦 left the victim expecting: the seconds until the child is born. */
     std::int64_t expecting = 0;
     /* A 🧊 froze the victim for this many seconds; his 🔥 shortened it, or melted it away. */
@@ -628,6 +629,11 @@ ClaimResult conquister_claim(
             outcome.penalty_seconds = wait;
             return outcome;
         }
+        if (state.fallout_until > now) {
+            outcome.status = ClaimStatus::contaminated;
+            outcome.penalty_seconds = state.fallout_until - now;
+            return outcome;
+        }
         if (state.current && !state.current->username.empty()) {
             const std::string holder = state.current->username;
             outcome.previous_user_id = !ambiguous_legacy(state, holder) &&
@@ -683,6 +689,10 @@ ClaimResult conquister_claim(
         if (find_entry(state.joined, username) != state.joined.end()) {
             state.entered[username] = 1;
         }
+        if (state.season_fresh) {
+            state.season_fresh = false;
+            outcome.opened_season = true;
+        }
         state.current = Holder{.user_id = user_id, .username = username, .since = now,
                                .lightning_percent = 0, .bolts = 0, .banked = 0, .counted_from = 0,
                                .lobsters = std::move(lobsters)};
@@ -730,6 +740,9 @@ ClaimResult conquister_claim(
         break;
     case ClaimStatus::frozen:
         log_info("claim refused user={} frozen={}", username, result.penalty_seconds);
+        break;
+    case ClaimStatus::contaminated:
+        log_info("claim refused user={} fallout={}", username, result.penalty_seconds);
         break;
     case ClaimStatus::already_held:
         break;
@@ -1427,7 +1440,29 @@ FurnitureBurnResult furniture_burn(Storage &storage, const std::string &player, 
         }
         if (is_power(emoji, power::nuke)) {
             session.backup(std::format("before-reset-{}", now));
+            /* The richest it sweeps away, and all it burns, told before it does. */
+            for (const auto &[ruined, score] : state.scores) {
+                if (score > 0) {
+                    outcome.fallen.emplace_back(display_name(state, ruined), score);
+                    outcome.wiped += score;
+                    ++outcome.ruined;
+                }
+            }
+            std::ranges::sort(outcome.fallen, std::greater{}, &std::pair<std::string, std::int64_t>::second);
+            if (outcome.fallen.size() > 5) {
+                outcome.fallen.resize(5);
+            }
+            for (const Authors *kept : {&state.furniture, &state.equipped}) {
+                for (const auto &[owner, slots] : *kept) {
+                    for (const std::string &piece : furniture_slots(slots)) {
+                        outcome.emoji_lost += piece.empty() ? 0 : 1;
+                    }
+                }
+            }
             start_over(state);
+            /* The place is left contaminated for a while; whoever gets in first after it opens a new season. */
+            state.fallout_until = now + fallout_seconds;
+            state.season_fresh = true;
             outcome.reset = true;
             return outcome;
         }
@@ -1717,6 +1752,13 @@ void equipment_sort_out(Storage &storage) {
         }
         state.split = true;
         return 0;
+    });
+}
+
+bool owns_emoji(Storage &storage, const std::string &player, std::string_view emoji) {
+    return storage.transaction([&](StorageSession &session) {
+        const ConquisterState &state = session.state();
+        return gear_slot_holding(state, player, emoji).has_value() || slot_holding(state, player, emoji).has_value();
     });
 }
 
@@ -2187,6 +2229,12 @@ Landing land(StorageSession &session, ConquisterState &state, std::string_view t
         }
     } else if (is_power(thrown, power::nuke)) {
         session.backup(std::format("before-reset-{}", now));
+        /* What goes up in smoke, told before it does. */
+        landing.wiped = counter(state.scores, victim);
+        for (const std::vector<std::string> &had : {slots_of(state, victim), gear_of(state, victim)}) {
+            std::ranges::copy_if(had, std::back_inserter(landing.blown),
+                                 [](const std::string &emoji) { return !emoji.empty(); });
+        }
         start_over(state, victim, now);
         landing.reset = true;
     } else if (is_power(thrown, power::seed)) {
@@ -2316,6 +2364,7 @@ std::vector<RaidEvent> raid_due(Storage &storage, std::int64_t now, const RaidRu
                             raid.gift_emoji.clear();
                             event.backfired = landing.backfired;
                             event.reset = landing.reset;
+                            event.wiped = landing.wiped;
                             event.expecting = landing.expecting;
                             event.froze = landing.froze;
                             event.melted = landing.melted;

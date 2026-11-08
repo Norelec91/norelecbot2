@@ -14,6 +14,9 @@
 #include <format>
 #include <limits>
 #include <utility>
+#include <cmath>
+#include <map>
+#include <mutex>
 #include <vector>
 
 namespace norelecbot {
@@ -416,6 +419,10 @@ std::string handle_raid(const CommandContext &context, std::string_view target, 
     case RaidStatus::started:
         break;
     }
+    if (is_power(gift_emoji, power::nuke) && !intact) {
+        return std::format("🚀☢️ {} ha lanciato un missile nucleare verso casa di {}!\n🚨 Impatto tra {}. Casa tua resta "
+                           "scoperta.", username, result.target, format_wait(result.seconds));
+    }
     if (!gift_emoji.empty()) {
         return std::format(
             "{} parti per {} con {} da {}: arrivi tra {}. Casa tua resta scoperta.",
@@ -709,12 +716,73 @@ std::string handle_furniture_move(const CommandContext &context, const ParsedMov
                        username, result.moved, move.from, move.to, result.shown);
 }
 
+/* What is said later, at its time: the bot's keeper tells it to both chats. */
+std::mutex staged_guard;
+std::vector<std::pair<std::int64_t, std::string>> staged_lines;
+
+void stage(std::string text, std::int64_t at) {
+    const std::scoped_lock lock{staged_guard};
+    staged_lines.emplace_back(at, std::move(text));
+}
+
+/* The blast of a ☢️ on the place: the mushroom, the end of the season, who it swept away and what burned. */
+std::string nuke_blast(std::string_view thrower, const FurnitureBurnResult &burnt,
+                       const std::optional<std::string> &last_words) {
+    std::string told = std::format("💥💥💥💥💥💥💥💥💥\n☁️☁️☁️🍄🍄🍄☁️☁️☁️\n🔥🔥🔥🔥🔥🔥🔥🔥🔥\n{} è stato raso al suolo. "
+                                   "Il gioco riparte da zero: tutti senza palle e con il solo 🎈 di partenza, e nessuno "
+                                   "è più in viaggio.", conquister_place);
+    if (!burnt.fallen.empty()) {
+        std::string swept;
+        for (const auto &[name, score] : burnt.fallen) {
+            swept += std::format("{}{} con {}", swept.empty() ? "" : ", ", name, palle(score));
+        }
+        const std::size_t others = burnt.ruined - burnt.fallen.size();
+        if (others > 0) {
+            swept += std::format(" e altri {}", others);
+        }
+        told += std::format("\n☠️ Spazzati via: {}.", swept);
+    }
+    told += std::format("\n🔥 In fumo {} e {} emoji.", palle(burnt.wiped), burnt.emoji_lost);
+    /* The more that burns, the harder the ground shakes: a tenfold fortune adds a degree. */
+    told += std::format("\n📈 I sismografi impazziscono: magnitudo {:.1f}.",
+                        3.0 + std::log10(static_cast<double>(burnt.wiped) + 1.0));
+    if (last_words) {
+        told += std::format("\n📻 Ultima trasmissione da {} prima del silenzio: «{}»", conquister_place, *last_words);
+    }
+    told += std::format("\n☢️ «Ora sono diventato Morte, il distruttore di mondi.» — {}", thrower);
+    return told;
+}
+
+/* A ☢️ thrown at the place is only armed: it goes once whoever armed it turns the key and then presses the red
+   button, each within a minute of the step before. Kept in memory only. */
+constexpr std::int64_t key_seconds = 60;
+std::mutex armed_guard;
+struct Armed {
+    std::int64_t until = 0;
+    bool key_turned = false;
+};
+std::map<std::string, Armed, std::less<>> armed_missiles;
+
 /* "We @TheConquister37 emoji", or "/throw @TheConquister37 emoji", with one that is thrown: it lands on whoever
    holds the place. "/burn emoji" destroys the first copy he has there and then: even one meant to be thrown
-   hits nobody. */
-std::string handle_emoji_burn(const CommandContext &context, std::string_view emoji, bool destroy = false) {
+   hits nobody. key_turned: a ☢️ whose launch went through the key and the button. */
+std::string handle_emoji_burn(const CommandContext &context, std::string_view emoji, bool destroy = false,
+                              bool key_turned = false) {
     if (context.username.empty()) {
         return missing_username_reply();
+    }
+    if (!destroy && !key_turned && is_power(emoji, power::nuke)) {
+        if (!owns_emoji(context.storage, std::string{context.player_key}, emoji)) {
+            return std::format("{} non hai {}, né con te né in casa.", context.username, emoji);
+        }
+        {
+            const std::scoped_lock lock{armed_guard};
+            armed_missiles.insert_or_assign(std::string{context.player_key},
+                                            Armed{.until = seconds_now() + key_seconds, .key_turned = false});
+        }
+        return std::format("⚠️ DEFCON 3\n🔐 {} ha armato il missile ☢️ puntato su {}.\n🔑 Per lanciarlo gira la chiave: scrivi "
+                           "{}giralachiave entro {}.", context.username, conquister_place, command_prefix(context),
+                           format_wait(key_seconds));
     }
     const FurnitureBurnResult burnt = furniture_burn(context.storage, std::string{context.player_key}, std::string{emoji},
                                                      seconds_now(), raid_rules(context), destroy);
@@ -734,8 +802,19 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
                            with_furniture(context.username, burnt.shown, false), emoji);
     }
     if (burnt.reset) {
-        return std::format("{0} ha sganciato la bomba nucleare su {1}: il gioco riparte da zero. Tutti senza palle e "
-                           "con il solo 🎈 di partenza, {1} è vuoto e nessuno è in viaggio.", context.username, conquister_place);
+        /* The siren at once; the launch, the countdown, the blast and the fallout follow a second at a time. */
+        const std::int64_t now = seconds_now();
+        stage(std::format("🛰️ Lancio confermato. Bersaglio: {}.\n🚀 Il missile esce dal silo.", conquister_place), now + 2);
+        stage("3… 💨🚀 · · · · · · 🏯", now + 4);
+        stage("2… · · · 💨🚀 · · · 🏯", now + 5);
+        stage("1… · · · · · · 💨🚀🏯", now + 6);
+        stage(nuke_blast(context.username, burnt, optional_random_quote(context.storage)), now + 7);
+        stage(std::format("☢️ Fallout: {} è contaminato dalle radiazioni. Nessuno può entrare per {}: poi si apre la "
+                          "corsa alla nuova stagione!", conquister_place, format_wait(fallout_seconds)), now + 10);
+        stage(std::format("🌱 Il fallout si è diradato: {} è di nuovo aperto! Il primo che entra inaugura la nuova "
+                          "stagione. Pronti… via! 🏁", conquister_place), now + fallout_seconds);
+        return std::format("⚠️ DEFCON 1\n🔴 {} ha premuto il pulsante rosso.\n🚨🚨🚨 ALLARME NUCLEARE 🚨🚨🚨\nUn missile ☢️ "
+                           "punta dritto su {}!", context.username, conquister_place);
     }
     if (is_power(emoji, power::poo)) {
         /* Whoever holds the place takes it full in the face. */
@@ -814,6 +893,11 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
     if (result.status == ClaimStatus::frozen) {
         return frozen_reply(username, result.penalty_seconds);
     }
+    if (result.status == ClaimStatus::contaminated) {
+        return std::format("☢️ tic… tic… tic… Il contatore Geiger impazzisce: {} {} è ancora contaminato dalle "
+                           "radiazioni, riapre tra {}.", username, conquister_place,
+                           format_wait(result.penalty_seconds));
+    }
     if (result.status == ClaimStatus::travelling) {
         return std::format(
             "{} sei per strada: non puoi entrare in {} prima di tornare in {}{}, tra {}.",
@@ -888,6 +972,9 @@ std::string handle_claim(const CommandContext &context, std::string_view) {
             became += emoji;
         }
         reply += std::format("\nLe tue aragoste diventano {} finché resti qui.", became);
+    }
+    if (result.opened_season) {
+        reply += std::format("\n🏁 {} è il primo a entrare dopo la bomba: inaugura la nuova stagione!", username);
     }
     if (const std::optional<std::string> quote = optional_random_quote(context.storage)) {
         reply += std::format("\n\n{}", *quote);
@@ -1573,6 +1660,60 @@ std::string handle_delete_quote(const CommandContext &context, std::string_view 
     return removed ? std::format("Citazione eliminata: {}", *removed) : "Citazione non trovata.";
 }
 
+/* Where the missile a player armed stands: whether he turned the key, and until when the next step can be taken.
+   Too late, it disarms and the ☢️ stays his; either way the step is taken from him. */
+std::optional<std::string> launch_step(const CommandContext &context, bool key_turned, std::int64_t &until) {
+    const std::scoped_lock lock{armed_guard};
+    const auto armed = armed_missiles.find(context.player_key);
+    if (armed == armed_missiles.end()) {
+        return std::format("{} non hai nessun missile armato: per armarne uno lancia la ☢️ su {}.", context.username,
+                           conquister_place);
+    }
+    if (armed->second.until < seconds_now()) {
+        armed_missiles.erase(armed);
+        return std::format("{} troppo tardi: il missile si è disarmato da solo, e la ☢️ resta tua.", context.username);
+    }
+    if (armed->second.key_turned != key_turned) {
+        return key_turned
+            ? std::format("{} prima devi girare la chiave: scrivi {}giralachiave.", context.username, command_prefix(context))
+            : std::format("{} la chiave è già girata: ora premi il pulsante rosso con {}premipulsanterosso.",
+                          context.username, command_prefix(context));
+    }
+    until = armed->second.until;
+    if (key_turned) {
+        armed_missiles.erase(armed);
+    } else {
+        armed->second = Armed{.until = seconds_now() + key_seconds, .key_turned = true};
+    }
+    return std::nullopt;
+}
+
+/* "/giralachiave": whoever armed a ☢️ on the place turns the key, and the red button lights up. */
+std::string handle_turn_key(const CommandContext &context, std::string_view) {
+    if (context.username.empty()) {
+        return missing_username_reply();
+    }
+    std::int64_t until = 0;
+    if (const std::optional<std::string> refused = launch_step(context, false, until)) {
+        return *refused;
+    }
+    return std::format("⚠️ DEFCON 2\n🔑 {} ha girato la chiave. Il pulsante rosso si illumina 🔴\nPer lanciare il missile premilo: "
+                       "scrivi {}premipulsanterosso entro {}.", context.username, command_prefix(context),
+                       format_wait(key_seconds));
+}
+
+/* "/premipulsanterosso": with the key turned, the ☢️ is launched at the place. */
+std::string handle_red_button(const CommandContext &context, std::string_view) {
+    if (context.username.empty()) {
+        return missing_username_reply();
+    }
+    std::int64_t until = 0;
+    if (const std::optional<std::string> refused = launch_step(context, true, until)) {
+        return *refused;
+    }
+    return handle_emoji_burn(context, power::nuke.emoji, false, true);
+}
+
 /* "/invitedby name": a newcomer names who brought him into the game. */
 std::string handle_invited_by(const CommandContext &context, std::string_view argument) {
     if (context.username.empty()) {
@@ -1673,6 +1814,8 @@ constexpr std::array commands{
     CommandDefinition{"/store", handle_store},
     CommandDefinition{"/unblock", handle_unblock},
     CommandDefinition{"/invitedby", handle_invited_by},
+    CommandDefinition{"/giralachiave", handle_turn_key},
+    CommandDefinition{"/premipulsanterosso", handle_red_button},
 };
 
 const CommandDefinition *find_command(std::string_view name) {
@@ -1682,6 +1825,19 @@ const CommandDefinition *find_command(std::string_view name) {
     return found != commands.end() ? &*found : nullptr;
 }
 
+}
+
+std::vector<std::string> staged_due(std::int64_t now) {
+    const std::scoped_lock lock{staged_guard};
+    std::vector<std::string> due;
+    std::erase_if(staged_lines, [&due, now](std::pair<std::int64_t, std::string> &line) {
+        if (line.first > now) {
+            return false;
+        }
+        due.push_back(std::move(line.second));
+        return true;
+    });
+    return due;
 }
 
 std::string sentinel_identity(std::int64_t user_id, std::string_view nick) {
@@ -1814,9 +1970,16 @@ std::optional<std::string> raid_event_story(const RaidEvent &event, const AppCon
                                mention, event.target, format_wait(event.expecting), home, format_wait(event.seconds));
         }
         if (is_power(event.gift_emoji, power::nuke)) {
-            return std::format("{} ha sganciato la bomba nucleare su casa di {}{}: riparte da zero, senza palle e "
-                               "con il solo 🎈 di partenza. Torni in {} tra {}.", raider, mention, event.target, home,
-                               format_wait(event.seconds));
+            std::string lost;
+            for (const std::string &emoji : event.blown) {
+                lost += emoji;
+            }
+            const std::string smoke = event.wiped > 0 && !lost.empty()
+                ? std::format("{} e {}", palle(event.wiped), lost)
+                : event.wiped > 0 ? palle(event.wiped) : !lost.empty() ? lost : std::string{"niente: non aveva nulla"};
+            return std::format("💥☢️💥 IMPATTO! 💥☢️💥\n☁️☁️🍄☁️☁️\nIl missile di {} ha centrato casa di {}{}: non resta "
+                               "niente. In fumo {}.\n{} riparte da zero, con il solo 🎈 di partenza. Torni in {} tra {}.",
+                               raider, mention, event.target, smoke, event.target, home, format_wait(event.seconds));
         }
         if (is_power(event.gift_emoji, power::bomb)) {
             std::string blown;

@@ -12,6 +12,7 @@
 #include <chrono>
 #include <fstream>
 #include <format>
+#include <limits>
 
 using namespace norelecbot;
 
@@ -1128,8 +1129,16 @@ TEST_CASE("the ☢️ costs a million and starts the game over from the place") 
     landed.gift_emoji = "☢️";
     landed.reset = true;
     landed.seconds = 5;
-    CHECK(raid_event_reply(landed) == "Alice ha sganciato la bomba nucleare su casa di @Bob: riparte da zero, senza "
-                                      "palle e con il solo 🎈 di partenza. Torni in Alice tra 5 secondi.");
+    CHECK(raid_event_reply(landed) == "💥☢️💥 IMPATTO! 💥☢️💥\n☁️☁️🍄☁️☁️\nIl missile di Alice ha centrato casa di @Bob: "
+                                      "non resta niente. In fumo niente: non aveva nulla.\nBob riparte da zero, con il "
+                                      "solo 🎈 di partenza. Torni in Alice tra 5 secondi.");
+    landed.wiped = 45210;
+    landed.blown = {"🍕", "🚀"};
+    CHECK(raid_event_reply(landed) == "💥☢️💥 IMPATTO! 💥☢️💥\n☁️☁️🍄☁️☁️\nIl missile di Alice ha centrato casa di @Bob: "
+                                      "non resta niente. In fumo 45210 palle e 🍕🚀.\nBob riparte da zero, con il "
+                                      "solo 🎈 di partenza. Torni in Alice tra 5 secondi.");
+    landed.wiped = 0;
+    landed.blown.clear();
     /* From then on his name carries it, wherever it is shown. */
     landed.target_pugliese = true;
     landed.kind = RaidEvent::Kind::gone;
@@ -1141,13 +1150,57 @@ TEST_CASE("the ☢️ costs a million and starts the game over from the place") 
     });
     CHECK(command_dispatch(alice, "/profile @Bob").value_or("").starts_with("Bob il pugliese\n"));
     CHECK(command_dispatch(alice, "/leaderboard").value_or("").contains("Bob il pugliese"));
+    static_cast<void>(staged_due(std::numeric_limits<std::int64_t>::max()));
+    CHECK(command_dispatch(bob, "/giralachiave") ==
+          "Bob non hai nessun missile armato: per armarne uno lancia la ☢️ su @TheConquister37.");
+    /* Thrown at the place, the missile is only armed: nothing happens until the key is turned. */
     CHECK(command_dispatch(alice, "/throw @TheConquister37 ☢️") ==
-          "Alice ha sganciato la bomba nucleare su @TheConquister37: il gioco riparte da zero. Tutti senza palle e "
-          "con il solo 🎈 di partenza, @TheConquister37 è vuoto e nessuno è in viaggio.");
+          "⚠️ DEFCON 3\n🔐 Alice ha armato il missile ☢️ puntato su @TheConquister37.\n🔑 Per lanciarlo gira la chiave: scrivi "
+          "/giralachiave entro 1 minuto.");
+    CHECK(house_of(storage, "tg:1") == "☢️");
+    CHECK(command_dispatch(alice, "/premipulsanterosso") == "Alice prima devi girare la chiave: scrivi /giralachiave.");
+    CHECK(command_dispatch(alice, "/giralachiave") ==
+          "⚠️ DEFCON 2\n🔑 Alice ha girato la chiave. Il pulsante rosso si illumina 🔴\nPer lanciare il missile premilo: scrivi "
+          "/premipulsanterosso entro 1 minuto.");
+    CHECK(command_dispatch(alice, "/giralachiave") ==
+          "Alice la chiave è già girata: ora premi il pulsante rosso con /premipulsanterosso.");
+    CHECK(house_of(storage, "tg:1") == "☢️");
+    CHECK(staged_due(std::numeric_limits<std::int64_t>::max()).empty());
+    CHECK(command_dispatch(alice, "/premipulsanterosso") ==
+          "⚠️ DEFCON 1\n🔴 Alice ha premuto il pulsante rosso.\n🚨🚨🚨 ALLARME NUCLEARE 🚨🚨🚨\nUn missile ☢️ punta dritto "
+          "su @TheConquister37!");
+    /* The launch, the countdown, the blast and the fallout follow, a second at a time, told by the keeper. */
+    CHECK(staged_due(0).empty());
+    const std::vector<std::string> show = staged_due(std::numeric_limits<std::int64_t>::max());
+    REQUIRE(show.size() == 7);
+    CHECK(show[0] == "🛰️ Lancio confermato. Bersaglio: @TheConquister37.\n🚀 Il missile esce dal silo.");
+    CHECK(show[1] == "3… 💨🚀 · · · · · · 🏯");
+    CHECK(show[2] == "2… · · · 💨🚀 · · · 🏯");
+    CHECK(show[3] == "1… · · · · · · 💨🚀🏯");
+    CHECK(show[4].starts_with("💥💥💥💥💥💥💥💥💥\n☁️☁️☁️🍄🍄🍄☁️☁️☁️\n🔥🔥🔥🔥🔥🔥🔥🔥🔥\n@TheConquister37 è stato raso al suolo."));
+    CHECK(show[4].contains("☠️ Spazzati via: Alice con 7 palle."));
+    CHECK(show[4].contains("🔥 In fumo 7 palle e "));
+    CHECK(show[4].contains("📈 I sismografi impazziscono: magnitudo 3.9."));
+    CHECK(show[4].ends_with("☢️ «Ora sono diventato Morte, il distruttore di mondi.» — Alice"));
+    CHECK(show[5].starts_with("☢️ Fallout: @TheConquister37 è contaminato dalle radiazioni."));
+    CHECK(show[6].starts_with("🌱 Il fallout si è diradato: @TheConquister37 è di nuovo aperto!"));
+    CHECK(staged_due(std::numeric_limits<std::int64_t>::max()).empty());
+    CHECK(command_dispatch(alice, "/premipulsanterosso").value_or("").contains("non hai nessun missile armato"));
     CHECK(furniture_all(storage).at("tg:1") == "🎈");
     CHECK(furniture_all(storage).at("tg:2") == "🎈");
     CHECK(conquister_user(storage, "Alice", RaidTargetKind::telegram)->score == 0);
     CHECK_FALSE(storage.transaction([](StorageSession &session) { return session.state().current.has_value(); }));
+    /* Nobody gets in while the fallout lasts; the first one in after it opens the new season. */
+    CHECK(command_dispatch(bob, "We @TheConquister37").value_or("").starts_with(
+        "☢️ tic… tic… tic… Il contatore Geiger impazzisce: Bob @TheConquister37 è ancora contaminato dalle "
+        "radiazioni, riapre tra "));
+    storage.transaction([](StorageSession &session) {
+        session.state().fallout_until = 0;
+        return 0;
+    });
+    CHECK(command_dispatch(bob, "We @TheConquister37").value_or("").contains(
+        "🏁 Bob è il primo a entrare dopo la bomba: inaugura la nuova stagione!"));
+    CHECK_FALSE(command_dispatch(alice, "We @TheConquister37").value_or("").contains("🏁"));
     for (const auto &entry : std::filesystem::directory_iterator{"."}) {
         if (entry.path().filename().string().starts_with(paths.conquister + ".before-reset-")) {
             std::filesystem::remove(entry.path());
