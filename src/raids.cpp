@@ -33,9 +33,14 @@ std::int64_t seconds_now() {
     ).count();
 }
 
-void announce(const AppConfig &config, const std::string &text) {
+void announce(const AppConfig &config, const std::string &text, std::string_view shown = {}) {
     if (config.conquister_chat_id != 0 && !config.bot_token.empty()) {
-        telegram_say(config, config.conquister_chat_id, text);
+        /* A picture goes only to Telegram: IRC has the words alone. */
+        if (const Picture *photo = shown.empty() ? nullptr : picture(shown)) {
+            telegram_photo(config, config.conquister_chat_id, *photo, text);
+        } else {
+            telegram_say(config, config.conquister_chat_id, text);
+        }
     }
     if (config.irc_enabled) {
         irc_say(text);
@@ -171,14 +176,16 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
             for (const RaidEvent &event : raid_due(storage, seconds_now(), rules)) {
                 pulse().event(event_name(event), seconds_now());
                 if (const std::optional<std::string> reply = raid_event_reply(event, config)) {
-                    announce(config, *reply);
+                    /* A ☢️ landing on a house comes with the cloud over it. */
+                    const bool nuked = event.kind == RaidEvent::Kind::delivered && event.reset;
+                    announce(config, *reply, nuked ? "impact" : "");
                 }
             }
         } catch (const std::exception &error) {
             log_warning("A raid could not be settled: {}", error.what());
         }
-        for (const std::string &line : staged_due(seconds_now())) {
-            announce(config, line);
+        for (const Staged &line : staged_due(seconds_now())) {
+            announce(config, line.text, line.picture);
         }
         try {
             sentinel_round(storage, config, seconds_now());
@@ -194,8 +201,8 @@ void raids_run(Storage &storage, const AppConfig &config, const std::atomic<bool
         for (int waited = 0; waited < tick.count() && !stop.load(std::memory_order_relaxed); ++waited) {
             std::this_thread::sleep_for(std::chrono::seconds{1});
             /* What was staged is told on its second, not on the next round. */
-            for (const std::string &line : staged_due(seconds_now())) {
-                announce(config, line);
+            for (const Staged &line : staged_due(seconds_now())) {
+                announce(config, line.text, line.picture);
             }
         }
     }

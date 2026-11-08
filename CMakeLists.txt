@@ -54,6 +54,8 @@ else()
     endif()
 endif()
 
+include(tools/pictures.cmake)
+
 set(CORE_SOURCES
     src/logging.cpp
     src/config.cpp
@@ -68,6 +70,7 @@ set(CORE_SOURCES
     src/position.cpp
     src/sentinel.cpp
     src/pulse.cpp
+    ${pictures_source}
 )
 
 add_library(norelecbot_core STATIC ${CORE_SOURCES})

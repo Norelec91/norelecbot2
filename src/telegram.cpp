@@ -157,6 +157,61 @@ void telegram_say(const AppConfig &config, std::int64_t chat_id, const std::stri
     ));
 }
 
+void telegram_photo(const AppConfig &config, std::int64_t chat_id, const Picture &picture, const std::string &text) {
+    /* Telegram cuts a caption at 1024 characters: a longer text goes on its own, after the picture. */
+    constexpr std::size_t caption_bytes = 900;
+    const std::string caption = text.size() <= caption_bytes ? text : std::string{};
+    static std::mutex known_guard;
+    static std::map<std::string, std::string, std::less<>> known_ids;
+    std::string known;
+    {
+        const std::scoped_lock lock{known_guard};
+        if (const auto found = known_ids.find(picture.name); found != known_ids.end()) {
+            known = found->second;
+        }
+    }
+    bool sent = false;
+    if (!known.empty()) {
+        sent = telegram_api(config, "sendPhoto", {{"chat_id", std::to_string(chat_id)}, {"photo", known},
+                                                  {"caption", caption}}, poll_timeout_seconds).has_value();
+    }
+    if (!sent) {
+        httplib::Client client{"https://api.telegram.org"};
+        const std::chrono::seconds timeout{poll_timeout_seconds};
+        client.set_connection_timeout(timeout);
+        client.set_read_timeout(timeout);
+        client.set_write_timeout(timeout);
+        const httplib::MultipartFormDataItems items{
+            {"chat_id", std::to_string(chat_id), "", ""},
+            {"caption", caption, "", ""},
+            {"photo", std::string{picture.bytes}, std::string{picture.file_name}, std::string{picture.mime}},
+        };
+        const httplib::Result result = client.Post(std::format("/bot{}/sendPhoto", config.bot_token), items);
+        if (!result || result->status < 200 || result->status >= 300) {
+            log_warning("Telegram sendPhoto {} failed: {}", picture.name,
+                        result ? std::to_string(result->status) : httplib::to_string(result.error()));
+        } else {
+            sent = true;
+            try {
+                /* The largest size is the last: its id sends the same picture again without uploading it. */
+                const Json reply = Json::parse(result->body);
+                const Json &sizes = reply.at("result").at("photo");
+                if (sizes.is_array() && !sizes.empty()) {
+                    const std::scoped_lock lock{known_guard};
+                    known_ids.insert_or_assign(std::string{picture.name},
+                                               sizes.back().at("file_id").get<std::string>());
+                }
+            } catch (const std::exception &error) {
+                log_warning("Telegram sendPhoto {} returned no id: {}", picture.name, error.what());
+            }
+        }
+    }
+    /* Whatever happened to the picture, the words get there. */
+    if (!sent || caption.empty()) {
+        telegram_say(config, chat_id, text);
+    }
+}
+
 void telegram_run(Storage &storage, const AppConfig &config, const std::atomic<bool> &stop) {
     log_info("Telegram poller started (trigger={})", conquister_trigger);
     std::int64_t offset = -1;

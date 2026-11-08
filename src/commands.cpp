@@ -718,11 +718,11 @@ std::string handle_furniture_move(const CommandContext &context, const ParsedMov
 
 /* What is said later, at its time: the bot's keeper tells it to both chats. */
 std::mutex staged_guard;
-std::vector<std::pair<std::int64_t, std::string>> staged_lines;
+std::vector<std::pair<std::int64_t, Staged>> staged_lines;
 
-void stage(std::string text, std::int64_t at) {
+void stage(std::string text, std::int64_t at, std::string picture = {}) {
     const std::scoped_lock lock{staged_guard};
-    staged_lines.emplace_back(at, std::move(text));
+    staged_lines.emplace_back(at, Staged{.text = std::move(text), .picture = std::move(picture)});
 }
 
 /* The blast of a ☢️ on the place: the mushroom, the end of the season, who it swept away and what burned. */
@@ -804,13 +804,15 @@ std::string handle_emoji_burn(const CommandContext &context, std::string_view em
     if (burnt.reset) {
         /* The siren at once; the launch, the countdown, the blast and the fallout follow a second at a time. */
         const std::int64_t now = seconds_now();
-        stage(std::format("🛰️ Lancio confermato. Bersaglio: {}.\n🚀 Il missile esce dal silo.", conquister_place), now + 2);
+        stage(std::format("🛰️ Lancio confermato. Bersaglio: {}.\n🚀 Il missile esce dal silo.", conquister_place), now + 2,
+              "launch");
         stage("3… 💨🚀 · · · · · · 🏯", now + 4);
         stage("2… · · · 💨🚀 · · · 🏯", now + 5);
         stage("1… · · · · · · 💨🚀🏯", now + 6);
-        stage(nuke_blast(context.username, burnt, optional_random_quote(context.storage)), now + 7);
+        stage(nuke_blast(context.username, burnt, optional_random_quote(context.storage)), now + 7, "blast");
         stage(std::format("☢️ Fallout: {} è contaminato dalle radiazioni. Nessuno può entrare per {}: poi si apre la "
-                          "corsa alla nuova stagione!", conquister_place, format_wait(fallout_seconds)), now + 10);
+                          "corsa alla nuova stagione!", conquister_place, format_wait(fallout_seconds)), now + 10,
+              "fallout");
         stage(std::format("🌱 Il fallout si è diradato: {} è di nuovo aperto! Il primo che entra inaugura la nuova "
                           "stagione. Pronti… via! 🏁", conquister_place), now + fallout_seconds);
         return std::format("⚠️ DEFCON 1\n🔴 {} ha premuto il pulsante rosso.\n🚨🚨🚨 ALLARME NUCLEARE 🚨🚨🚨\nUn missile ☢️ "
@@ -1827,10 +1829,10 @@ const CommandDefinition *find_command(std::string_view name) {
 
 }
 
-std::vector<std::string> staged_due(std::int64_t now) {
+std::vector<Staged> staged_due(std::int64_t now) {
     const std::scoped_lock lock{staged_guard};
-    std::vector<std::string> due;
-    std::erase_if(staged_lines, [&due, now](std::pair<std::int64_t, std::string> &line) {
+    std::vector<Staged> due;
+    std::erase_if(staged_lines, [&due, now](std::pair<std::int64_t, Staged> &line) {
         if (line.first > now) {
             return false;
         }

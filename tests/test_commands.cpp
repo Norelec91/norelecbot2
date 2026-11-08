@@ -2,6 +2,7 @@
 
 #include "game.hpp"
 #include "commands.hpp"
+#include "pictures.hpp"
 #include "sentinel.hpp"
 #include "zodiac.hpp"
 
@@ -1173,19 +1174,33 @@ TEST_CASE("the ☢️ costs a million and starts the game over from the place") 
           "su @TheConquister37!");
     /* The launch, the countdown, the blast and the fallout follow, a second at a time, told by the keeper. */
     CHECK(staged_due(0).empty());
-    const std::vector<std::string> show = staged_due(std::numeric_limits<std::int64_t>::max());
+    const std::vector<Staged> show = staged_due(std::numeric_limits<std::int64_t>::max());
     REQUIRE(show.size() == 7);
-    CHECK(show[0] == "🛰️ Lancio confermato. Bersaglio: @TheConquister37.\n🚀 Il missile esce dal silo.");
-    CHECK(show[1] == "3… 💨🚀 · · · · · · 🏯");
-    CHECK(show[2] == "2… · · · 💨🚀 · · · 🏯");
-    CHECK(show[3] == "1… · · · · · · 💨🚀🏯");
-    CHECK(show[4].starts_with("💥💥💥💥💥💥💥💥💥\n☁️☁️☁️🍄🍄🍄☁️☁️☁️\n🔥🔥🔥🔥🔥🔥🔥🔥🔥\n@TheConquister37 è stato raso al suolo."));
-    CHECK(show[4].contains("☠️ Spazzati via: Alice con 7 palle."));
-    CHECK(show[4].contains("🔥 In fumo 7 palle e "));
-    CHECK(show[4].contains("📈 I sismografi impazziscono: magnitudo 3.9."));
-    CHECK(show[4].ends_with("☢️ «Ora sono diventato Morte, il distruttore di mondi.» — Alice"));
-    CHECK(show[5].starts_with("☢️ Fallout: @TheConquister37 è contaminato dalle radiazioni."));
-    CHECK(show[6].starts_with("🌱 Il fallout si è diradato: @TheConquister37 è di nuovo aperto!"));
+    CHECK(show[0].text == "🛰️ Lancio confermato. Bersaglio: @TheConquister37.\n🚀 Il missile esce dal silo.");
+    CHECK(show[1].text == "3… 💨🚀 · · · · · · 🏯");
+    CHECK(show[2].text == "2… · · · 💨🚀 · · · 🏯");
+    CHECK(show[3].text == "1… · · · · · · 💨🚀🏯");
+    CHECK(show[4].text.starts_with("💥💥💥💥💥💥💥💥💥\n☁️☁️☁️🍄🍄🍄☁️☁️☁️\n🔥🔥🔥🔥🔥🔥🔥🔥🔥\n@TheConquister37 è stato raso al suolo."));
+    CHECK(show[4].text.contains("☠️ Spazzati via: Alice con 7 palle."));
+    CHECK(show[4].text.contains("🔥 In fumo 7 palle e "));
+    CHECK(show[4].text.contains("📈 I sismografi impazziscono: magnitudo 3.9."));
+    CHECK(show[4].text.ends_with("☢️ «Ora sono diventato Morte, il distruttore di mondi.» — Alice"));
+    CHECK(show[5].text.starts_with("☢️ Fallout: @TheConquister37 è contaminato dalle radiazioni."));
+    CHECK(show[6].text.starts_with("🌱 Il fallout si è diradato: @TheConquister37 è di nuovo aperto!"));
+    /* The launch, the blast and the fallout come with their pictures on Telegram. */
+    CHECK(show[0].picture == "launch");
+    CHECK(show[1].picture.empty());
+    CHECK(show[4].picture == "blast");
+    CHECK(show[5].picture == "fallout");
+    CHECK(show[6].picture.empty());
+    for (const std::string_view name : {"launch", "blast", "impact", "fallout"}) {
+        const Picture *photo = picture(name);
+        REQUIRE(photo != nullptr);
+        CHECK(photo->bytes.size() > 1000);
+    }
+    CHECK(picture("blast")->bytes.starts_with("\xFF\xD8\xFF"));
+    CHECK(picture("fallout")->bytes.starts_with("\x89PNG"));
+    CHECK(picture("nothing") == nullptr);
     CHECK(staged_due(std::numeric_limits<std::int64_t>::max()).empty());
     CHECK(command_dispatch(alice, "/premipulsanterosso").value_or("").contains("non hai nessun missile armato"));
     CHECK(furniture_all(storage).at("tg:1") == "🎈");

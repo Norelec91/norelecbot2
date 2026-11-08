@@ -39,7 +39,12 @@ struct CommandContext {
 
 /* What the bot was told to say later and is due by now, such as the blast of a ☢️ a few seconds after its siren:
    each line is handed out once. */
-[[nodiscard]] std::vector<std::string> staged_due(std::int64_t now);
+struct Staged {
+    std::string text;
+    /* The picture to show with it on Telegram, by name; none when empty. */
+    std::string picture;
+};
+[[nodiscard]] std::vector<Staged> staged_due(std::int64_t now);
 
 /* How the sentinel knows whoever wrote: "tg:<id>" on Telegram, "irc:<nick>" on IRC. */
 [[nodiscard]] std::string sentinel_identity(std::int64_t user_id, std::string_view nick);
